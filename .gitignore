@@ -1,0 +1,8 @@
+sim/
+*.vcd
+*.log
+*.jou
+*.pb
+*.wdb
+.Xil/
+synth_out/*.rpt
