@@ -21,13 +21,13 @@ module accel_controller #(
   output logic computing,
 
   output logic output_valid_en,
+  output logic output_last_en,
 
   output logic [$clog2(MAX_PIXELS)-1:0]          load_addr,
   output logic [$clog2(MAX_PIXELS)-1:0]          out_pixel_addr,
   output logic [$clog2(NUM_INPUT_CHANNELS)-1:0]  load_ic,
   output logic [$clog2(NUM_OUTPUT_CHANNELS)-1:0] out_oc,
 
-  // Counter-based output coordinates for timing-friendly address generation.
   output logic [15:0] out_x,
   output logic [15:0] out_y,
   output logic [$clog2(MAX_PIXELS)-1:0] out_base_addr
@@ -43,11 +43,19 @@ module accel_controller #(
   state_t state;
   state_t next_state;
 
-  logic [15:0] out_w;
-  logic [15:0] out_h;
+  localparam int ADDR_W = $clog2(MAX_PIXELS);
 
-  logic [31:0] image_pixels;
-  logic [31:0] output_pixels;
+  logic [15:0] out_w_calc;
+  logic [15:0] out_h_calc;
+
+  logic [15:0] out_w_q;
+  logic [15:0] out_h_q;
+
+  logic [31:0] image_pixels_calc;
+  logic [31:0] output_pixels_calc;
+
+  logic [31:0] image_pixels_q;
+  logic [31:0] output_pixels_q;
 
   logic [31:0] load_addr_32;
   logic [31:0] out_pixel_addr_32;
@@ -57,11 +65,11 @@ module accel_controller #(
   logic input_last_transfer;
   logic output_last_transfer;
 
-  assign out_w = (image_width  >= 16'd3) ? (image_width  - 16'd2) : 16'd0;
-  assign out_h = (image_height >= 16'd3) ? (image_height - 16'd2) : 16'd0;
+  assign out_w_calc = (image_width  >= 16'd3) ? (image_width  - 16'd2) : 16'd0;
+  assign out_h_calc = (image_height >= 16'd3) ? (image_height - 16'd2) : 16'd0;
 
-  assign image_pixels  = {16'd0, image_width} * {16'd0, image_height};
-  assign output_pixels = {16'd0, out_w} * {16'd0, out_h};
+  assign image_pixels_calc  = {16'd0, image_width} * {16'd0, image_height};
+  assign output_pixels_calc = {16'd0, out_w_calc} * {16'd0, out_h_calc};
 
   assign load_addr_32      = {{(32-$bits(load_addr)){1'b0}}, load_addr};
   assign out_pixel_addr_32 = {{(32-$bits(out_pixel_addr)){1'b0}}, out_pixel_addr};
@@ -70,14 +78,14 @@ module accel_controller #(
 
   assign input_last_transfer =
     input_fire &&
-    (image_pixels != 32'd0) &&
-    (load_addr_32 == image_pixels - 32'd1) &&
+    (image_pixels_q != 32'd0) &&
+    (load_addr_32 == image_pixels_q - 32'd1) &&
     (load_ic_32 == NUM_INPUT_CHANNELS - 1);
 
   assign output_last_transfer =
     output_fire &&
-    (output_pixels != 32'd0) &&
-    (out_pixel_addr_32 == output_pixels - 32'd1) &&
+    (output_pixels_q != 32'd0) &&
+    (out_pixel_addr_32 == output_pixels_q - 32'd1) &&
     (out_oc_32 == NUM_OUTPUT_CHANNELS - 1);
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -99,7 +107,7 @@ module accel_controller #(
       end
 
       S_LOAD: begin
-        if (image_pixels == 32'd0) begin
+        if (image_pixels_q == 32'd0) begin
           next_state = S_DONE;
         end else if (input_last_transfer) begin
           next_state = S_COMPUTE;
@@ -107,7 +115,7 @@ module accel_controller #(
       end
 
       S_COMPUTE: begin
-        if (output_pixels == 32'd0) begin
+        if (output_pixels_q == 32'd0) begin
           next_state = S_DONE;
         end else if (output_last_transfer) begin
           next_state = S_DONE;
@@ -126,33 +134,42 @@ module accel_controller #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      load_addr      <= '0;
-      out_pixel_addr <= '0;
-      load_ic        <= '0;
-      out_oc         <= '0;
+      load_addr       <= '0;
+      out_pixel_addr  <= '0;
+      load_ic         <= '0;
+      out_oc          <= '0;
 
-      out_x          <= 16'd0;
-      out_y          <= 16'd0;
-      out_base_addr  <= '0;
+      out_x           <= 16'd0;
+      out_y           <= 16'd0;
+      out_base_addr   <= '0;
 
-      done           <= 1'b0;
+      out_w_q         <= 16'd0;
+      out_h_q         <= 16'd0;
+      image_pixels_q  <= 32'd0;
+      output_pixels_q <= 32'd0;
+
+      done            <= 1'b0;
     end else begin
       done <= 1'b0;
 
       if ((state == S_IDLE) && start) begin
-        load_addr      <= '0;
-        out_pixel_addr <= '0;
-        load_ic        <= '0;
-        out_oc         <= '0;
+        load_addr       <= '0;
+        out_pixel_addr  <= '0;
+        load_ic         <= '0;
+        out_oc          <= '0;
 
-        out_x          <= 16'd0;
-        out_y          <= 16'd0;
-        out_base_addr  <= '0;
+        out_x           <= 16'd0;
+        out_y           <= 16'd0;
+        out_base_addr   <= '0;
+
+        out_w_q         <= out_w_calc;
+        out_h_q         <= out_h_calc;
+        image_pixels_q  <= image_pixels_calc;
+        output_pixels_q <= output_pixels_calc;
       end
 
-      // Load input image data channel-by-channel.
-      if ((state == S_LOAD) && input_fire && (image_pixels != 32'd0)) begin
-        if (load_addr_32 == image_pixels - 32'd1) begin
+      if ((state == S_LOAD) && input_fire && (image_pixels_q != 32'd0)) begin
+        if (load_addr_32 == image_pixels_q - 32'd1) begin
           load_addr <= '0;
 
           if (load_ic_32 == NUM_INPUT_CHANNELS - 1) begin
@@ -165,14 +182,11 @@ module accel_controller #(
         end
       end
 
-      // Output order:
-      // pixel0_oc0, pixel0_oc1, pixel0_oc2, pixel0_oc3,
-      // pixel1_oc0, ...
-      if ((state == S_COMPUTE) && output_fire && (output_pixels != 32'd0)) begin
+      if ((state == S_COMPUTE) && output_fire && (output_pixels_q != 32'd0)) begin
         if (out_oc_32 == NUM_OUTPUT_CHANNELS - 1) begin
           out_oc <= '0;
 
-          if (out_pixel_addr_32 == output_pixels - 32'd1) begin
+          if (out_pixel_addr_32 == output_pixels_q - 32'd1) begin
             out_pixel_addr <= '0;
             out_x          <= 16'd0;
             out_y          <= 16'd0;
@@ -180,17 +194,13 @@ module accel_controller #(
           end else begin
             out_pixel_addr <= out_pixel_addr + 1'b1;
 
-            if (out_x == out_w - 16'd1) begin
-              out_x <= 16'd0;
-              out_y <= out_y + 16'd1;
-
-              // Last valid base address in row is row_start + (image_width - 3).
-              // Next row start is row_start + image_width.
-              // Difference is +3.
-              out_base_addr <= out_base_addr + $clog2(MAX_PIXELS)'(3);
+            if (out_x == out_w_q - 16'd1) begin
+              out_x         <= 16'd0;
+              out_y         <= out_y + 1'b1;
+              out_base_addr <= out_base_addr + ADDR_W'(3);
             end else begin
-              out_x <= out_x + 16'd1;
-              out_base_addr <= out_base_addr + 1'b1;
+              out_x         <= out_x + 1'b1;
+              out_base_addr <= out_base_addr + ADDR_W'(1);
             end
           end
         end else begin
@@ -208,7 +218,12 @@ module accel_controller #(
     busy            = (state != S_IDLE);
     loading         = (state == S_LOAD);
     computing       = (state == S_COMPUTE);
-    output_valid_en = (state == S_COMPUTE) && (output_pixels != 32'd0);
+    output_valid_en = (state == S_COMPUTE) && (output_pixels_q != 32'd0);
+
+    output_last_en =
+      output_valid_en &&
+      (out_pixel_addr_32 == output_pixels_q - 32'd1) &&
+      (out_oc_32 == NUM_OUTPUT_CHANNELS - 1);
   end
 
 endmodule

@@ -96,6 +96,8 @@ module cnn_accel_top #(
   logic pixel_last_unused;
   logic [15:0] out_x_unused;
   logic [15:0] out_y_unused;
+  logic signed [ACC_WIDTH_P-1:0] compute_acc_unused;
+  logic [ADDR_W-1:0] out_pixel_addr_unused;
   /* verilator lint_on UNUSEDSIGNAL */
 
   logic signed [DATA_WIDTH_P-1:0] windows
@@ -108,9 +110,13 @@ module cnn_accel_top #(
   logic output_stage_valid;
   logic output_last_q;
 
-  logic signed [OUT_WIDTH_P-1:0] compute_out_q;
   logic compute_valid_q;
   logic compute_last_q;
+
+  logic conv_last_s1;
+  logic conv_last_s2;
+  logic conv_last_s3;
+  logic conv_last_s4;
 
   logic [ADDR_W-1:0] rd_addr
     [NUM_INPUT_CHANNELS_P][KERNEL_TAPS_P];
@@ -133,52 +139,23 @@ module cnn_accel_top #(
   logic signed [BIAS_WIDTH_P-1:0] bias_q
     [NUM_OUTPUT_CHANNELS_P];
 
-  // Selected one-output-channel compute path.
   logic signed [WEIGHT_WIDTH_P-1:0] selected_weights
     [NUM_INPUT_CHANNELS_P][KERNEL_TAPS_P];
 
   logic signed [BIAS_WIDTH_P-1:0] selected_bias;
 
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic signed [ACC_WIDTH_P-1:0] compute_acc_unused;
-  /* verilator lint_on UNUSEDSIGNAL */
-
   logic signed [OUT_WIDTH_P-1:0] compute_out_comb;
 
-  logic [15:0] out_w;
-  logic [15:0] out_h;
-
-  logic [31:0] out_w_32;
-  logic [31:0] out_h_32;
-  logic [31:0] out_pixel_addr_32;
   logic [31:0] out_oc_32;
-  logic [31:0] output_pixels_32;
-  logic [31:0] last_output_pixel_32;
   logic [31:0] last_output_channel_32;
 
-  assign out_x_unused = out_x;
-  assign out_y_unused = out_y;
+  assign out_x_unused          = out_x;
+  assign out_y_unused          = out_y;
+  assign out_pixel_addr_unused = out_pixel_addr;
 
-  assign out_w = (image_width  >= 16'd3) ? (image_width  - 16'd2) : 16'd0;
-  assign out_h = (image_height >= 16'd3) ? (image_height - 16'd2) : 16'd0;
+  assign out_oc_32 = {{(32-$bits(out_oc)){1'b0}}, out_oc};
 
-  assign out_w_32          = {16'd0, out_w};
-  assign out_h_32          = {16'd0, out_h};
-  assign out_pixel_addr_32 = {{(32-$bits(out_pixel_addr)){1'b0}}, out_pixel_addr};
-  assign out_oc_32         = {{(32-$bits(out_oc)){1'b0}}, out_oc};
-
-  assign output_pixels_32 = out_w_32 * out_h_32;
-
-  assign last_output_pixel_32 =
-    (output_pixels_32 == 32'd0) ? 32'd0 : (output_pixels_32 - 32'd1);
-
-  assign last_output_channel_32 =
-    NUM_OUTPUT_CHANNELS_P - 1;
-
-  assign output_last_en =
-    output_valid_en &&
-    (out_pixel_addr_32 == last_output_pixel_32) &&
-    (out_oc_32 == last_output_channel_32);
+  assign last_output_channel_32 = NUM_OUTPUT_CHANNELS_P - 1;
 
   assign image_width_addr     = ADDR_W'(image_width);
   assign two_image_width_addr = ADDR_W'(image_width << 1);
@@ -261,6 +238,7 @@ module cnn_accel_top #(
     .loading(loading),
     .computing(computing),
     .output_valid_en(output_valid_en),
+    .output_last_en(output_last_en),
 
     .load_addr(load_addr),
     .out_pixel_addr(out_pixel_addr),
@@ -367,25 +345,26 @@ module cnn_accel_top #(
         output_stage_valid <= 1'b0;
         output_last_q      <= 1'b0;
         out_oc_q           <= '0;
+
+        for (int c = 0; c < NUM_INPUT_CHANNELS_P; c++) begin
+          for (int k = 0; k < KERNEL_TAPS_P; k++) begin
+            windows_q[c][k] <= '0;
+          end
+        end
       end else if (output_ready) begin
         output_stage_valid <= output_valid_en;
+        output_last_q      <= output_last_en;
+        out_oc_q           <= out_oc;
 
-        if (output_valid_en) begin
-          output_last_q <= output_last_en;
-          out_oc_q      <= out_oc;
-
-          for (int c = 0; c < NUM_INPUT_CHANNELS_P; c++) begin
-            for (int k = 0; k < KERNEL_TAPS_P; k++) begin
-              windows_q[c][k] <= windows[c][k];
-            end
+        for (int c = 0; c < NUM_INPUT_CHANNELS_P; c++) begin
+          for (int k = 0; k < KERNEL_TAPS_P; k++) begin
+            windows_q[c][k] <= windows[c][k];
           end
         end
       end
     end
   end
 
-  // Select only the currently requested output channel.
-  // This avoids computing all output channels in parallel.
   always_comb begin
     selected_bias = bias_q[out_oc_q];
 
@@ -405,6 +384,11 @@ module cnn_accel_top #(
     .NUM_INPUT_CHANNELS(NUM_INPUT_CHANNELS_P),
     .KERNEL_TAPS(KERNEL_TAPS_P)
   ) u_conv_engine_selected (
+    .clk(clk),
+    .rst_n(rst_n),
+    .pipe_en(output_ready),
+    .valid_in(output_stage_valid),
+
     .windows(windows_q),
     .weights(selected_weights),
     .bias(selected_bias),
@@ -414,27 +398,32 @@ module cnn_accel_top #(
     .quant_enable(quant_enable_q),
     .quant_shift(quant_shift_q),
 
+    .valid_out(compute_valid_q),
     .acc_raw(compute_acc_unused),
     .out_data(compute_out_comb)
   );
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      compute_out_q   <= '0;
-      compute_valid_q <= 1'b0;
-      compute_last_q  <= 1'b0;
+      conv_last_s1   <= 1'b0;
+      conv_last_s2   <= 1'b0;
+      conv_last_s3   <= 1'b0;
+      conv_last_s4   <= 1'b0;
+      compute_last_q <= 1'b0;
     end else begin
       if (start_pulse) begin
-        compute_out_q   <= '0;
-        compute_valid_q <= 1'b0;
-        compute_last_q  <= 1'b0;
+        conv_last_s1   <= 1'b0;
+        conv_last_s2   <= 1'b0;
+        conv_last_s3   <= 1'b0;
+        conv_last_s4   <= 1'b0;
+        compute_last_q <= 1'b0;
       end else if (output_ready) begin
-        compute_valid_q <= output_stage_valid;
-        compute_last_q  <= output_last_q;
+        conv_last_s1   <= output_stage_valid && output_last_q;
+        conv_last_s2   <= conv_last_s1;
+        conv_last_s3   <= conv_last_s2;
+        conv_last_s4   <= conv_last_s3;
 
-        if (output_stage_valid) begin
-          compute_out_q <= compute_out_comb;
-        end
+        compute_last_q <= conv_last_s3;
       end
     end
   end
@@ -445,7 +434,7 @@ module cnn_accel_top #(
     .clk(clk),
     .rst_n(rst_n),
 
-    .data_in(compute_out_q),
+    .data_in(compute_out_comb),
     .data_valid(compute_valid_q),
     .data_ready(output_ready),
     .data_last(compute_last_q),
