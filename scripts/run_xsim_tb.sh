@@ -78,6 +78,7 @@ xvlog -sv -L work \
   ../../rtl/buffer/weight_buffer.sv \
   ../../rtl/buffer/line_buffer_3x3.sv \
   ../../rtl/buffer/window_generator_3x3.sv \
+  ../../rtl/fpga/*.sv \
   ../../rtl/cnn_accel_top.sv \
   ../../${TB_FILE}
 
