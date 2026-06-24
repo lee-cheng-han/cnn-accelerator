@@ -210,18 +210,28 @@ module tb_cnn_accel_top_small;
     input bit bias_en,
     input bit quant_en,
     input int qshift,
-    output int total_outputs
+    output int total_outputs,
+    input bit kernel_mode_arg = 1'b1
   );
+    int idx;
     int out_h;
     int out_w;
-    int idx;
     logic signed [31:0] acc;
 
     begin
-      out_h = h - 2;
-      out_w = w - 2;
-      total_outputs = out_h * out_w * OC;
       idx = 0;
+
+      if (kernel_mode_arg) begin
+        // 3x3 valid convolution.
+        out_h = h - 2;
+        out_w = w - 2;
+      end else begin
+        // 1x1 convolution keeps the same spatial size.
+        out_h = h;
+        out_w = w;
+      end
+
+      total_outputs = out_h * out_w * OC;
 
       for (int r = 0; r < out_h; r++) begin
         for (int c = 0; c < out_w; c++) begin
@@ -229,17 +239,23 @@ module tb_cnn_accel_top_small;
             acc = '0;
 
             for (int ic = 0; ic < IC; ic++) begin
-              acc += input_mem[ic][r + 0][c + 0] * weight_mem[oc][ic][0];
-              acc += input_mem[ic][r + 0][c + 1] * weight_mem[oc][ic][1];
-              acc += input_mem[ic][r + 0][c + 2] * weight_mem[oc][ic][2];
+              if (kernel_mode_arg) begin
+                // 3x3 mode: use all 9 taps.
+                acc += input_mem[ic][r + 0][c + 0] * weight_mem[oc][ic][0];
+                acc += input_mem[ic][r + 0][c + 1] * weight_mem[oc][ic][1];
+                acc += input_mem[ic][r + 0][c + 2] * weight_mem[oc][ic][2];
 
-              acc += input_mem[ic][r + 1][c + 0] * weight_mem[oc][ic][3];
-              acc += input_mem[ic][r + 1][c + 1] * weight_mem[oc][ic][4];
-              acc += input_mem[ic][r + 1][c + 2] * weight_mem[oc][ic][5];
+                acc += input_mem[ic][r + 1][c + 0] * weight_mem[oc][ic][3];
+                acc += input_mem[ic][r + 1][c + 1] * weight_mem[oc][ic][4];
+                acc += input_mem[ic][r + 1][c + 2] * weight_mem[oc][ic][5];
 
-              acc += input_mem[ic][r + 2][c + 0] * weight_mem[oc][ic][6];
-              acc += input_mem[ic][r + 2][c + 1] * weight_mem[oc][ic][7];
-              acc += input_mem[ic][r + 2][c + 2] * weight_mem[oc][ic][8];
+                acc += input_mem[ic][r + 2][c + 0] * weight_mem[oc][ic][6];
+                acc += input_mem[ic][r + 2][c + 1] * weight_mem[oc][ic][7];
+                acc += input_mem[ic][r + 2][c + 2] * weight_mem[oc][ic][8];
+              end else begin
+                // 1x1 mode: use only tap 0 at the current pixel.
+                acc += input_mem[ic][r][c] * weight_mem[oc][ic][0];
+              end
             end
 
             if (bias_en) begin
@@ -294,7 +310,8 @@ module tb_cnn_accel_top_small;
     input bit relu_en,
     input bit bias_en,
     input bit quant_en,
-    input int qshift
+    input int qshift,
+    input bit kernel_mode_arg = 1'b1
   );
     logic [31:0] ctrl;
 
@@ -303,7 +320,7 @@ module tb_cnn_accel_top_small;
       cfg_write(16'h000C, h[31:0]);
       cfg_write(16'h0010, qshift[31:0]);
 
-      ctrl = {28'd0, quant_en, bias_en, relu_en, 1'b0};
+      ctrl = {27'd0, kernel_mode_arg, quant_en, bias_en, relu_en, 1'b0};
       cfg_write(16'h0000, ctrl);
 
       for (int oc = 0; oc < OC; oc++) begin
@@ -323,11 +340,16 @@ module tb_cnn_accel_top_small;
     end
   endtask
 
-  task automatic start_dut(input bit relu_en, input bit bias_en, input bit quant_en);
+  task automatic start_dut(
+    input bit relu_en,
+    input bit bias_en,
+    input bit quant_en,
+    input bit kernel_mode_arg = 1'b1
+  );
     logic [31:0] ctrl;
 
     begin
-      ctrl = {28'd0, quant_en, bias_en, relu_en, 1'b1};
+      ctrl = {27'd0, kernel_mode_arg, quant_en, bias_en, relu_en, 1'b1};
       cfg_write(16'h0000, ctrl);
 
       repeat (2) @(negedge clk);
@@ -575,7 +597,8 @@ module tb_cnn_accel_top_small;
     input bit quant_en,
     input int qshift,
     input bit gaps,
-    input bit stalls
+    input bit stalls,
+    input bit kernel_mode_arg = 1'b1
   );
     int total_outputs;
     int expected_input_count;
@@ -597,14 +620,14 @@ module tb_cnn_accel_top_small;
       init_scenario(scenario, h, w);
 
       $display("[SCENARIO] compute expected output");
-      compute_expected(h, w, relu_en, bias_en, quant_en, qshift, total_outputs);
+      compute_expected(h, w, relu_en, bias_en, quant_en, qshift, total_outputs, kernel_mode_arg);
 
       $display("[SCENARIO] program DUT");
-      program_dut(h, w, relu_en, bias_en, quant_en, qshift);
+      program_dut(h, w, relu_en, bias_en, quant_en, qshift, kernel_mode_arg);
 
       $display("[SCENARIO] start DUT");
       m_axis_tready = 1'b0;
-      start_dut(relu_en, bias_en, quant_en);
+      start_dut(relu_en, bias_en, quant_en, kernel_mode_arg);
 
       $display("[SCENARIO] send image");
       send_image(h, w, gaps);
@@ -618,9 +641,15 @@ module tb_cnn_accel_top_small;
       $display("[SCENARIO] wait done");
       wait_done(name);
 
-      expected_input_count  = h * w * IC;
-      expected_window_count = (h - 2) * (w - 2);
-      expected_mac_count    = expected_window_count * IC * OC * KERNEL_TAPS;
+      expected_input_count = h * w * IC;
+
+      if (kernel_mode_arg) begin
+        expected_window_count = (h - 2) * (w - 2);
+        expected_mac_count    = expected_window_count * IC * OC * KERNEL_TAPS;
+      end else begin
+        expected_window_count = h * w;
+        expected_mac_count    = expected_window_count * IC * OC;
+      end
 
       tests++;
 
@@ -816,6 +845,21 @@ module tb_cnn_accel_top_small;
       1'b0,
       1'b0,
       4,
+      1'b0,
+      1'b0
+    );
+
+
+    run_scenario(
+      "one_by_one_4x4_bias_relu_quant",
+      0,
+      4,
+      4,
+      1'b1,
+      1'b1,
+      1'b1,
+      2,
+      1'b0,
       1'b0,
       1'b0
     );

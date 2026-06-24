@@ -53,11 +53,13 @@ module cnn_accel_top #(
   logic relu_enable;
   logic bias_enable;
   logic quant_enable;
+  logic kernel_mode;
   logic [4:0] quant_shift;
 
   logic relu_enable_q;
   logic bias_enable_q;
   logic quant_enable_q;
+  logic kernel_mode_q;
   logic [4:0] quant_shift_q;
 
   logic signed [WEIGHT_WIDTH_P-1:0] cfg_weights
@@ -211,6 +213,7 @@ module cnn_accel_top #(
     .relu_enable(relu_enable),
     .bias_enable(bias_enable),
     .quant_enable(quant_enable),
+    .kernel_mode(kernel_mode),
     .quant_shift(quant_shift),
 
     .weights(cfg_weights),
@@ -228,6 +231,7 @@ module cnn_accel_top #(
     .start(start_pulse),
     .image_width(image_width),
     .image_height(image_height),
+    .kernel_mode(kernel_mode),
 
     .input_fire(input_fire),
     .output_fire(output_fire),
@@ -284,6 +288,7 @@ module cnn_accel_top #(
       relu_enable_q  <= 1'b0;
       bias_enable_q  <= 1'b0;
       quant_enable_q <= 1'b0;
+      kernel_mode_q  <= 1'b1;
       quant_shift_q  <= 5'd0;
 
       for (int oc = 0; oc < NUM_OUTPUT_CHANNELS_P; oc++) begin
@@ -299,6 +304,7 @@ module cnn_accel_top #(
       relu_enable_q  <= relu_enable;
       bias_enable_q  <= bias_enable;
       quant_enable_q <= quant_enable;
+      kernel_mode_q  <= kernel_mode;
       quant_shift_q  <= quant_shift;
 
       for (int oc = 0; oc < NUM_OUTPUT_CHANNELS_P; oc++) begin
@@ -388,6 +394,7 @@ module cnn_accel_top #(
     .rst_n(rst_n),
     .pipe_en(output_ready),
     .valid_in(output_stage_valid),
+    .kernel_mode(kernel_mode_q),
 
     .windows(windows_q),
     .weights(selected_weights),
@@ -461,7 +468,11 @@ module cnn_accel_top #(
     .stall(output_valid_en && !output_ready),
     .fifo_full(1'b0),
 
-    .macs_per_window(16'(NUM_INPUT_CHANNELS_P * NUM_OUTPUT_CHANNELS_P * KERNEL_TAPS_P)),
+    .macs_per_window(
+      kernel_mode_q ?
+        16'(NUM_INPUT_CHANNELS_P * NUM_OUTPUT_CHANNELS_P * KERNEL_TAPS_P) :
+        16'(NUM_INPUT_CHANNELS_P * NUM_OUTPUT_CHANNELS_P)
+    ),
 
     .cycle_count(cycle_count),
     .input_pixel_count(input_pixel_count),

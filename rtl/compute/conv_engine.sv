@@ -14,6 +14,9 @@ module conv_engine #(
   input  logic pipe_en,
   input  logic valid_in,
 
+  // 0 = 1x1 convolution, 1 = 3x3 convolution
+  input  logic kernel_mode,
+
   input  logic signed [DATA_WIDTH-1:0]   windows [NUM_INPUT_CHANNELS][KERNEL_TAPS],
   input  logic signed [WEIGHT_WIDTH-1:0] weights [NUM_INPUT_CHANNELS][KERNEL_TAPS],
   input  logic signed [BIAS_WIDTH-1:0]   bias,
@@ -33,6 +36,10 @@ module conv_engine #(
   logic valid_s2;
   logic valid_s3;
   logic valid_s4;
+
+  logic kernel_mode_s1;
+  logic kernel_mode_s2;
+  logic kernel_mode_s3;
 
   logic signed [PRODUCT_WIDTH-1:0] products_s1
     [NUM_INPUT_CHANNELS][KERNEL_TAPS];
@@ -71,16 +78,24 @@ module conv_engine #(
     sign_extend_product = {{(ACC_WIDTH-PRODUCT_WIDTH){value[PRODUCT_WIDTH-1]}}, value};
   endfunction
 
-  function automatic logic signed [ACC_WIDTH-1:0] sum_3x3_products(
-    input logic signed [PRODUCT_WIDTH-1:0] p [KERNEL_TAPS]
+  function automatic logic signed [ACC_WIDTH-1:0] sum_kernel_products(
+    input logic signed [PRODUCT_WIDTH-1:0] p [KERNEL_TAPS],
+    input logic use_3x3
   );
     logic signed [ACC_WIDTH-1:0] sum;
     begin
       sum = '0;
-      for (int k = 0; k < KERNEL_TAPS; k++) begin
-        sum = sum + sign_extend_product(p[k]);
+
+      if (use_3x3) begin
+        for (int k = 0; k < KERNEL_TAPS; k++) begin
+          sum = sum + sign_extend_product(p[k]);
+        end
+      end else begin
+        // 1x1 mode: only tap 0 participates.
+        sum = sign_extend_product(p[0]);
       end
-      sum_3x3_products = sum;
+
+      sum_kernel_products = sum;
     end
   endfunction
 
@@ -146,6 +161,10 @@ module conv_engine #(
       acc_raw   <= '0;
       out_data  <= '0;
 
+      kernel_mode_s1 <= 1'b1;
+      kernel_mode_s2 <= 1'b1;
+      kernel_mode_s3 <= 1'b1;
+
       bias_s1 <= '0;
       bias_s2 <= '0;
       bias_s3 <= '0;
@@ -182,11 +201,12 @@ module conv_engine #(
       // Stage 1: multiply pixels by weights.
       valid_s1 <= valid_in;
 
-      bias_s1          <= bias;
-      relu_enable_s1   <= relu_enable;
-      bias_enable_s1   <= bias_enable;
-      quant_enable_s1  <= quant_enable;
-      quant_shift_s1   <= quant_shift;
+      kernel_mode_s1  <= kernel_mode;
+      bias_s1         <= bias;
+      relu_enable_s1  <= relu_enable;
+      bias_enable_s1  <= bias_enable;
+      quant_enable_s1 <= quant_enable;
+      quant_shift_s1  <= quant_shift;
 
       for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
         for (int k = 0; k < KERNEL_TAPS; k++) begin
@@ -194,27 +214,31 @@ module conv_engine #(
         end
       end
 
-      // Stage 2: sum 3x3 products per channel.
+      // Stage 2: sum products per channel.
+      // 3x3 mode sums all 9 products.
+      // 1x1 mode only uses tap 0.
       valid_s2 <= valid_s1;
 
-      bias_s2          <= bias_s1;
-      relu_enable_s2   <= relu_enable_s1;
-      bias_enable_s2   <= bias_enable_s1;
-      quant_enable_s2  <= quant_enable_s1;
-      quant_shift_s2   <= quant_shift_s1;
+      kernel_mode_s2  <= kernel_mode_s1;
+      bias_s2         <= bias_s1;
+      relu_enable_s2  <= relu_enable_s1;
+      bias_enable_s2  <= bias_enable_s1;
+      quant_enable_s2 <= quant_enable_s1;
+      quant_shift_s2  <= quant_shift_s1;
 
       for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
-        channel_sums_s2[c] <= sum_3x3_products(products_s1[c]);
+        channel_sums_s2[c] <= sum_kernel_products(products_s1[c], kernel_mode_s1);
       end
 
       // Stage 3: accumulate input channels.
       valid_s3 <= valid_s2;
 
-      bias_s3          <= bias_s2;
-      relu_enable_s3   <= relu_enable_s2;
-      bias_enable_s3   <= bias_enable_s2;
-      quant_enable_s3  <= quant_enable_s2;
-      quant_shift_s3   <= quant_shift_s2;
+      kernel_mode_s3  <= kernel_mode_s2;
+      bias_s3         <= bias_s2;
+      relu_enable_s3  <= relu_enable_s2;
+      bias_enable_s3  <= bias_enable_s2;
+      quant_enable_s3 <= quant_enable_s2;
+      quant_shift_s3  <= quant_shift_s2;
 
       acc_s3 <= channel_sums_s2[0] + channel_sums_s2[1] + channel_sums_s2[2];
 

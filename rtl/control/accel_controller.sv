@@ -12,6 +12,10 @@ module accel_controller #(
   input  logic [15:0] image_width,
   input  logic [15:0] image_height,
 
+  // 0 = 1x1 convolution
+  // 1 = 3x3 convolution
+  input  logic kernel_mode,
+
   input  logic input_fire,
   input  logic output_fire,
 
@@ -45,6 +49,8 @@ module accel_controller #(
 
   localparam int ADDR_W = $clog2(MAX_PIXELS);
 
+  logic kernel_mode_q;
+
   logic [15:0] out_w_calc;
   logic [15:0] out_h_calc;
 
@@ -65,8 +71,17 @@ module accel_controller #(
   logic input_last_transfer;
   logic output_last_transfer;
 
-  assign out_w_calc = (image_width  >= 16'd3) ? (image_width  - 16'd2) : 16'd0;
-  assign out_h_calc = (image_height >= 16'd3) ? (image_height - 16'd2) : 16'd0;
+  always_comb begin
+    if (kernel_mode) begin
+      // 3x3 valid convolution.
+      out_w_calc = (image_width  >= 16'd3) ? (image_width  - 16'd2) : 16'd0;
+      out_h_calc = (image_height >= 16'd3) ? (image_height - 16'd2) : 16'd0;
+    end else begin
+      // 1x1 convolution keeps same spatial size.
+      out_w_calc = image_width;
+      out_h_calc = image_height;
+    end
+  end
 
   assign image_pixels_calc  = {16'd0, image_width} * {16'd0, image_height};
   assign output_pixels_calc = {16'd0, out_w_calc} * {16'd0, out_h_calc};
@@ -143,6 +158,7 @@ module accel_controller #(
       out_y           <= 16'd0;
       out_base_addr   <= '0;
 
+      kernel_mode_q   <= 1'b1;
       out_w_q         <= 16'd0;
       out_h_q         <= 16'd0;
       image_pixels_q  <= 32'd0;
@@ -162,6 +178,7 @@ module accel_controller #(
         out_y           <= 16'd0;
         out_base_addr   <= '0;
 
+        kernel_mode_q   <= kernel_mode;
         out_w_q         <= out_w_calc;
         out_h_q         <= out_h_calc;
         image_pixels_q  <= image_pixels_calc;
@@ -195,9 +212,18 @@ module accel_controller #(
             out_pixel_addr <= out_pixel_addr + 1'b1;
 
             if (out_x == out_w_q - 16'd1) begin
-              out_x         <= 16'd0;
-              out_y         <= out_y + 1'b1;
-              out_base_addr <= out_base_addr + ADDR_W'(3);
+              out_x <= 16'd0;
+              out_y <= out_y + 1'b1;
+
+              if (kernel_mode_q) begin
+                // 3x3 valid convolution: move from end of output row to
+                // start of next valid 3x3 window row.
+                out_base_addr <= out_base_addr + ADDR_W'(3);
+              end else begin
+                // 1x1 convolution: output width equals input width, so the
+                // next output row is naturally the next address.
+                out_base_addr <= out_base_addr + ADDR_W'(1);
+              end
             end else begin
               out_x         <= out_x + 1'b1;
               out_base_addr <= out_base_addr + ADDR_W'(1);

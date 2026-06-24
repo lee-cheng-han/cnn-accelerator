@@ -15,6 +15,9 @@ module output_channel_array #(
   input  logic pipe_en,
   input  logic valid_in,
 
+  // 0 = 1x1 convolution, 1 = 3x3 convolution
+  input  logic kernel_mode,
+
   input  logic signed [DATA_WIDTH-1:0]   windows [NUM_INPUT_CHANNELS][KERNEL_TAPS],
   input  logic signed [WEIGHT_WIDTH-1:0] weights [NUM_OUTPUT_CHANNELS][NUM_INPUT_CHANNELS][KERNEL_TAPS],
   input  logic signed [BIAS_WIDTH-1:0]   bias    [NUM_OUTPUT_CHANNELS],
@@ -46,6 +49,7 @@ module output_channel_array #(
         .rst_n(rst_n),
         .pipe_en(pipe_en),
         .valid_in(valid_in),
+        .kernel_mode(kernel_mode),
 
         .windows(windows),
         .weights(weights[oc]),

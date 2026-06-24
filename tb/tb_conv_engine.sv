@@ -14,6 +14,7 @@ module tb_conv_engine;
   logic rst_n;
   logic pipe_en;
   logic valid_in;
+  logic kernel_mode;
 
   logic signed [DATA_WIDTH-1:0]   windows [NUM_INPUT_CHANNELS][KERNEL_TAPS];
   logic signed [WEIGHT_WIDTH-1:0] weights [NUM_INPUT_CHANNELS][KERNEL_TAPS];
@@ -48,6 +49,7 @@ module tb_conv_engine;
     .rst_n(rst_n),
     .pipe_en(pipe_en),
     .valid_in(valid_in),
+    .kernel_mode(kernel_mode),
 
     .windows(windows),
     .weights(weights),
@@ -74,8 +76,14 @@ module tb_conv_engine;
       sum = '0;
 
       for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
-        for (int k = 0; k < KERNEL_TAPS; k++) begin
-          sum += $signed(windows[c][k]) * $signed(weights[c][k]);
+        if (kernel_mode) begin
+          // 3x3 mode: use all 9 taps.
+          for (int k = 0; k < KERNEL_TAPS; k++) begin
+            sum += $signed(windows[c][k]) * $signed(weights[c][k]);
+          end
+        end else begin
+          // 1x1 mode: use only tap 0.
+          sum += $signed(windows[c][0]) * $signed(weights[c][0]);
         end
       end
 
@@ -150,6 +158,7 @@ module tb_conv_engine;
     begin
       valid_in     = 1'b0;
       pipe_en      = 1'b1;
+      kernel_mode  = 1'b1;  // default old behavior: 3x3 mode
 
       bias         = '0;
       relu_enable  = 1'b0;
@@ -400,6 +409,84 @@ module tb_conv_engine;
     quant_enable = 1'b0;
     quant_shift  = 5'd0;
     check_case("negative_saturation");
+
+
+    $display("[TEST] 1x1 ignores taps 1 to 8");
+    clear_inputs();
+    kernel_mode = 1'b0;  // 1x1 mode
+
+    // Tap 0 should be used.
+    windows[0][0] = 8'sd2;   weights[0][0] = 8'sd3;   // 6
+    windows[1][0] = 8'sd4;   weights[1][0] = -8'sd2;  // -8
+    windows[2][0] = -8'sd5;  weights[2][0] = 8'sd6;   // -30
+    // raw = 6 - 8 - 30 = -32
+
+    // Taps 1..8 should be ignored. Use huge/weird values to prove it.
+    for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
+      for (int k = 1; k < KERNEL_TAPS; k++) begin
+        windows[c][k] = 8'sd100;
+        weights[c][k] = -8'sd100;
+      end
+    end
+
+    bias         = 32'sd0;
+    relu_enable  = 1'b0;
+    bias_enable  = 1'b0;
+    quant_enable = 1'b0;
+    quant_shift  = 5'd0;
+    check_case("one_by_one_ignores_extra_taps");
+
+    $display("[TEST] 1x1 with bias relu quant");
+    clear_inputs();
+    kernel_mode = 1'b0;  // 1x1 mode
+
+    windows[0][0] = 8'sd10;  weights[0][0] = 8'sd2;   // 20
+    windows[1][0] = 8'sd3;   weights[1][0] = 8'sd4;   // 12
+    windows[2][0] = 8'sd1;   weights[2][0] = -8'sd8;  // -8
+    // raw = 24
+    // + bias 40 = 64
+    // >> 2 = 16
+
+    for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
+      for (int k = 1; k < KERNEL_TAPS; k++) begin
+        windows[c][k] = -8'sd77;
+        weights[c][k] = 8'sd55;
+      end
+    end
+
+    bias         = 32'sd40;
+    relu_enable  = 1'b1;
+    bias_enable  = 1'b1;
+    quant_enable = 1'b1;
+    quant_shift  = 5'd2;
+    check_case("one_by_one_bias_relu_quant");
+
+    $display("[TEST] 1x1 relu clamps negative");
+    clear_inputs();
+    kernel_mode = 1'b0;  // 1x1 mode
+
+    windows[0][0] = 8'sd5;   weights[0][0] = -8'sd10; // -50
+    windows[1][0] = 8'sd2;   weights[1][0] = -8'sd4;  // -8
+    windows[2][0] = 8'sd1;   weights[2][0] = -8'sd3;  // -3
+    // raw = -61, ReLU should clamp to 0
+
+    for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
+      for (int k = 1; k < KERNEL_TAPS; k++) begin
+        windows[c][k] = 8'sd99;
+        weights[c][k] = 8'sd99;
+      end
+    end
+
+    bias         = 32'sd0;
+    relu_enable  = 1'b1;
+    bias_enable  = 1'b0;
+    quant_enable = 1'b0;
+    quant_shift  = 5'd0;
+    check_case("one_by_one_relu_negative");
+
+    // Return to old default before the random 3x3 tests.
+    kernel_mode = 1'b1;
+
 
     $display("[TEST] random tests");
     for (int i = 0; i < 600; i++) begin
