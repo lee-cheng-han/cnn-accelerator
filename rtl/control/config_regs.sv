@@ -27,6 +27,7 @@ module config_regs #(
   output logic relu_enable,
   output logic bias_enable,
   output logic quant_enable,
+  output logic kernel_mode,
   output logic [4:0] quant_shift,
 
   output logic signed [7:0]  weights[NUM_OUTPUT_CHANNELS][NUM_INPUT_CHANNELS][KERNEL_TAPS],
@@ -110,6 +111,10 @@ module config_regs #(
       relu_enable  <= 1'b1;
       bias_enable  <= 1'b1;
       quant_enable <= 1'b1;
+
+      // Default to old behavior: 3x3 mode.
+      kernel_mode  <= 1'b1;
+
       quant_shift  <= 5'd0;
 
       start_pulse <= 1'b0;
@@ -133,6 +138,7 @@ module config_regs #(
             relu_enable  <= cfg_wdata[1];
             bias_enable  <= cfg_wdata[2];
             quant_enable <= cfg_wdata[3];
+            kernel_mode  <= cfg_wdata[4];
           end
 
           ADDR_WIDTH: begin
@@ -163,6 +169,17 @@ module config_regs #(
     cfg_rdata = '0;
 
     unique case (cfg_addr)
+      ADDR_CONTROL: begin
+        cfg_rdata = {
+          27'd0,
+          kernel_mode,
+          quant_enable,
+          bias_enable,
+          relu_enable,
+          1'b0
+        };
+      end
+
       ADDR_STATUS: begin
         cfg_rdata = {30'd0, done_status, busy_status};
       end
