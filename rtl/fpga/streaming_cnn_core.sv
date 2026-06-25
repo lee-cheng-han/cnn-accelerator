@@ -91,7 +91,10 @@ module streaming_cnn_core #(
   logic signed [ACC_WIDTH-1:0] conv_acc_unused;
   logic signed [OUT_WIDTH-1:0] conv_out;
 
+  logic [31:0] total_windows_calc;
   logic [31:0] total_windows;
+  logic [31:0] total_windows_w_operand;
+  logic [31:0] total_windows_h_operand;
   logic [31:0] window_index;
 
   logic feed_last;
@@ -115,12 +118,44 @@ module streaming_cnn_core #(
   logic out_fifo_rd_en;
   logic conv_pipe_en;
 
-  assign total_windows =
-    kernel_mode ?
-      (((image_width >= 16'd3) && (image_height >= 16'd3)) ?
-        ({16'd0, image_width - 16'd2} * {16'd0, image_height - 16'd2}) :
-        32'd0) :
-      ({16'd0, image_width} * {16'd0, image_height});
+  // Compute total number of output windows/pixels.
+  //
+  // Pipeline stage 1:
+  //   image_width/image_height/kernel_mode -> registered multiply operands
+  //
+  // Pipeline stage 2:
+  //   registered operands -> DSP multiply -> registered total_windows
+  //
+  // This avoids the long path:
+  // image_width -> subtract/mux -> DSP input -> total_windows/last logic.
+  assign total_windows_calc = total_windows_w_operand * total_windows_h_operand;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      total_windows_w_operand <= 32'd0;
+      total_windows_h_operand <= 32'd0;
+      total_windows           <= 32'd0;
+    end else if (clear) begin
+      total_windows_w_operand <= 32'd0;
+      total_windows_h_operand <= 32'd0;
+      total_windows           <= 32'd0;
+    end else begin
+      if (kernel_mode) begin
+        if ((image_width >= 16'd3) && (image_height >= 16'd3)) begin
+          total_windows_w_operand <= {16'd0, image_width - 16'd2};
+          total_windows_h_operand <= {16'd0, image_height - 16'd2};
+        end else begin
+          total_windows_w_operand <= 32'd0;
+          total_windows_h_operand <= 32'd0;
+        end
+      end else begin
+        total_windows_w_operand <= {16'd0, image_width};
+        total_windows_h_operand <= {16'd0, image_height};
+      end
+
+      total_windows <= total_windows_calc;
+    end
+  end
 
   assign out_fifo_empty       = (out_fifo_count == 0);
   assign out_fifo_full        = (out_fifo_count == OUT_FIFO_DEPTH);

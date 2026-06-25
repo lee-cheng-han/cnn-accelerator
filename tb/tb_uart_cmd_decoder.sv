@@ -37,7 +37,10 @@ module tb_uart_cmd_decoder;
   logic bias_done;
 
   logic pixel_valid;
+  logic [31:0] pixel_index;
   logic signed [7:0] pixel_data;
+  logic [31:0] image_length;
+  logic image_done;
 
   logic protocol_error;
 
@@ -49,15 +52,15 @@ module tb_uart_cmd_decoder;
   int weight_count;
   int bias_count;
   int pixel_count;
+  int image_done_count;
+  int weights_done_count;
+  int bias_done_count;
   int read_count;
   int error_count;
 
   logic [7:0] expected_pixel_queue [$];
   logic [7:0] expected_weight_queue [$];
   logic signed [31:0] expected_bias_queue [$];
-
-  int weights_done_count;
-  int bias_done_count;
 
   uart_cmd_decoder #(
     .NUM_INPUT_CHANNELS(IC),
@@ -94,7 +97,10 @@ module tb_uart_cmd_decoder;
     .bias_done(bias_done),
 
     .pixel_valid(pixel_valid),
+    .pixel_index(pixel_index),
     .pixel_data(pixel_data),
+    .image_length(image_length),
+    .image_done(image_done),
 
     .protocol_error(protocol_error)
   );
@@ -131,9 +137,7 @@ module tb_uart_cmd_decoder;
         end
       end
 
-      if (weights_done) begin
-        weights_done_count++;
-      end
+      if (weights_done) weights_done_count++;
 
       if (bias_valid) begin
         logic signed [31:0] expected_bias;
@@ -155,9 +159,7 @@ module tb_uart_cmd_decoder;
         end
       end
 
-      if (bias_done) begin
-        bias_done_count++;
-      end
+      if (bias_done) bias_done_count++;
 
       if (pixel_valid) begin
         logic [7:0] expected_pixel;
@@ -167,17 +169,19 @@ module tb_uart_cmd_decoder;
 
         if (expected_pixel_queue.size() == 0) begin
           errors++;
-          $error("Unexpected pixel_data=0x%02h", pixel_data);
+          $error("Unexpected pixel_data=0x%02h index=%0d", pixel_data, pixel_index);
         end else begin
           expected_pixel = expected_pixel_queue.pop_front();
 
           if (pixel_data !== expected_pixel) begin
             errors++;
-            $error("pixel_data mismatch got=0x%02h expected=0x%02h", pixel_data, expected_pixel);
+            $error("pixel_data mismatch got=0x%02h expected=0x%02h index=%0d",
+                   pixel_data, expected_pixel, pixel_index);
           end
         end
       end
 
+      if (image_done) image_done_count++;
       if (read_request_valid) read_count++;
       if (protocol_error) error_count++;
     end
@@ -198,6 +202,24 @@ module tb_uart_cmd_decoder;
 
       @(posedge clk);
       #1;
+    end
+  endtask
+
+  task automatic send_u32_le(input logic [31:0] value);
+    begin
+      send_byte(value[7:0]);
+      send_byte(value[15:8]);
+      send_byte(value[23:16]);
+      send_byte(value[31:24]);
+    end
+  endtask
+
+  task automatic send_i32_le(input logic signed [31:0] value);
+    begin
+      send_byte(value[7:0]);
+      send_byte(value[15:8]);
+      send_byte(value[23:16]);
+      send_byte(value[31:24]);
     end
   endtask
 
@@ -232,13 +254,15 @@ module tb_uart_cmd_decoder;
       weight_count = 0;
       bias_count = 0;
       pixel_count = 0;
+      image_done_count = 0;
+      weights_done_count = 0;
+      bias_done_count = 0;
       read_count = 0;
       error_count = 0;
+
       expected_pixel_queue.delete();
       expected_weight_queue.delete();
       expected_bias_queue.delete();
-      weights_done_count = 0;
-      bias_done_count = 0;
 
       rst_n = 1'b0;
       repeat (5) @(posedge clk);
@@ -260,13 +284,13 @@ module tb_uart_cmd_decoder;
       $display("[TEST] config");
 
       send_byte("C");
-      send_byte(8'd64); // width low
-      send_byte(8'd0);  // width high
-      send_byte(8'd32); // height low
-      send_byte(8'd0);  // height high
-      send_byte(8'd1);  // kernel 3x3
-      send_byte(8'b0000_0111); // relu,bias,quant
-      send_byte(8'd3);  // shift
+      send_byte(8'd64);
+      send_byte(8'd0);
+      send_byte(8'd32);
+      send_byte(8'd0);
+      send_byte(8'd1);
+      send_byte(8'b0000_0111);
+      send_byte(8'd3);
 
       check_equal_int("cfg_count", cfg_count, 1);
       check_equal_logic("cfg_width", cfg_width, 32'd64);
@@ -298,15 +322,6 @@ module tb_uart_cmd_decoder;
     end
   endtask
 
-  task automatic send_i32_le(input logic signed [31:0] value);
-    begin
-      send_byte(value[7:0]);
-      send_byte(value[15:8]);
-      send_byte(value[23:16]);
-      send_byte(value[31:24]);
-    end
-  endtask
-
   task automatic test_bias;
     logic signed [31:0] vals [4];
     begin
@@ -330,24 +345,44 @@ module tb_uart_cmd_decoder;
     end
   endtask
 
-  task automatic test_image_and_read;
+  task automatic test_image_with_explicit_length;
     logic [7:0] expected_pixel;
     begin
-      $display("[TEST] image stream and read request");
+      $display("[TEST] image stream with explicit length");
 
       send_byte("I");
+      send_u32_le(32'd20);
 
       for (int i = 0; i < 20; i++) begin
-        expected_pixel = 8'h80 + i[7:0];
+        if (i == 7) begin
+          expected_pixel = "R"; // prove data byte 0x52 does not end image mode
+        end else begin
+          expected_pixel = 8'h80 + i[7:0];
+        end
+
         expected_pixel_queue.push_back(expected_pixel);
         send_byte(expected_pixel);
       end
 
-      send_byte("R");
-
+      check_equal_logic("image_length", image_length, 32'd20);
       check_equal_int("pixel_count", pixel_count, 20);
-      check_equal_int("read_count", read_count, 1);
+      check_equal_int("image_done_count", image_done_count, 1);
       check_equal_int("expected_pixel_queue.size", expected_pixel_queue.size(), 0);
+
+      send_byte("R");
+      check_equal_int("read_count", read_count, 1);
+    end
+  endtask
+
+  task automatic test_zero_length_image;
+    begin
+      $display("[TEST] zero length image");
+
+      send_byte("I");
+      send_u32_le(32'd0);
+
+      check_equal_logic("zero image_length", image_length, 32'd0);
+      check_equal_int("zero length image_done_count", image_done_count, 2);
     end
   endtask
 
@@ -374,6 +409,7 @@ module tb_uart_cmd_decoder;
       $display("Bias count       : %0d", bias_count);
       $display("Bias done        : %0d", bias_done_count);
       $display("Pixel count      : %0d", pixel_count);
+      $display("Image done       : %0d", image_done_count);
       $display("Read count       : %0d", read_count);
       $display("Protocol errors  : %0d", error_count);
       $display("Total errors     : %0d", errors);
@@ -393,7 +429,8 @@ module tb_uart_cmd_decoder;
     test_config();
     test_weights();
     test_bias();
-    test_image_and_read();
+    test_image_with_explicit_length();
+    test_zero_length_image();
     test_invalid_command();
 
     repeat (10) @(posedge clk);

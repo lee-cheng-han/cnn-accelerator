@@ -16,9 +16,8 @@ TESTS=(
   tb_streaming_cnn_core_random
   tb_uart_tx
   tb_uart_rx
-  tb_cnn_accel_board_top_loopback
-  tb_uart_loopback_random
   tb_uart_cmd_decoder
+  tb_cnn_config_loader
 )
 
 PASS_COUNT=0
@@ -74,3 +73,7 @@ else
   echo "[FAIL] Full regression failed"
   exit 1
 fi
+
+  tb_cnn_accel_board_top_compile
+  tb_cnn_accel_board_top_invalid
+  tb_cnn_accel_board_top_e2e

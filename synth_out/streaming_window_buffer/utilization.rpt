@@ -1,0 +1,28 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (lin64) Build 6299465 Fri Nov 14 12:34:56 MST 2025
+| Date         : Wed Jun 24 02:59:27 2026
+| Host         : WIN-DREFJD030RN running 64-bit Ubuntu 26.04 LTS
+| Command      : report_utilization -hierarchical -file synth_out/streaming_window_buffer/utilization.rpt
+| Design       : streaming_window_buffer
+| Device       : xc7a35tcpg236-1
+| Speed File   : -1
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++-------------------------+--------+------------+------------+---------+------+------+--------+--------+------------+
+|         Instance        | Module | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | DSP Blocks |
++-------------------------+--------+------------+------------+---------+------+------+--------+--------+------------+
+| streaming_window_buffer |  (top) |       1615 |       1615 |       0 |    0 | 3552 |      0 |      0 |          0 |
++-------------------------+--------+------------+------------+---------+------+------+--------+--------+------------+
+
+

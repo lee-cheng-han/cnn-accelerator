@@ -35,7 +35,10 @@ module uart_cmd_decoder #(
   output logic        bias_done,
 
   output logic        pixel_valid,
+  output logic [31:0] pixel_index,
   output logic signed [7:0] pixel_data,
+  output logic [31:0] image_length,
+  output logic        image_done,
 
   output logic        protocol_error
 );
@@ -43,7 +46,7 @@ module uart_cmd_decoder #(
   localparam int NUM_WEIGHTS = NUM_INPUT_CHANNELS * NUM_OUTPUT_CHANNELS * KERNEL_TAPS;
   localparam int NUM_BIAS    = NUM_OUTPUT_CHANNELS;
 
-  typedef enum logic [3:0] {
+  typedef enum logic [4:0] {
     S_IDLE,
 
     S_CFG_W0,
@@ -61,6 +64,10 @@ module uart_cmd_decoder #(
     S_BIAS_B2,
     S_BIAS_B3,
 
+    S_IMG_L0,
+    S_IMG_L1,
+    S_IMG_L2,
+    S_IMG_L3,
     S_IMAGE
   } state_t;
 
@@ -68,8 +75,14 @@ module uart_cmd_decoder #(
 
   logic [7:0] weight_count;
   logic [1:0] bias_count;
-  logic [1:0] bias_byte_count;
   logic signed [31:0] bias_shift;
+
+  logic [31:0] image_length_next;
+  logic [31:0] image_byte_count;
+
+  always_comb begin
+    image_length_next = {rx_data, image_length[23:0]};
+  end
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -83,6 +96,7 @@ module uart_cmd_decoder #(
       bias_valid         <= 1'b0;
       bias_done          <= 1'b0;
       pixel_valid        <= 1'b0;
+      image_done         <= 1'b0;
       protocol_error     <= 1'b0;
 
       cfg_width        <= 16'd0;
@@ -97,13 +111,15 @@ module uart_cmd_decoder #(
       weight_data  <= 8'sd0;
       weight_count <= 8'd0;
 
-      bias_index      <= 2'd0;
-      bias_data       <= 32'sd0;
-      bias_count      <= 2'd0;
-      bias_byte_count <= 2'd0;
-      bias_shift      <= 32'sd0;
+      bias_index <= 2'd0;
+      bias_data  <= 32'sd0;
+      bias_count <= 2'd0;
+      bias_shift <= 32'sd0;
 
-      pixel_data <= 8'sd0;
+      pixel_index      <= 32'd0;
+      pixel_data       <= 8'sd0;
+      image_length     <= 32'd0;
+      image_byte_count <= 32'd0;
     end else begin
       ping_valid         <= 1'b0;
       read_request_valid <= 1'b0;
@@ -113,14 +129,17 @@ module uart_cmd_decoder #(
       bias_valid         <= 1'b0;
       bias_done          <= 1'b0;
       pixel_valid        <= 1'b0;
+      image_done         <= 1'b0;
       protocol_error     <= 1'b0;
 
       if (clear) begin
         state <= S_IDLE;
         weight_count <= 8'd0;
         bias_count <= 2'd0;
-        bias_byte_count <= 2'd0;
         bias_shift <= 32'sd0;
+        image_length <= 32'd0;
+        image_byte_count <= 32'd0;
+        pixel_index <= 32'd0;
       end else if (rx_valid) begin
         unique case (state)
           S_IDLE: begin
@@ -144,13 +163,15 @@ module uart_cmd_decoder #(
 
               "B": begin
                 bias_count <= 2'd0;
-                bias_byte_count <= 2'd0;
                 bias_shift <= 32'sd0;
                 state <= S_BIAS_B0;
               end
 
               "I": begin
-                state <= S_IMAGE;
+                image_length <= 32'd0;
+                image_byte_count <= 32'd0;
+                pixel_index <= 32'd0;
+                state <= S_IMG_L0;
               end
 
               default: begin
@@ -243,13 +264,45 @@ module uart_cmd_decoder #(
             end
           end
 
-          S_IMAGE: begin
-            if (rx_data == "R") begin
-              read_request_valid <= 1'b1;
+          S_IMG_L0: begin
+            image_length[7:0] <= rx_data;
+            state <= S_IMG_L1;
+          end
+
+          S_IMG_L1: begin
+            image_length[15:8] <= rx_data;
+            state <= S_IMG_L2;
+          end
+
+          S_IMG_L2: begin
+            image_length[23:16] <= rx_data;
+            state <= S_IMG_L3;
+          end
+
+          S_IMG_L3: begin
+            image_length[31:24] <= rx_data;
+            image_byte_count <= 32'd0;
+            pixel_index <= 32'd0;
+
+            if (image_length_next == 32'd0) begin
+              image_done <= 1'b1;
               state <= S_IDLE;
             end else begin
-              pixel_data  <= rx_data;
-              pixel_valid <= 1'b1;
+              state <= S_IMAGE;
+            end
+          end
+
+          S_IMAGE: begin
+            pixel_data  <= rx_data;
+            pixel_index <= image_byte_count;
+            pixel_valid <= 1'b1;
+
+            if (image_byte_count == image_length - 32'd1) begin
+              image_done <= 1'b1;
+              image_byte_count <= 32'd0;
+              state <= S_IDLE;
+            end else begin
+              image_byte_count <= image_byte_count + 32'd1;
             end
           end
 
