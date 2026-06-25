@@ -18,6 +18,7 @@ TESTS=(
   tb_uart_rx
   tb_cnn_accel_board_top_loopback
   tb_uart_loopback_random
+  tb_uart_cmd_decoder
 )
 
 PASS_COUNT=0
