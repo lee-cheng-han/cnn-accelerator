@@ -26,3 +26,10 @@ synth:
 clean:
 	rm -rf sim .Xil
 	rm -f *.jou *.log *.pb *.vcd
+
+.PHONY: axi-lite zynq-axi-lite
+
+axi-lite:
+	./scripts/zynq/run_axi_lite_tb.sh
+
+zynq-axi-lite: axi-lite

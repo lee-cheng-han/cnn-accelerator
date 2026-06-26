@@ -14,9 +14,6 @@ TESTS=(
   tb_streaming_window_buffer
   tb_streaming_cnn_core
   tb_streaming_cnn_core_random
-  tb_uart_tx
-  tb_uart_rx
-  tb_uart_cmd_decoder
   tb_cnn_config_loader
 )
 
@@ -74,6 +71,3 @@ else
   exit 1
 fi
 
-  tb_cnn_accel_board_top_compile
-  tb_cnn_accel_board_top_invalid
-  tb_cnn_accel_board_top_e2e

@@ -1,0 +1,6 @@
+0.7
+2020.2
+Nov 14 2025
+12:36:23
+/home/leech/cnn_accelerator/rtl/zynq/cnn_axi_lite_slave.sv,1782451223,systemVerilog,,/home/leech/cnn_accelerator/tb/zynq/tb_cnn_axi_lite_slave.sv,,cnn_axi_lite_slave,,,,,,,,
+/home/leech/cnn_accelerator/tb/zynq/tb_cnn_axi_lite_slave.sv,1782451223,systemVerilog,,,,tb_cnn_axi_lite_slave,,,,,,,,

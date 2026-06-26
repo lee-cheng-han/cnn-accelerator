@@ -1,4 +1,4 @@
-set part_name xc7z020clg400-1
+set part_name xc7a35tcpg236-1
 set top_name cnn_accel_board_top
 
 proc find_sv_files {dir} {
@@ -24,15 +24,15 @@ read_verilog -sv $sv_files
 synth_design \
   -top $top_name \
   -part $part_name \
-  -generic CLK_FREQ_HZ=125000000 \
+  -generic CLK_FREQ_HZ=100000000 \
   -generic BAUD_RATE=115200 \
   -generic RESULT_DEPTH=16384 \
   -flatten_hierarchy none
 
-create_clock -period 8.000 -name clk [get_ports clk]
+create_clock -period 10.000 -name clk [get_ports clk]
 
 # Add your real board XDC here later:
-read_xdc constraints/arty_z7_20_pmod_uart.xdc
+# read_xdc constraints/<your_board>.xdc
 
 opt_design
 place_design
