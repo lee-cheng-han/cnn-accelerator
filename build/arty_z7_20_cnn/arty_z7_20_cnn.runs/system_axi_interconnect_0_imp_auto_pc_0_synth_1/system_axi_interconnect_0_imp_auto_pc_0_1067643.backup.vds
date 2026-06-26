@@ -1,0 +1,42 @@
+#-----------------------------------------------------------
+# Vivado v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Fri Jun 26 04:31:41 2026
+# Process ID         : 1067643
+# Current directory  : /home/leech/cnn_accelerator/build/arty_z7_20_cnn/arty_z7_20_cnn.runs/system_axi_interconnect_0_imp_auto_pc_0_synth_1
+# Command line       : vivado -log system_axi_interconnect_0_imp_auto_pc_0.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source system_axi_interconnect_0_imp_auto_pc_0.tcl
+# Log file           : /home/leech/cnn_accelerator/build/arty_z7_20_cnn/arty_z7_20_cnn.runs/system_axi_interconnect_0_imp_auto_pc_0_synth_1/system_axi_interconnect_0_imp_auto_pc_0.vds
+# Journal file       : /home/leech/cnn_accelerator/build/arty_z7_20_cnn/arty_z7_20_cnn.runs/system_axi_interconnect_0_imp_auto_pc_0_synth_1/vivado.jou
+# Running On         : WIN-DREFJD030RN
+# Platform           : Ubuntu
+# Operating System   : Ubuntu 26.04 LTS
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 155H
+# CPU Frequency      : 2995.202 MHz
+# CPU Physical cores : 11
+# CPU Logical cores  : 22
+# Host memory        : 50252 MB
+# Swap memory        : 12884 MB
+# Total Virtual      : 63137 MB
+# Available Virtual  : 59453 MB
+#-----------------------------------------------------------
+source system_axi_interconnect_0_imp_auto_pc_0.tcl -notrace
+Command: synth_design -top system_axi_interconnect_0_imp_auto_pc_0 -part xc7z020clg400-1 -incremental_mode off -mode out_of_context
+Starting synth_design
+Attempting to get a license for feature 'Synthesis' and/or device 'xc7z020'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xc7z020'
+INFO: [Device 21-403] Loading part xc7z020clg400-1
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 1067914
+INFO: [Common 17-41] Interrupt caught. Command should exit soon.
+1
+INFO: [Common 17-83] Releasing license: Synthesis
+7 Infos, 0 Warnings, 0 Critical Warnings and 1 Errors encountered.
+synth_design failed
+synth_design: Time (s): cpu = 00:00:13 ; elapsed = 00:00:11 . Memory (MB): peak = 2254.406 ; gain = 674.766 ; free physical = 38860 ; free virtual = 52934
+INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 1287.857; main = 1287.857; forked = 0.000
+INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 2254.406; main = 2254.406; forked = 0.000
+INFO: [Common 17-344] 'source' was cancelled
+INFO: [Common 17-206] Exiting Vivado at Fri Jun 26 04:31:59 2026...

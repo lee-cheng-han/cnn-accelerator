@@ -56,3 +56,8 @@ synth-zynq-axi-system:
 
 arty-z7-project:
 	~/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/create_arty_z7_20_project.tcl
+
+.PHONY: arty-z7-bitstream
+
+arty-z7-bitstream:
+	~/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/build_arty_z7_20_bitstream.tcl

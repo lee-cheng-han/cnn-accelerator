@@ -31,11 +31,9 @@ module streaming_window_buffer #(
 
   // Two previous rows per channel. These are intentionally not reset so they
   // can infer FPGA memory more easily.
-  (* ram_style = "block" *)
-  logic signed [DATA_WIDTH-1:0] row_m2 [NUM_INPUT_CHANNELS][MAX_IMG_WIDTH];
+    logic signed [DATA_WIDTH-1:0] row_m2 [NUM_INPUT_CHANNELS][MAX_IMG_WIDTH];
 
-  (* ram_style = "block" *)
-  logic signed [DATA_WIDTH-1:0] row_m1 [NUM_INPUT_CHANNELS][MAX_IMG_WIDTH];
+    logic signed [DATA_WIDTH-1:0] row_m1 [NUM_INPUT_CHANNELS][MAX_IMG_WIDTH];
 
   // Horizontal shift registers for the three rows.
   logic signed [DATA_WIDTH-1:0] top_s0 [NUM_INPUT_CHANNELS];
@@ -82,6 +80,16 @@ module streaming_window_buffer #(
     bot_new0 = bot_s1[cur_ch];
     bot_new1 = bot_s2[cur_ch];
     bot_new2 = pixel_data;
+  end
+
+  // Row memories are intentionally not reset.
+  // Keep them in a clock-only process so Vivado does not infer reset/set
+  // behavior on every memory element.
+  always_ff @(posedge clk) begin
+    if (rst_n && !clear && pixel_valid) begin
+      row_m2[cur_ch][X_W'(cur_x)] <= row_m1_read;
+      row_m1[cur_ch][X_W'(cur_x)] <= pixel_data;
+    end
   end
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -135,10 +143,6 @@ module streaming_window_buffer #(
           bot_s2[c] <= '0;
         end
       end else if (pixel_valid) begin
-        // Update row memories for this channel and x position.
-        row_m2[cur_ch][X_W'(cur_x)] <= row_m1_read;
-        row_m1[cur_ch][X_W'(cur_x)] <= pixel_data;
-
         // Update horizontal shifts for this channel.
         top_s0[cur_ch] <= top_new0;
         top_s1[cur_ch] <= top_new1;

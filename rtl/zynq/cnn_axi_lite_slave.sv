@@ -94,11 +94,42 @@ module cnn_axi_lite_slave #(
   logic signed [BIAS_WIDTH-1:0]   bias_mem   [0:NUM_OUTPUT_CHANNELS-1];
 
   logic [7:0] wr_weight_idx_calc;
+  logic [31:0] width_wr_merged;
+  logic [31:0] height_wr_merged;
+  logic [31:0] mode_wr_merged;
+  logic [31:0] weight_wr_merged;
+  logic [31:0] bias_wr_merged;
+  logic [31:0] pixel_wr_merged;
   logic [1:0] wr_bias_idx_calc;
   logic       result_read_fire;
 
+
+  function automatic logic [31:0] apply_wstrb(
+    input logic [31:0] old_value,
+    input logic [31:0] new_value,
+    input logic [3:0]  byte_strobe
+  );
+    logic [31:0] merged;
+    begin
+      merged = old_value;
+      for (int b = 0; b < 4; b++) begin
+        if (byte_strobe[b]) begin
+          merged[b*8 +: 8] = new_value[b*8 +: 8];
+        end
+      end
+      return merged;
+    end
+  endfunction
+
   assign s_axi_bresp = 2'b00;
   assign s_axi_rresp = 2'b00;
+
+  assign width_wr_merged  = apply_wstrb({16'd0, image_width},  wdata_q, wstrb_q);
+  assign height_wr_merged = apply_wstrb({16'd0, image_height}, wdata_q, wstrb_q);
+  assign mode_wr_merged   = apply_wstrb({19'd0, quant_shift, quant_enable, bias_enable, relu_enable, kernel_mode}, wdata_q, wstrb_q);
+  assign weight_wr_merged = apply_wstrb(32'd0, wdata_q, wstrb_q);
+  assign bias_wr_merged   = apply_wstrb(32'd0, wdata_q, wstrb_q);
+  assign pixel_wr_merged  = apply_wstrb(32'd0, wdata_q, wstrb_q);
 
   assign result_read_fire =
     (!s_axi_rvalid) &&
@@ -214,7 +245,7 @@ module cnn_axi_lite_slave #(
           end
 
           ADDR_HEIGHT: begin
-            image_height <= wdata_q[15:0];
+            image_height <= height_wr_merged[15:0];
           end
 
           ADDR_MODE_FLAGS: begin
@@ -228,7 +259,7 @@ module cnn_axi_lite_slave #(
 
           ADDR_PIXEL_IN: begin
             pixel_valid <= 1'b1;
-            pixel_data  <= wdata_q[DATA_WIDTH-1:0];
+            pixel_data  <= pixel_wr_merged[DATA_WIDTH-1:0];
           end
 
           ADDR_PIXEL_INDEX: begin
@@ -241,7 +272,7 @@ module cnn_axi_lite_slave #(
               weight_mem[wr_weight_idx_calc] <= wdata_q[WEIGHT_WIDTH-1:0];
               weight_valid <= 1'b1;
               weight_index <= wr_weight_idx_calc;
-              weight_data  <= wdata_q[WEIGHT_WIDTH-1:0];
+              weight_data  <= weight_wr_merged[WEIGHT_WIDTH-1:0];
             end else if ((awaddr_q >= ADDR_BIAS_BASE) &&
                          (awaddr_q < (ADDR_BIAS_BASE + (NUM_OUTPUT_CHANNELS * 4)))) begin
               bias_mem[wr_bias_idx_calc] <= wdata_q;
