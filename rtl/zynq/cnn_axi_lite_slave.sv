@@ -95,9 +95,17 @@ module cnn_axi_lite_slave #(
 
   logic [7:0] wr_weight_idx_calc;
   logic [1:0] wr_bias_idx_calc;
+  logic       result_read_fire;
 
   assign s_axi_bresp = 2'b00;
   assign s_axi_rresp = 2'b00;
+
+  assign result_read_fire =
+    (!s_axi_rvalid) &&
+    s_axi_arvalid &&
+    (s_axi_araddr == ADDR_RESULT_DATA);
+
+  assign result_ready = result_read_fire && result_valid;
 
   assign status_reg = {
     27'd0,
@@ -260,10 +268,8 @@ module cnn_axi_lite_slave #(
       s_axi_arready <= 1'b0;
       s_axi_rvalid  <= 1'b0;
       s_axi_rdata   <= 32'd0;
-      result_ready  <= 1'b0;
     end else begin
       s_axi_arready <= 1'b0;
-      result_ready  <= 1'b0;
 
       if (!s_axi_rvalid && s_axi_arvalid) begin
         s_axi_arready <= 1'b1;
@@ -296,7 +302,6 @@ module cnn_axi_lite_slave #(
 
           ADDR_RESULT_DATA: begin
             s_axi_rdata  <= {{(32-DATA_WIDTH){result_data[DATA_WIDTH-1]}}, result_data};
-            result_ready <= result_valid;
           end
 
           ADDR_RESULT_STAT: begin

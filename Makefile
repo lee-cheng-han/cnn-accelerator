@@ -33,3 +33,10 @@ axi-lite:
 	./scripts/zynq/run_axi_lite_tb.sh
 
 zynq-axi-lite: axi-lite
+
+.PHONY: axi-system zynq-axi-system
+
+axi-system:
+	./scripts/zynq/run_axi_system_tb.sh
+
+zynq-axi-system: axi-system
