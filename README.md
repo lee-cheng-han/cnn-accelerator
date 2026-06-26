@@ -9,8 +9,8 @@ Full board-top integration was synthesized, placed, routed, and timing-checked i
 
 | Item | Result |
 |---|---:|
-| Target FPGA | Xilinx Artix-7 35T |
-| Part | `xc7a35tcpg236-1` |
+| Target FPGA | TBD |
+| Part | `TBD` |
 | Tool | Vivado 2025.2 |
 | Clock Target | 100 MHz |
 | Timing Status | PASS |
@@ -316,16 +316,4 @@ Until a specific FPGA board is selected, the project should be described as:
 - The current board demo uses 3 input channels and 4 output channels.
 - The project is intended as an FPGA/RTL accelerator demo, not a production-scale CNN inference engine.
 
-## Resume Summary
-
-This project demonstrates:
-
-- SystemVerilog RTL design
-- FPGA-oriented streaming architecture
-- CNN convolution datapath design
-- UART hardware/software integration
-- BRAM inference
-- randomized and directed verification
-- board-level end-to-end testing
-- Vivado synthesis, implementation, and timing closure
 
