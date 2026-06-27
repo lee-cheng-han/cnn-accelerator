@@ -1,319 +1,338 @@
-# FPGA-Ready UART CNN Accelerator
-
-A hardware CNN accelerator written in SystemVerilog and prepared for FPGA board bring-up.  
-The design supports a streaming UART interface for loading configuration, weights, bias values, and image data, then reading CNN results back over UART.
-
-## Final Implementation Result
-
-Full board-top integration was synthesized, placed, routed, and timing-checked in Vivado.
-
-| Item | Result |
-|---|---:|
-| Target FPGA | TBD |
-| Part | `TBD` |
-| Tool | Vivado 2025.2 |
-| Clock Target | 100 MHz |
-| Timing Status | PASS |
-| WNS | +0.489 ns |
-| TNS | 0.000 ns |
-| Failing Endpoints | 0 |
-
-### Final Resource Utilization
-
-| Resource | Used | Available | Utilization |
-|---|---:|---:|---:|
-| Slice LUTs | 4,992 | 20,800 | 24.00% |
-| Slice Registers | 6,247 | 41,600 | 15.02% |
-| Block RAM Tile | 4.5 | 50 | 9.00% |
-| RAMB36 | 4 | 50 | 8.00% |
-| RAMB18 | 1 | 100 | 1.00% |
-| DSPs | 3 | 90 | 3.33% |
-| Bonded IOB | 7 | 106 | 6.60% |
-
-## Project Status
-
-Current status:
-
-- Full regression passes
-- Board-level UART end-to-end simulation passes
-- Full board-top synthesis passes
-- Full board-top implementation passes
-- 100 MHz timing closes successfully
-- Result buffer infers BRAM
-- Hardware bitstream generation is ready after adding board-specific XDC pin constraints
-
-The project is hardware-ready at the RTL and implementation level. Final FPGA programming requires selecting a board and assigning physical pins for clock, reset, UART, and LEDs.
-
-## Features
-
-- Streaming CNN datapath
-- 1x1 convolution mode
-- 3x3 convolution mode
-- 3 input channels
-- 4 output channels
-- INT8 input pixels
-- INT8 weights
-- INT32 accumulation
-- Optional bias
-- Optional ReLU
-- Optional quantization shift
-- INT8 output saturation
-- UART command interface
-- Config, weight, bias, and image loading
-- BRAM-backed result buffer
-- UART result readback
-- Board-level top module with only 7 external I/O ports
-
-## Top-Level Board Interface
-
-Top module:
-
-    cnn_accel_board_top
-
-External ports:
-
-| Port | Direction | Description |
-|---|---|---|
-| `clk` | input | FPGA clock |
-| `rst_n` | input | Active-low reset |
-| `uart_rx` | input | UART receive from host PC |
-| `uart_tx` | output | UART transmit to host PC |
-| `led_busy` | output | Indicates busy/not-ready activity |
-| `led_done` | output | Toggles when result readback completes |
-| `led_error` | output | Indicates UART/protocol/buffer error |
-
-## Architecture Overview
-
-The board-ready accelerator is organized as:
-
-    uart_rx
-      -> uart_cmd_decoder
-      -> cnn_system_core
-          -> cnn_config_loader
-          -> streaming_cnn_core
-          -> output_result_buffer
-          -> uart_result_sender
-      -> uart_tx
-
-The design avoids storing a full image in a large activation buffer. Instead, it uses a streaming window-buffer architecture to generate convolution windows as pixels arrive.
-
-This greatly reduces LUT and register usage compared to a full activation-memory approach.
-
-## CNN Configuration
-
-Default board configuration:
-
-| Parameter | Value |
-|---|---:|
-| Input channels | 3 |
-| Output channels | 4 |
-| Kernel taps | 9 |
-| Input data width | 8-bit signed |
-| Weight width | 8-bit signed |
-| Accumulator width | 32-bit signed |
-| Output width | 8-bit signed |
-| Result buffer depth | 16,384 bytes |
-
-Supported convolution modes:
-
-| Mode | Description |
-|---|---|
-| 1x1 | Uses tap 0 for each input channel |
-| 3x3 | Uses all 9 taps per input channel |
-
-## UART Protocol
-
-Default UART settings:
-
-| Setting | Value |
-|---|---:|
-| Baud rate | 115200 |
-| Data bits | 8 |
-| Parity | None |
-| Stop bits | 1 |
-| Flow control | None |
-
-Command summary:
-
-| Command | Payload | Description |
-|---|---|---|
-| `P` | none | Ping |
-| `C` | 7 bytes | Configure image size, mode, flags, quantization |
-| `W` | 108 bytes | Load CNN weights |
-| `B` | 16 bytes | Load 4 signed INT32 bias values |
-| `I` | 4-byte length + image bytes | Stream image data |
-| `R` | none | Read output bytes |
-
-Full protocol documentation is in:
-
-    docs/uart_protocol.md
-
-## Verification
-
-The project includes directed and randomized SystemVerilog testbenches.
-
-Verified modules include:
-
-- MAC unit
-- 3x3 MAC array
-- channel accumulator
-- window generator
-- convolution engine
-- streaming window buffer
-- streaming CNN core
-- UART RX
-- UART TX
-- UART command decoder
-- CNN config loader
-- output result buffer
-- UART result sender
-- CNN system core
-- board-level UART top
-
-Board-level tests include:
-
-- compile test
-- invalid command test
-- full UART end-to-end test
-
-Run full regression:
-
-    make regression SEED=12345
-
-## Implementation and Timing Closure
-
-The original full-memory version did not fit efficiently because the activation buffer inferred a large LUT/FF-based memory.
-
-The board-ready implementation fixed this by using:
-
-- streaming pixel input
-- line/window buffering
-- BRAM-backed result storage
-- UART-controlled loading and readback
-
-A major timing issue came from calculating the total number of output windows directly from `image_width` and `image_height` and immediately using that result in control logic.
-
-Timing was closed by pipelining:
-
-1. total window multiply operands
-2. total window count
-3. last-window/control logic usage
-
-Final result:
-
-| Metric | Result |
-|---|---:|
-| Clock period | 10.000 ns |
-| Frequency | 100 MHz |
-| WNS | +0.489 ns |
-| TNS | 0.000 ns |
-| Status | PASS |
-
-More details are in:
-
-    docs/synthesis_results.md
-
-## Host UART Script
-
-A Python host script is provided for sending a demo image to the FPGA over UART.
-
-Location:
-
-    host/send_image_uart.py
-
-Install dependency:
-
-    pip install pyserial
-
-Example Linux usage:
-
-    python3 host/send_image_uart.py --port /dev/ttyUSB0 --baud 115200
-
-Example Windows usage:
-
-    python host/send_image_uart.py --port COM5 --baud 115200
-
-The default demo sends a 4x4 image and verifies the returned CNN output.
-
-Default 1x1 mapping:
-
-    out0 = input_channel_0
-    out1 = input_channel_1
-    out2 = input_channel_2
-    out3 = input_channel_0 + input_channel_1 + input_channel_2
-
-## Repository Structure
-
-    rtl/
-      fpga/
-        cnn_accel_board_top.sv
-        cnn_system_core.sv
-        streaming_cnn_core.sv
-        streaming_window_buffer.sv
-        uart_rx.sv
-        uart_tx.sv
-        uart_cmd_decoder.sv
-        cnn_config_loader.sv
-        output_result_buffer.sv
-        uart_result_sender.sv
-
-    tb/
-      SystemVerilog testbenches
-
-    scripts/
-      simulation, regression, synthesis, and implementation scripts
-
-    docs/
-      uart_protocol.md
-      synthesis_results.md
-
-    host/
-      send_image_uart.py
-
-## Build and Test Commands
-
-Run a single testbench:
-
-    make xsim TB=tb_cnn_accel_board_top_e2e SEED=12345
-
-Run full regression:
-
-    make regression SEED=12345
-
-Run full board-top synthesis:
-
-    vivado -mode batch -source scripts/synth_real_board_top.tcl | tee synth_real_board_top.log
-
-Check synthesis timing:
-
-    grep -A 20 "Design Timing Summary" synth_out/real_board_top/timing_summary.rpt
-
-Run full implementation:
-
-    vivado -mode batch -source scripts/build_real_board_top_bitstream.tcl | tee build_real_board_top_bitstream.log
-
-## Hardware Bring-Up
-
-Final bitstream generation requires board-specific XDC constraints for:
-
-- `clk`
-- `rst_n`
-- `uart_rx`
-- `uart_tx`
-- `led_busy`
-- `led_done`
-- `led_error`
-
-Until a specific FPGA board is selected, the project should be described as:
-
-    Synthesized, implemented, and timing-closed for Xilinx Artix-7 35T at 100 MHz.
-    Hardware bring-up requires board-specific XDC pin constraints.
-
-## Current Limitations
-
-- Final hardware bitstream is blocked until a target board and XDC pin constraints are selected.
-- UART bandwidth limits practical image size for interactive demos.
-- The current board demo uses 3 input channels and 4 output channels.
-- The project is intended as an FPGA/RTL accelerator demo, not a production-scale CNN inference engine.
-
-
+# CNN Accelerator
+
+SystemVerilog CNN accelerator for the **Digilent Arty Z7-20** using a **Zynq-7000 SoC**. The design integrates a custom CNN datapath into the Zynq programmable logic and exposes it to the ARM Cortex-A9 processing system through an AXI-Lite memory-mapped interface.
+
+The repository includes RTL, verification, Vivado automation scripts, Zynq block design generation, bitstream generation, XSA export, and a Vitis bare-metal software application for controlling the accelerator from the ARM processor.
+
+## Implementation Summary
+
+| Item                       | Status              |
+| -------------------------- | ------------------- |
+| RTL simulation             | Passing             |
+| AXI-Lite control interface | Complete            |
+| Zynq PS to PL integration  | Complete            |
+| Vivado block design        | Generated from TCL  |
+| Bitstream generation       | Passing             |
+| Timing closure             | Met                 |
+| XSA hardware export        | Passing             |
+| Vitis bare-metal app       | Builds successfully |
+| Target board               | Digilent Arty Z7-20 |
+| Accelerator base address   | `0x43C00000`        |
+
+## FPGA Utilization
+
+Latest implemented design on `xc7z020clg400-1`:
+
+| Resource        |  Used | Available | Utilization |
+| --------------- | ----: | --------: | ----------: |
+| Slice LUTs      | 5,678 |    53,200 |      10.67% |
+| Slice Registers | 7,749 |   106,400 |       7.28% |
+| Block RAM Tile  |   4.5 |       140 |       3.21% |
+| RAMB36/FIFO     |     4 |       140 |       2.86% |
+| RAMB18          |     1 |       280 |       0.36% |
+| DSPs            |     3 |       220 |       1.36% |
+
+Timing result:
+
+```text
+All user specified timing constraints are met.
+```
+
+## Target Platform
+
+| Item                         | Value                   |
+| ---------------------------- | ----------------------- |
+| Board                        | Digilent Arty Z7-20     |
+| SoC                          | Xilinx Zynq-7000        |
+| FPGA Part                    | `xc7z020clg400-1`       |
+| Processor                    | Dual-core ARM Cortex-A9 |
+| Programmable Logic Interface | AXI-Lite                |
+| Toolchain                    | Vivado / Vitis 2025.2   |
+| Software Environment         | Bare-metal standalone   |
+| Accelerator Base Address     | `0x43C00000`            |
+
+## System Architecture
+
+```text
+ARM Cortex-A9 Processing System
+        |
+        | M_AXI_GP0
+        v
+AXI Interconnect
+        |
+        v
+CNN AXI-Lite Accelerator
+        |
+        +-- Control / Status Registers
+        +-- Image Dimension Registers
+        +-- Mode Configuration Register
+        +-- Weight Registers
+        +-- Bias Registers
+        +-- Streaming Pixel Input Register
+        +-- Result Data Register
+        +-- Result Status Register
+```
+
+The ARM processor configures the accelerator through AXI-Lite writes, streams input pixels through a memory-mapped pixel input register, and reads computed outputs from the result buffer. The programmable logic contains the CNN datapath, buffering, control logic, and result storage.
+
+## Hardware Features
+
+* AXI-Lite memory-mapped control interface
+* Zynq PS to PL integration through `M_AXI_GP0`
+* Script-generated Vivado block design
+* Streaming pixel input path
+* Register-loaded weights and biases
+* Result buffer with software readback
+* ReLU, bias, and quantization configuration flags
+* Bare-metal ARM software driver/test application
+* Reproducible Vivado/Vitis build flow
+
+## CNN Datapath Overview
+
+The accelerator is structured around a streaming hardware datapath:
+
+```text
+Pixel Input Register
+        |
+        v
+Streaming Input Control
+        |
+        v
+Window / Buffer Logic
+        |
+        v
+CNN Compute Datapath
+        |
+        v
+Bias / ReLU / Quantization Logic
+        |
+        v
+Result Buffer
+        |
+        v
+AXI-Lite Readback
+```
+
+The software writes pixels into the accelerator one word at a time. The hardware receives the pixel stream, processes it through the configured CNN datapath, stores output values in the result buffer, and exposes the results through AXI-Lite reads.
+
+## AXI Register Map
+
+|  Offset | Register      | Description                                        |
+| ------: | ------------- | -------------------------------------------------- |
+| `0x000` | Control       | Start / clear control register                     |
+| `0x004` | Status        | Accelerator status                                 |
+| `0x008` | Width         | Input image width                                  |
+| `0x00C` | Height        | Input image height                                 |
+| `0x010` | Mode Flags    | Kernel, ReLU, bias, and quantization configuration |
+| `0x020` | Pixel Input   | Streaming pixel input                              |
+| `0x024` | Pixel Index   | Pixel index / debug register                       |
+| `0x030` | Result Data   | Output result data                                 |
+| `0x034` | Result Status | Result buffer status                               |
+| `0x100` | Weight Base   | Weight register base                               |
+| `0x400` | Bias Base     | Bias register base                                 |
+
+## Mode Flags
+
+|    Bit | Name         | Description                       |
+| -----: | ------------ | --------------------------------- |
+|    `0` | Kernel Mode  | Selects kernel/configuration mode |
+|    `1` | ReLU Enable  | Enables ReLU post-processing      |
+|    `2` | Bias Enable  | Enables bias addition             |
+|    `3` | Quant Enable | Enables output quantization       |
+| `12:8` | Quant Shift  | Quantization right-shift amount   |
+
+## Program Structure
+
+```text
+cnn_accelerator/
+├── rtl/
+│   ├── compute/
+│   │   └── CNN compute datapath modules
+│   │
+│   ├── fpga/
+│   │   └── Streaming buffers, FPGA wrappers, and board-level datapath logic
+│   │
+│   └── zynq/
+│       └── AXI-Lite slave, Zynq system top, and block design wrapper
+│
+├── tb/
+│   └── SystemVerilog testbenches for RTL and AXI-level verification
+│
+├── scripts/
+│   ├── zynq/
+│   │   └── Vivado TCL scripts for project generation, synthesis, bitstream
+│   │       generation, XSA export, and board programming
+│   │
+│   └── vitis/
+│       └── Vitis Python scripts for bare-metal software generation
+│
+├── software/
+│   └── zynq_baremetal/
+│       └── Bare-metal ARM application for configuring and testing the accelerator
+│
+├── constraints/
+│   └── FPGA constraint files
+│
+├── docs/
+│   ├── architecture.md
+│   ├── block_diagram.md
+│   ├── performance_results.md
+│   ├── synthesis_results.md
+│   ├── verification_plan.md
+│   └── zynq/
+│       └── Zynq-specific integration documentation
+│
+├── Makefile
+└── README.md
+Documentation
+
+Additional design documentation is available in the docs/ directory.
+
+Document	Description
+docs/architecture.md	Hardware architecture, datapath organization, and module-level design notes
+docs/block_diagram.md	Text-based block diagrams for the CNN accelerator and Zynq integration
+docs/performance_results.md	Implementation results, timing status, and resource utilization summary
+docs/synthesis_results.md	Vivado synthesis results, warnings, and implementation notes
+docs/verification_plan.md	Testbench strategy, directed/random testing approach, and verification coverage plan
+docs/zynq/	Zynq PS/PL integration notes, AXI-Lite memory map details, and board bring-up flow
+```
+
+## Important Source Files
+
+| File                                          | Purpose                                                  |
+| --------------------------------------------- | -------------------------------------------------------- |
+| `rtl/zynq/cnn_axi_lite_slave.sv`              | AXI-Lite register interface                              |
+| `rtl/zynq/cnn_axi_system_top.sv`              | Top-level Zynq-facing accelerator wrapper                |
+| `rtl/zynq/cnn_axi_system_bd_wrapper.v`        | Verilog wrapper used for Vivado block design integration |
+| `rtl/fpga/streaming_window_buffer.sv`         | Streaming image/window buffering logic                   |
+| `software/zynq_baremetal/main.c`              | Bare-metal ARM test application                          |
+| `scripts/zynq/create_arty_z7_20_project.tcl`  | Creates the Vivado block design project                  |
+| `scripts/zynq/build_arty_z7_20_bitstream.tcl` | Builds the implemented FPGA bitstream                    |
+| `scripts/zynq/export_arty_z7_20_xsa.tcl`      | Exports the XSA hardware platform                        |
+| `scripts/vitis/create_zynq_baremetal_app.py`  | Creates and builds the Vitis bare-metal application      |
+
+## Software Flow
+
+The bare-metal ARM application controls the accelerator through memory-mapped I/O.
+
+Application source:
+
+```text
+software/zynq_baremetal/main.c
+```
+
+Base address:
+
+```c
+#define CNN_BASE 0x43C00000U
+```
+
+Program sequence:
+
+1. Clear the accelerator
+2. Configure image width and height
+3. Configure accelerator mode flags
+4. Load test weights
+5. Load zero biases
+6. Start the accelerator
+7. Stream a small RGB test image
+8. Read accelerator status
+9. Read output results
+10. Print results over UART
+
+## Build Flow
+
+### 1. Create the Vivado Project
+
+```bash
+make arty-z7-project
+```
+
+This generates the Vivado project and Zynq block design.
+
+### 2. Build the Bitstream
+
+```bash
+make arty-z7-bitstream
+```
+
+Generated bitstream:
+
+```text
+build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
+```
+
+### 3. Export the XSA
+
+```bash
+make arty-z7-xsa
+```
+
+Generated hardware platform:
+
+```text
+build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+```
+
+### 4. Build the Bare-Metal ARM Application
+
+```bash
+make vitis-app
+```
+
+Generated ELF:
+
+```text
+build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
+```
+
+### 5. Full Hardware/Software Build
+
+```bash
+make full-arty-z7-flow
+```
+
+This runs the complete build sequence:
+
+```text
+Vivado project -> bitstream -> XSA -> Vitis bare-metal ELF
+```
+
+## Generated Outputs
+
+Generated Vivado and Vitis outputs are not tracked in Git.
+
+Ignored generated files include:
+
+```text
+build/
+*.bit
+*.xsa
+*.elf
+*.rpt
+*.log
+*.jou
+.Xil/
+xsim.dir/
+```
+
+A clean clone should regenerate all hardware and software outputs using the Makefile targets.
+
+## Requirements
+
+* Vivado 2025.2
+* Vitis 2025.2
+* Zynq-7000 / 7-Series device support
+* Linux or WSL Ubuntu
+* Digilent Arty Z7-20 board
+* USB cable for programming and UART
+
+For WSL users, Vitis may require:
+
+```bash
+sudo apt install -y x11-utils
+```
+
+## Notes
+
+Generated Vivado and Vitis projects are intentionally excluded from version control. The repository tracks source RTL, software, constraints, scripts, and build targets. Hardware and software build products are regenerated from the scripted flow.

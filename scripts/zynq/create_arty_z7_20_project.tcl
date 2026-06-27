@@ -32,6 +32,15 @@ current_bd_design $bd_name
 # Zynq Processing System
 create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7 ps7
 
+# Enable PS UART1 for bare-metal UART prints over the Arty Z7 USB-UART path.
+# Arty Z7 uses the Zynq PS UART through MIO, so Vitis needs this peripheral
+# present in the exported XSA.
+set_property -dict [list \
+  CONFIG.PCW_UART1_PERIPHERAL_ENABLE {1} \
+  CONFIG.PCW_UART1_UART1_IO {MIO 48 .. 49} \
+  CONFIG.PCW_UART_PERIPHERAL_FREQMHZ {100} \
+] [get_bd_cells ps7]
+
 # Apply basic Zynq config
 apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 \
   -config {make_external "FIXED_IO, DDR" apply_board_preset "0" Master "Disable" Slave "Disable"} \

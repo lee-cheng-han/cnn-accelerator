@@ -1,59 +1,66 @@
 # Synthesis and Implementation Results
 
-Target used for implementation testing:
+## Target Configuration
 
-- FPGA family: Xilinx Artix-7
-- Part: xc7a35tcpg236-1
-- Top module: cnn_accel_board_top
-- Clock target: 100 MHz
-- Tool: Vivado 2025.2
+| Item | Value |
+|---|---|
+| Board | Digilent Arty Z7-20 |
+| FPGA Part | `xc7z020clg400-1` |
+| Top-Level Wrapper | `system_wrapper` |
+| Vivado Version | 2025.2 |
+| Design Flow | Script-generated Vivado project and block design |
 
-## Final Board-Top Utilization
+## Implementation Status
 
-Full UART + CNN board integration result:
+| Stage | Result |
+|---|---|
+| Vivado project creation | Passing |
+| Block design validation | Passing |
+| Synthesis | Passing |
+| Implementation | Passing |
+| Bitstream generation | Passing |
+| Timing | Met |
+| XSA export | Passing |
+
+## Resource Utilization
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 4,992 | 20,800 | 24.00% |
-| Slice Registers | 6,247 | 41,600 | 15.02% |
-| Block RAM Tile | 4.5 | 50 | 9.00% |
-| RAMB36 | 4 | 50 | 8.00% |
-| RAMB18 | 1 | 100 | 1.00% |
-| DSPs | 3 | 90 | 3.33% |
-| Bonded IOB | 7 | 106 | 6.60% |
+| Slice LUTs | 5,678 | 53,200 | 10.67% |
+| Slice Registers | 7,749 | 106,400 | 7.28% |
+| Block RAM Tile | 4.5 | 140 | 3.21% |
+| RAMB36/FIFO | 4 | 140 | 2.86% |
+| RAMB18 | 1 | 280 | 0.36% |
+| DSPs | 3 | 220 | 1.36% |
 
-## Timing
+## Timing Summary
 
-| Metric | Result |
-|---|---:|
-| Clock period | 10.000 ns |
-| Frequency | 100 MHz |
-| WNS | +0.489 ns |
-| TNS | 0.000 ns |
-| Failing endpoints | 0 |
-| Status | PASS |
+```text
+All user specified timing constraints are met.
+```
 
-## Timing Closure Notes
+## Important Generated Files
 
-The board-ready design uses a streaming architecture instead of a large activation-memory buffer.
+| File | Description |
+|---|---|
+| `build/arty_z7_20_cnn/arty_z7_20_cnn.xpr` | Generated Vivado project |
+| `build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit` | Generated bitstream |
+| `build/arty_z7_20_bitstream_util.rpt` | Utilization report |
+| `build/arty_z7_20_bitstream_timing.rpt` | Timing report |
+| `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa` | Exported hardware platform |
 
-A major timing issue came from computing the total number of output windows directly from image_width and image_height and immediately using that result in control logic. This was fixed by pipelining:
+## Warning Notes
 
-1. total window count
-2. total window multiply operands
+Vivado may print board-store warnings related to unrelated board parts. These are not design failures. The project targets the raw Zynq part:
 
-After this, the full board-top design met 100 MHz timing.
+```text
+xc7z020clg400-1
+```
 
-## Hardware Bring-Up Status
+Relevant passing checks:
 
-The design synthesizes, places, routes, and meets timing.
-
-Final bitstream generation requires board-specific XDC constraints for:
-
-- clk
-- rst_n
-- uart_rx
-- uart_tx
-- led_busy
-- led_done
-- led_error
+- synthesis completes
+- implementation completes
+- bitstream is generated
+- timing is met
+- XSA exports correctly
