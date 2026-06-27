@@ -1,25 +1,54 @@
-# Performance Results
+# Performance and Implementation Results
 
-The design exposes these counters:
+## Target
 
-- `cycle_count`
-- `input_pixel_count`
-- `window_count`
-- `mac_count`
-- `output_count`
-- `stall_count`
-- `fifo_full_count`
+| Item | Value |
+|---|---|
+| Board | Digilent Arty Z7-20 |
+| SoC | Xilinx Zynq-7000 |
+| Part | `xc7z020clg400-1` |
+| Toolchain | Vivado / Vitis 2025.2 |
+| Build Type | Implemented bitstream |
 
-For the default 3 input channels, 4 output channels, and 3x3 kernel:
+## Build Status
+
+| Item | Result |
+|---|---|
+| Vivado project generation | Passing |
+| Bitstream generation | Passing |
+| Timing | Met |
+| XSA export | Passing |
+| Vitis bare-metal app build | Passing |
+
+## FPGA Utilization
+
+Latest implemented design:
+
+| Resource | Used | Available | Utilization |
+|---|---:|---:|---:|
+| Slice LUTs | 5,678 | 53,200 | 10.67% |
+| Slice Registers | 7,749 | 106,400 | 7.28% |
+| Block RAM Tile | 4.5 | 140 | 3.21% |
+| RAMB36/FIFO | 4 | 140 | 2.86% |
+| RAMB18 | 1 | 280 | 0.36% |
+| DSPs | 3 | 220 | 1.36% |
+
+## Timing Result
 
 ```text
-MAC-equivalent operations per output pixel = 3 x 4 x 9 = 108
+All user specified timing constraints are met.
 ```
 
-For an H x W image with valid convolution:
+## Generated Outputs
 
-```text
-output pixels per output channel = (H - 2) x (W - 2)
-total output values = 4 x (H - 2) x (W - 2)
-total MAC-equivalent operations = 108 x (H - 2) x (W - 2)
-```
+| Output | Path |
+|---|---|
+| Bitstream | `build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit` |
+| Timing Report | `build/arty_z7_20_bitstream_timing.rpt` |
+| Utilization Report | `build/arty_z7_20_bitstream_util.rpt` |
+| XSA | `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa` |
+| Bare-metal ELF | `build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf` |
+
+## Notes
+
+The current implementation fits comfortably on the Arty Z7-20 and leaves room for larger buffers, DMA support, additional output channels, and more compute parallelism.

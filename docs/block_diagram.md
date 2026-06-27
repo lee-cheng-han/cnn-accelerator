@@ -1,25 +1,128 @@
 # Block Diagram
 
-```text
-                 +-------------------+
- cfg interface -> | config_regs       |
-                 +---------+---------+
-                           |
-                           v
- AXIS input ---> axis_input_if ---> activation_buffer
-                           |              |
-                           |              v
-                           |        window addresses
-                           |              |
-                           v              v
-                    accel_controller -> output_channel_array
-                                         |  |  |  |
-                                         v  v  v  v
-                                   conv_engine per output channel
-                                         |
-                              bias -> ReLU -> quantize -> saturate
-                                         |
- AXIS output <--- axis_output_if <-------+
+## Zynq System Block Diagram
 
- perf_counters observe input/output/windows/stalls
+```text
++-------------------------------------------------------------+
+|                         Zynq-7000 SoC                        |
+|                                                             |
+|  +-----------------------------+                            |
+|  | Processing System            |                            |
+|  | ARM Cortex-A9                |                            |
+|  | Bare-metal software          |                            |
+|  +--------------+--------------+                            |
+|                 |                                           |
+|                 | M_AXI_GP0                                 |
+|                 v                                           |
+|  +-----------------------------+                            |
+|  | AXI Interconnect             |                            |
+|  +--------------+--------------+                            |
+|                 |                                           |
+|                 | AXI-Lite                                  |
+|                 v                                           |
+|  +-------------------------------------------------------+  |
+|  | CNN AXI-Lite Accelerator                              |  |
+|  |                                                       |  |
+|  | +-------------------+   +---------------------------+ |  |
+|  | | Control Registers |   | Status Registers          | |  |
+|  | +-------------------+   +---------------------------+ |  |
+|  |                                                       |  |
+|  | +-------------------+   +---------------------------+ |  |
+|  | | Weight Registers  |   | Bias Registers            | |  |
+|  | +-------------------+   +---------------------------+ |  |
+|  |                                                       |  |
+|  | +-------------------+   +---------------------------+ |  |
+|  | | Pixel Input       |-->| CNN Streaming Datapath    | |  |
+|  | +-------------------+   +-------------+-------------+ |  |
+|  |                                     |                 |  |
+|  |                                     v                 |  |
+|  |                         +---------------------------+ |  |
+|  |                         | Result Buffer             | |  |
+|  |                         +---------------------------+ |  |
+|  +-------------------------------------------------------+  |
++-------------------------------------------------------------+
+```
+
+## Accelerator Datapath
+
+```text
+AXI-Lite Pixel Write
+        |
+        v
+Pixel Input Register
+        |
+        v
+Streaming Control
+        |
+        v
+Window / Buffer Logic
+        |
+        v
+Compute Datapath
+        |
+        v
+Bias Add
+        |
+        v
+ReLU
+        |
+        v
+Quantization / Saturation
+        |
+        v
+Result Buffer
+        |
+        v
+AXI-Lite Result Read
+```
+
+## Software-Control Flow
+
+```text
+main.c
+  |
+  +-- write width / height
+  |
+  +-- write mode flags
+  |
+  +-- write weights
+  |
+  +-- write biases
+  |
+  +-- write start bit
+  |
+  +-- stream pixels through pixel input register
+  |
+  +-- read status
+  |
+  +-- read result data
+  |
+  +-- print output over UART
+```
+
+## Generated Hardware Flow
+
+```text
+RTL source
+   |
+   v
+Vivado TCL project generation
+   |
+   v
+Zynq block design
+   |
+   v
+Synthesis
+   |
+   v
+Implementation
+   |
+   v
+Bitstream
+   |
+   v
+XSA export
+   |
+   v
+Vitis bare-metal application
 ```

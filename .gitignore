@@ -1,8 +1,45 @@
-sim/
-*.vcd
-*.log
-*.jou
-*.pb
-*.wdb
+# Build/generated output
+build/
+dist/
+out/
+
+# Vivado generated files
 .Xil/
-synth_out/*.rpt
+*.jou
+*.log
+*.str
+*.wdb
+*.rpt
+*.bit
+*.bin
+*.ltx
+*.dcp
+*.xsa
+*.hwdef
+*.runs/
+*.cache/
+*.gen/
+*.ip_user_files/
+*.sim/
+*.srcs/
+
+# Simulation generated files
+xsim.dir/
+*.vcd
+*.fst
+*.ghw
+*.vvp
+*.o
+*.so
+
+# Vitis generated files
+*.elf
+*.map
+*.xpfm
+*.bif
+*.mmi
+
+# Editor/OS files
+.vscode/
+.DS_Store
+Thumbs.db

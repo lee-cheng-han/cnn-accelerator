@@ -1,345 +1,338 @@
-# Configurable INT8 CNN Accelerator
+# CNN Accelerator
 
-A configurable CNN convolution accelerator written in SystemVerilog. The design supports both **1×1** and **3×3** convolution modes, INT8 activations and weights, INT32 accumulation, bias addition, ReLU, quantization shifting, output saturation, AXI-style streaming I/O, memory-mapped configuration registers, and performance counters.
+SystemVerilog CNN accelerator for the **Digilent Arty Z7-20** using a **Zynq-7000 SoC**. The design integrates a custom CNN datapath into the Zynq programmable logic and exposes it to the ARM Cortex-A9 processing system through an AXI-Lite memory-mapped interface.
 
-This project is intended as a portfolio-quality RTL design project for FPGA, ASIC, and digital IC design roles.
+The repository includes RTL, verification, Vivado automation scripts, Zynq block design generation, bitstream generation, XSA export, and a Vitis bare-metal software application for controlling the accelerator from the ARM processor.
 
----
+## Implementation Summary
 
-## Features
+| Item                       | Status              |
+| -------------------------- | ------------------- |
+| RTL simulation             | Passing             |
+| AXI-Lite control interface | Complete            |
+| Zynq PS to PL integration  | Complete            |
+| Vivado block design        | Generated from TCL  |
+| Bitstream generation       | Passing             |
+| Timing closure             | Met                 |
+| XSA hardware export        | Passing             |
+| Vitis bare-metal app       | Builds successfully |
+| Target board               | Digilent Arty Z7-20 |
+| Accelerator base address   | `0x43C00000`        |
 
-* Configurable **1×1 convolution** and **3×3 convolution**
-* INT8 signed input activations
-* INT8 signed weights
-* INT32 signed accumulation
-* Multiple input channels
-* Multiple output channels
-* Bias addition
-* ReLU activation
-* Arithmetic right-shift quantization
-* INT8 output saturation
-* AXI-style streaming input interface
-* AXI-style streaming output interface
-* Memory-mapped configuration registers
-* Performance counters:
-  * input pixel count
-  * output pixel count
-  * generated window count
-  * MAC count
-* Directed SystemVerilog testbenches
-* Randomized SystemVerilog testbenches
-* Vivado XSim simulation flow
-* Vivado synthesis and timing flow
+## FPGA Utilization
 
----
+Latest implemented design on `xc7z020clg400-1`:
 
-## Architecture Overview
+| Resource        |  Used | Available | Utilization |
+| --------------- | ----: | --------: | ----------: |
+| Slice LUTs      | 5,678 |    53,200 |      10.67% |
+| Slice Registers | 7,749 |   106,400 |       7.28% |
+| Block RAM Tile  |   4.5 |       140 |       3.21% |
+| RAMB36/FIFO     |     4 |       140 |       2.86% |
+| RAMB18          |     1 |       280 |       0.36% |
+| DSPs            |     3 |       220 |       1.36% |
 
-The accelerator processes streamed image data and produces streamed convolution outputs. The design is split into control, buffering, compute, post-processing, and stream interface blocks.
+Timing result:
 
 ```text
-Input Stream
-    |
-    v
-AXI-style Input Interface
-    |
-    v
-Activation / Line Buffer
-    |
-    v
-3x3 Window Generator
-    |
-    v
-Convolution Engine
-    |
-    +--> 1x1 mode: uses tap 0 only
-    |
-    +--> 3x3 mode: uses all 9 taps
-    |
-    v
-Bias / ReLU / Quantization / Saturation
-    |
-    v
-AXI-style Output Interface
-    |
-    v
-Output Stream
+All user specified timing constraints are met.
 ```
 
----
+## Target Platform
 
-## Convolution Modes
+| Item                         | Value                   |
+| ---------------------------- | ----------------------- |
+| Board                        | Digilent Arty Z7-20     |
+| SoC                          | Xilinx Zynq-7000        |
+| FPGA Part                    | `xc7z020clg400-1`       |
+| Processor                    | Dual-core ARM Cortex-A9 |
+| Programmable Logic Interface | AXI-Lite                |
+| Toolchain                    | Vivado / Vitis 2025.2   |
+| Software Environment         | Bare-metal standalone   |
+| Accelerator Base Address     | `0x43C00000`            |
 
-The accelerator supports two kernel modes through a configuration register bit.
+## System Architecture
 
 ```text
-kernel_mode = 0 -> 1x1 convolution
-kernel_mode = 1 -> 3x3 convolution
+ARM Cortex-A9 Processing System
+        |
+        | M_AXI_GP0
+        v
+AXI Interconnect
+        |
+        v
+CNN AXI-Lite Accelerator
+        |
+        +-- Control / Status Registers
+        +-- Image Dimension Registers
+        +-- Mode Configuration Register
+        +-- Weight Registers
+        +-- Bias Registers
+        +-- Streaming Pixel Input Register
+        +-- Result Data Register
+        +-- Result Status Register
 ```
 
-### 1×1 Mode
+The ARM processor configures the accelerator through AXI-Lite writes, streams input pixels through a memory-mapped pixel input register, and reads computed outputs from the result buffer. The programmable logic contains the CNN datapath, buffering, control logic, and result storage.
 
-In 1×1 mode, the accelerator keeps the full input spatial size.
+## Hardware Features
+
+* AXI-Lite memory-mapped control interface
+* Zynq PS to PL integration through `M_AXI_GP0`
+* Script-generated Vivado block design
+* Streaming pixel input path
+* Register-loaded weights and biases
+* Result buffer with software readback
+* ReLU, bias, and quantization configuration flags
+* Bare-metal ARM software driver/test application
+* Reproducible Vivado/Vitis build flow
+
+## CNN Datapath Overview
+
+The accelerator is structured around a streaming hardware datapath:
 
 ```text
-Output height = input height
-Output width  = input width
-MACs per output pixel = input_channels × output_channels
+Pixel Input Register
+        |
+        v
+Streaming Input Control
+        |
+        v
+Window / Buffer Logic
+        |
+        v
+CNN Compute Datapath
+        |
+        v
+Bias / ReLU / Quantization Logic
+        |
+        v
+Result Buffer
+        |
+        v
+AXI-Lite Readback
 ```
 
-Only kernel tap `0` is used.
+The software writes pixels into the accelerator one word at a time. The hardware receives the pixel stream, processes it through the configured CNN datapath, stores output values in the result buffer, and exposes the results through AXI-Lite reads.
 
-### 3×3 Mode
+## AXI Register Map
 
-In 3×3 mode, the accelerator performs valid convolution.
+|  Offset | Register      | Description                                        |
+| ------: | ------------- | -------------------------------------------------- |
+| `0x000` | Control       | Start / clear control register                     |
+| `0x004` | Status        | Accelerator status                                 |
+| `0x008` | Width         | Input image width                                  |
+| `0x00C` | Height        | Input image height                                 |
+| `0x010` | Mode Flags    | Kernel, ReLU, bias, and quantization configuration |
+| `0x020` | Pixel Input   | Streaming pixel input                              |
+| `0x024` | Pixel Index   | Pixel index / debug register                       |
+| `0x030` | Result Data   | Output result data                                 |
+| `0x034` | Result Status | Result buffer status                               |
+| `0x100` | Weight Base   | Weight register base                               |
+| `0x400` | Bias Base     | Bias register base                                 |
 
-```text
-Output height = input height - 2
-Output width  = input width - 2
-MACs per output pixel = input_channels × output_channels × 9
-```
+## Mode Flags
 
-All 9 kernel taps are used.
+|    Bit | Name         | Description                       |
+| -----: | ------------ | --------------------------------- |
+|    `0` | Kernel Mode  | Selects kernel/configuration mode |
+|    `1` | ReLU Enable  | Enables ReLU post-processing      |
+|    `2` | Bias Enable  | Enables bias addition             |
+|    `3` | Quant Enable | Enables output quantization       |
+| `12:8` | Quant Shift  | Quantization right-shift amount   |
 
----
-
-## Configuration Register Map
-
-| Address   | Register     | Description               |
-| --------- | ------------ | ------------------------- |
-| `0x0000`  | CONTROL      | Start and feature enables |
-| `0x0008`  | IMAGE_WIDTH  | Input image width         |
-| `0x000C`  | IMAGE_HEIGHT | Input image height        |
-| `0x0010`  | QUANT_SHIFT  | Quantization right shift  |
-| `0x0100+` | WEIGHTS      | Convolution weights       |
-| `0x0400+` | BIAS         | Bias values               |
-
-### CONTROL Register
-
-| Bit | Name           | Description               |
-| --- | -------------- | ------------------------- |
-| 0   | `start`        | Start accelerator         |
-| 1   | `relu_enable`  | Enable ReLU               |
-| 2   | `bias_enable`  | Enable bias addition      |
-| 3   | `quant_enable` | Enable quantization shift |
-| 4   | `kernel_mode`  | `0 = 1x1`, `1 = 3x3`      |
-
-Example:
-
-```systemverilog
-// Start 3x3 convolution with ReLU, bias, and quantization enabled
-ctrl = {27'd0, 1'b1, quant_enable, bias_enable, relu_enable, 1'b1};
-
-// Start 1x1 convolution with ReLU, bias, and quantization enabled
-ctrl = {27'd0, 1'b0, quant_enable, bias_enable, relu_enable, 1'b1};
-```
-
----
-
-## Repository Structure
+## Program Structure
 
 ```text
 cnn_accelerator/
 ├── rtl/
-│   ├── cnn_accel_pkg.sv
-│   ├── cnn_accel_top.sv
-│   ├── control/
-│   │   ├── accel_controller.sv
-│   │   ├── config_regs.sv
-│   │   └── perf_counters.sv
-│   ├── stream/
-│   │   ├── axis_input_if.sv
-│   │   ├── axis_output_if.sv
-│   │   └── stream_fifo.sv
-│   ├── buffer/
-│   │   ├── activation_buffer.sv
-│   │   ├── weight_buffer.sv
-│   │   ├── line_buffer_3x3.sv
-│   │   └── window_generator_3x3.sv
 │   ├── compute/
-│   │   ├── mac_unit.sv
-│   │   ├── mac_array_3x3.sv
-│   │   ├── adder_tree.sv
-│   │   ├── channel_accumulator.sv
-│   │   ├── conv_engine.sv
-│   │   └── output_channel_array.sv
-│   └── postprocess/
-│       ├── bias_add.sv
-│       ├── relu.sv
-│       ├── quantizer.sv
-│       └── output_saturate.sv
+│   │   └── CNN compute datapath modules
+│   │
+│   ├── fpga/
+│   │   └── Streaming buffers, FPGA wrappers, and board-level datapath logic
+│   │
+│   └── zynq/
+│       └── AXI-Lite slave, Zynq system top, and block design wrapper
 │
 ├── tb/
-│   ├── tb_mac_unit.sv
-│   ├── tb_mac_array_3x3.sv
-│   ├── tb_channel_accumulator.sv
-│   ├── tb_window_generator_3x3.sv
-│   ├── tb_conv_engine.sv
-│   ├── tb_cnn_accel_top_small.sv
-│   └── tb_cnn_accel_top_random.sv
+│   └── SystemVerilog testbenches for RTL and AXI-level verification
 │
 ├── scripts/
-│   ├── run_xsim_tb.sh
-│   ├── run_iverilog_tb.sh
-│   └── clean.sh
+│   ├── zynq/
+│   │   └── Vivado TCL scripts for project generation, synthesis, bitstream
+│   │       generation, XSA export, and board programming
+│   │
+│   └── vitis/
+│       └── Vitis Python scripts for bare-metal software generation
 │
-├── synth_out/
+├── software/
+│   └── zynq_baremetal/
+│       └── Bare-metal ARM application for configuring and testing the accelerator
+│
+├── constraints/
+│   └── FPGA constraint files
+│
+├── docs/
+│   ├── architecture.md
+│   ├── block_diagram.md
+│   ├── performance_results.md
+│   ├── synthesis_results.md
+│   ├── verification_plan.md
+│   └── zynq/
+│       └── Zynq-specific integration documentation
+│
 ├── Makefile
 └── README.md
+Documentation
+
+Additional design documentation is available in the docs/ directory.
+
+Document	Description
+docs/architecture.md	Hardware architecture, datapath organization, and module-level design notes
+docs/block_diagram.md	Text-based block diagrams for the CNN accelerator and Zynq integration
+docs/performance_results.md	Implementation results, timing status, and resource utilization summary
+docs/synthesis_results.md	Vivado synthesis results, warnings, and implementation notes
+docs/verification_plan.md	Testbench strategy, directed/random testing approach, and verification coverage plan
+docs/zynq/	Zynq PS/PL integration notes, AXI-Lite memory map details, and board bring-up flow
 ```
 
----
+## Important Source Files
 
-## Main RTL Modules
+| File                                          | Purpose                                                  |
+| --------------------------------------------- | -------------------------------------------------------- |
+| `rtl/zynq/cnn_axi_lite_slave.sv`              | AXI-Lite register interface                              |
+| `rtl/zynq/cnn_axi_system_top.sv`              | Top-level Zynq-facing accelerator wrapper                |
+| `rtl/zynq/cnn_axi_system_bd_wrapper.v`        | Verilog wrapper used for Vivado block design integration |
+| `rtl/fpga/streaming_window_buffer.sv`         | Streaming image/window buffering logic                   |
+| `software/zynq_baremetal/main.c`              | Bare-metal ARM test application                          |
+| `scripts/zynq/create_arty_z7_20_project.tcl`  | Creates the Vivado block design project                  |
+| `scripts/zynq/build_arty_z7_20_bitstream.tcl` | Builds the implemented FPGA bitstream                    |
+| `scripts/zynq/export_arty_z7_20_xsa.tcl`      | Exports the XSA hardware platform                        |
+| `scripts/vitis/create_zynq_baremetal_app.py`  | Creates and builds the Vitis bare-metal application      |
 
-### `cnn_accel_top.sv`
+## Software Flow
 
-Top-level accelerator wrapper. Connects the configuration registers, controller, buffers, convolution engine, output stream interface, and performance counters.
+The bare-metal ARM application controls the accelerator through memory-mapped I/O.
 
-### `config_regs.sv`
-
-Memory-mapped configuration register block. Stores image dimensions, quantization shift, feature enables, kernel mode, weights, and bias values.
-
-### `accel_controller.sv`
-
-Controls accelerator execution. Tracks output coordinates, output dimensions, output completion, and mode-dependent behavior for 1×1 and 3×3 convolution.
-
-### `conv_engine.sv`
-
-Main convolution datapath. Multiplies input window values by weights, accumulates across input channels, and supports mode-dependent accumulation:
+Application source:
 
 ```text
-1x1 mode -> use only tap 0
-3x3 mode -> use all 9 taps
+software/zynq_baremetal/main.c
 ```
 
-### `perf_counters.sv`
+Base address:
 
-Tracks runtime statistics such as input pixels, output pixels, convolution windows, and MAC operations.
+```c
+#define CNN_BASE 0x43C00000U
+```
 
----
+Program sequence:
 
-## Verification
+1. Clear the accelerator
+2. Configure image width and height
+3. Configure accelerator mode flags
+4. Load test weights
+5. Load zero biases
+6. Start the accelerator
+7. Stream a small RGB test image
+8. Read accelerator status
+9. Read output results
+10. Print results over UART
 
-The project includes directed and randomized SystemVerilog testbenches.
+## Build Flow
 
-### Unit Tests
-
-| Testbench                    | Purpose                                                                |
-| ---------------------------- | ---------------------------------------------------------------------- |
-| `tb_mac_unit.sv`             | Verifies signed INT8 multiply behavior                                 |
-| `tb_mac_array_3x3.sv`        | Verifies 3×3 MAC array behavior                                        |
-| `tb_channel_accumulator.sv`  | Verifies accumulation across input channels                            |
-| `tb_window_generator_3x3.sv` | Verifies window generation                                             |
-| `tb_conv_engine.sv`          | Verifies convolution datapath, post-processing, 1×1 mode, and 3×3 mode |
-
-### Top-Level Tests
-
-| Testbench                    | Purpose                                                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| `tb_cnn_accel_top_small.sv`  | Directed end-to-end accelerator tests                                                             |
-| `tb_cnn_accel_top_random.sv` | Randomized end-to-end accelerator tests with stalls, gaps, reset recovery, 1×1 mode, and 3×3 mode |
-
-The testbenches verify:
-
-* signed arithmetic correctness
-* 1×1 convolution correctness
-* 3×3 convolution correctness
-* bias addition
-* ReLU
-* quantization shift
-* INT8 saturation
-* output ordering
-* `tlast` behavior
-* AXI-style backpressure
-* input/output counters
-* window counters
-* MAC counters
-* reset recovery
-
----
-
-## Running Simulation
-
-Run a single testbench:
+### 1. Create the Vivado Project
 
 ```bash
-make xsim TB=tb_conv_engine SEED=12345
+make arty-z7-project
 ```
 
-Run the directed top-level test:
+This generates the Vivado project and Zynq block design.
+
+### 2. Build the Bitstream
 
 ```bash
-make xsim TB=tb_cnn_accel_top_small SEED=12345
+make arty-z7-bitstream
 ```
 
-Run the randomized top-level test:
-
-```bash
-make xsim TB=tb_cnn_accel_top_random SEED=12345
-```
-
-Run the full regression:
-
-```bash
-make regression SEED=12345
-```
-
----
-
-## Lint
-
-Run lint checks:
-
-```bash
-make lint
-```
-
----
-
-## Synthesis
-
-Run synthesis:
-
-```bash
-make synth
-```
-
-Check timing:
-
-```bash
-grep -A 20 "Design Timing Summary" synth_out/timing_summary.rpt
-```
-
-A passing timing result should show:
+Generated bitstream:
 
 ```text
-WNS >= 0
-TNS = 0
-Failing Endpoints = 0
+build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
 ```
 
----
-
-## Current Verification Status
-
-Latest known project status:
-
-```text
-Directed unit tests: PASS
-Convolution engine 1x1 tests: PASS
-Convolution engine 3x3 tests: PASS
-Directed top-level 1x1 test: PASS
-Directed top-level 3x3 tests: PASS
-Randomized top-level 1x1 test: PASS
-Randomized top-level 3x3 tests: PASS
-```
-
-Final signoff commands:
+### 3. Export the XSA
 
 ```bash
-make regression SEED=12345
-make lint
-make synth
-grep -A 20 "Design Timing Summary" synth_out/timing_summary.rpt
+make arty-z7-xsa
 ```
+
+Generated hardware platform:
+
+```text
+build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+```
+
+### 4. Build the Bare-Metal ARM Application
+
+```bash
+make vitis-app
+```
+
+Generated ELF:
+
+```text
+build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
+```
+
+### 5. Full Hardware/Software Build
+
+```bash
+make full-arty-z7-flow
+```
+
+This runs the complete build sequence:
+
+```text
+Vivado project -> bitstream -> XSA -> Vitis bare-metal ELF
+```
+
+## Generated Outputs
+
+Generated Vivado and Vitis outputs are not tracked in Git.
+
+Ignored generated files include:
+
+```text
+build/
+*.bit
+*.xsa
+*.elf
+*.rpt
+*.log
+*.jou
+.Xil/
+xsim.dir/
+```
+
+A clean clone should regenerate all hardware and software outputs using the Makefile targets.
+
+## Requirements
+
+* Vivado 2025.2
+* Vitis 2025.2
+* Zynq-7000 / 7-Series device support
+* Linux or WSL Ubuntu
+* Digilent Arty Z7-20 board
+* USB cable for programming and UART
+
+For WSL users, Vitis may require:
+
+```bash
+sudo apt install -y x11-utils
+```
+
+## Notes
+
+Generated Vivado and Vitis projects are intentionally excluded from version control. The repository tracks source RTL, software, constraints, scripts, and build targets. Hardware and software build products are regenerated from the scripted flow.
