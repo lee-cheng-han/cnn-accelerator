@@ -11,11 +11,23 @@ platform_name = "arty_z7_20_cnn_platform"
 app_name = "cnn_baremetal"
 domain_name = "standalone_domain"
 
+platform_dir = workspace / platform_name
+app_dir = workspace / app_name
+
 print("Workspace:", workspace)
 print("XSA:", xsa_file)
 
 if not xsa_file.exists():
     raise FileNotFoundError(f"Missing XSA: {xsa_file}")
+
+# Clean the entire generated Vitis workspace.
+# Vitis can leave stale workspace metadata after failed runs, which causes:
+# "Invalid project location ... arty_z7_20_cnn_platform"
+if workspace.exists():
+    print(f"Removing old Vitis workspace: {workspace}")
+    shutil.rmtree(workspace)
+
+workspace.mkdir(parents=True, exist_ok=True)
 
 client = vitis.create_client()
 client.set_workspace(path=str(workspace))
@@ -45,6 +57,8 @@ src_main = root / "software" / "zynq_baremetal" / "main.c"
 dst_main = app_src_dir / "main.c"
 dst_hello = app_src_dir / "helloworld.c"
 user_config = app_src_dir / "UserConfig.cmake"
+hello_cmake = app_src_dir / "Hello_worldExample.cmake"
+cmake_file = app_src_dir / "CMakeLists.txt"
 
 if not src_main.exists():
     raise FileNotFoundError(f"Missing source file: {src_main}")
@@ -60,13 +74,9 @@ if user_config.exists():
 else:
     raise FileNotFoundError(f"Missing Vitis source config: {user_config}")
 
-# Remove generated hello source after metadata is patched.
+# Remove generated Hello World source and helper after metadata is patched.
 if dst_hello.exists():
     dst_hello.unlink()
-
-# Remove leftover Hello World template helper if present.
-hello_cmake = app_src_dir / "Hello_worldExample.cmake"
-cmake_file = app_src_dir / "CMakeLists.txt"
 
 if cmake_file.exists():
     text = cmake_file.read_text()
