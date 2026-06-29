@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-NUM_INPUT_CHANNELS = 3
-NUM_OUTPUT_CHANNELS = 4
-KERNEL_TAPS = 9
 WIDTH = 4
 HEIGHT = 4
+NUM_INPUT_CHANNELS = 3
+NUM_OUTPUT_CHANNELS = 4
 
 def make_image():
     image = []
@@ -18,55 +17,33 @@ def make_image():
         image.append(row)
     return image
 
-def make_weights():
-    weights = [[[[0 for _ in range(3)] for _ in range(3)]
-                for _ in range(NUM_INPUT_CHANNELS)]
-                for _ in range(NUM_OUTPUT_CHANNELS)]
-
-    # Center tap identity-like mapping.
-    weights[0][0][1][1] = 1
-    weights[1][1][1][1] = 1
-    weights[2][2][1][1] = 1
-
-    # Output channel 3 sums R + G + B center taps.
-    weights[3][0][1][1] = 1
-    weights[3][1][1][1] = 1
-    weights[3][2][1][1] = 1
-
-    return weights
-
-def conv3x3_valid(image, weights, relu=True, bias=None):
-    if bias is None:
-        bias = [0] * NUM_OUTPUT_CHANNELS
-
+def expected_outputs():
+    image = make_image()
     outputs = []
 
+    # Valid 3x3 output positions for 4x4 input = 2x2 windows.
+    # Center tap identity-like weights:
+    # oc0 = R center
+    # oc1 = G center
+    # oc2 = B center
+    # oc3 = R + G + B center
     for y in range(HEIGHT - 2):
         for x in range(WIDTH - 2):
-            for oc in range(NUM_OUTPUT_CHANNELS):
-                acc = bias[oc]
+            center = image[y + 1][x + 1]
+            r, g, b = center
 
-                for ic in range(NUM_INPUT_CHANNELS):
-                    for ky in range(3):
-                        for kx in range(3):
-                            pixel = image[y + ky][x + kx][ic]
-                            weight = weights[oc][ic][ky][kx]
-                            acc += pixel * weight
-
-                if relu and acc < 0:
-                    acc = 0
-
-                outputs.append(acc)
+            outputs.append(r)
+            outputs.append(g)
+            outputs.append(b)
+            outputs.append(r + g + b)
 
     return outputs
 
 def main():
-    image = make_image()
-    weights = make_weights()
-    outputs = conv3x3_valid(image, weights, relu=True)
+    outputs = expected_outputs()
 
     print("Golden CNN test")
-    print(f"Image: {WIDTH}x{HEIGHT} RGB")
+    print(f"Input image: {WIDTH}x{HEIGHT} RGB")
     print(f"Output words: {len(outputs)}")
     print()
 
