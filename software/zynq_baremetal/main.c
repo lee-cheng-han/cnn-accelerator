@@ -22,6 +22,14 @@
 #define KERNEL_TAPS          9
 #define NUM_WEIGHTS          (NUM_INPUT_CHANNELS * NUM_OUTPUT_CHANNELS * KERNEL_TAPS)
 
+static const int32_t expected_output_4x4[16] = {
+    2, 2, 3, 7,
+    3, 2, 4, 9,
+    2, 3, 4, 9,
+    3, 3, 5, 11
+};
+
+
 static inline void cnn_write(uint32_t offset, uint32_t value)
 {
     Xil_Out32(CNN_BASE + offset, value);
@@ -145,11 +153,35 @@ int main(void)
     }
 
     xil_printf("Expected results = %d\r\n", expected_results);
-    xil_printf("Reading result words:\r\n");
+    xil_printf("Checking result words against golden output:\r\n");
+
+    uint32_t mismatches = 0;
+
+    if (expected_results != 16) {
+        xil_printf("[FAIL] Expected result count should be 16 for 4x4 test, got %d\r\n",
+                   expected_results);
+        mismatches++;
+    }
 
     for (uint32_t i = 0; i < expected_results; i++) {
-        uint32_t result = cnn_read(REG_RESULT_DATA);
-        xil_printf("result[%02d] = 0x%08x\r\n", i, result);
+        int32_t result = (int32_t)cnn_read(REG_RESULT_DATA);
+
+        if ((i < 16) && (result == expected_output_4x4[i])) {
+            xil_printf("[PASS] result[%02d] = %d\r\n", i, result);
+        } else if (i < 16) {
+            xil_printf("[FAIL] result[%02d] expected=%d got=%d\r\n",
+                       i, expected_output_4x4[i], result);
+            mismatches++;
+        } else {
+            xil_printf("[FAIL] extra result[%02d] = %d\r\n", i, result);
+            mismatches++;
+        }
+    }
+
+    if (mismatches == 0) {
+        xil_printf("[PASS] CNN accelerator test passed\r\n");
+    } else {
+        xil_printf("[FAIL] CNN accelerator test failed, mismatches=%d\r\n", mismatches);
     }
 
     xil_printf("Test done.\r\n");
