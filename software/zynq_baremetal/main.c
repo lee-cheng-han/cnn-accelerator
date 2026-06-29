@@ -36,39 +36,42 @@ static inline uint32_t cnn_read(uint32_t offset)
     return Xil_In32(CNN_BASE + offset);
 }
 
-static void load_weights_identity_like(void)
+static void load_weights_identity_like(uint32_t kernel_mode)
 {
     for (uint32_t i = 0; i < NUM_WEIGHTS; i++) {
         cnn_write(REG_WEIGHT_BASE + (i * 4), 0);
     }
 
     /*
-     * Simple 1x1-style test weights.
-     * Center tap = index 4 in each 3x3 kernel.
+     * Identity-like test weights.
+     *
+     * kernel_mode = 1: 3x3 mode, use center tap index 4.
+     * kernel_mode = 0: 1x1 mode, RTL uses tap index 0.
      *
      * oc0 reads input channel 0
      * oc1 reads input channel 1
      * oc2 reads input channel 2
      * oc3 adds all 3 input channels
      */
+    uint32_t active_tap = kernel_mode ? 4U : 0U;
     uint32_t idx;
 
-    idx = (((0 * NUM_INPUT_CHANNELS) + 0) * KERNEL_TAPS) + 4;
+    idx = (((0 * NUM_INPUT_CHANNELS) + 0) * KERNEL_TAPS) + active_tap;
     cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
 
-    idx = (((1 * NUM_INPUT_CHANNELS) + 1) * KERNEL_TAPS) + 4;
+    idx = (((1 * NUM_INPUT_CHANNELS) + 1) * KERNEL_TAPS) + active_tap;
     cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
 
-    idx = (((2 * NUM_INPUT_CHANNELS) + 2) * KERNEL_TAPS) + 4;
+    idx = (((2 * NUM_INPUT_CHANNELS) + 2) * KERNEL_TAPS) + active_tap;
     cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
 
-    idx = (((3 * NUM_INPUT_CHANNELS) + 0) * KERNEL_TAPS) + 4;
+    idx = (((3 * NUM_INPUT_CHANNELS) + 0) * KERNEL_TAPS) + active_tap;
     cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
 
-    idx = (((3 * NUM_INPUT_CHANNELS) + 1) * KERNEL_TAPS) + 4;
+    idx = (((3 * NUM_INPUT_CHANNELS) + 1) * KERNEL_TAPS) + active_tap;
     cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
 
-    idx = (((3 * NUM_INPUT_CHANNELS) + 2) * KERNEL_TAPS) + 4;
+    idx = (((3 * NUM_INPUT_CHANNELS) + 2) * KERNEL_TAPS) + active_tap;
     cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
 }
 
@@ -99,17 +102,23 @@ int main(void)
     /*
      * mode flags:
      * bit 0 = kernel_mode
+     *   0 = 1x1 convolution
+     *   1 = 3x3 convolution
      * bit 1 = relu_enable
      * bit 2 = bias_enable
      * bit 3 = quant_enable
      *
-     * Start simple:
-     * relu on, bias off, quant off.
+     * Current test:
+     * generated TEST_KERNEL_MODE + ReLU on, bias off, quant off.
      */
-    cnn_write(REG_MODE_FLAGS, 0x2);
+    uint32_t mode_flags = (TEST_KERNEL_MODE & 0x1U) | 0x2U;
+    cnn_write(REG_MODE_FLAGS, mode_flags);
+
+    xil_printf("Kernel mode = %s\r\n", TEST_KERNEL_NAME);
+    xil_printf("Mode flags  = 0x%08x\r\n", mode_flags);
 
     xil_printf("Loading weights...\r\n");
-    load_weights_identity_like();
+    load_weights_identity_like(TEST_KERNEL_MODE);
 
     xil_printf("Loading bias...\r\n");
     load_bias_zero();
