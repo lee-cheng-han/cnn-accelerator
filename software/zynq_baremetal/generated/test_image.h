@@ -6,8 +6,8 @@
 #define IMAGE_WIDTH 8U
 #define IMAGE_HEIGHT 8U
 #define IMAGE_PIXELS 64U
-#define TEST_KERNEL_MODE 0U
-#define TEST_KERNEL_NAME "1x1"
+#define TEST_KERNEL_MODE 1U
+#define TEST_KERNEL_NAME "3x3"
 
 static const uint32_t input_image[IMAGE_PIXELS] = {
     0x00010101U,
