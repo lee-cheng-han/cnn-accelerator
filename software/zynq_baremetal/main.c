@@ -136,9 +136,18 @@ int main(void)
     xil_printf("Status      = 0x%08x\r\n", status);
     xil_printf("Result stat = 0x%08x\r\n", result_stat);
 
-    xil_printf("Reading first 32 result words:\r\n");
+    uint32_t expected_results = 0;
 
-    for (uint32_t i = 0; i < 32; i++) {
+    if ((cnn_read(REG_WIDTH) >= 3) && (cnn_read(REG_HEIGHT) >= 3)) {
+        expected_results = (cnn_read(REG_WIDTH) - 2) *
+                           (cnn_read(REG_HEIGHT) - 2) *
+                           NUM_OUTPUT_CHANNELS;
+    }
+
+    xil_printf("Expected results = %d\r\n", expected_results);
+    xil_printf("Reading result words:\r\n");
+
+    for (uint32_t i = 0; i < expected_results; i++) {
         uint32_t result = cnn_read(REG_RESULT_DATA);
         xil_printf("result[%02d] = 0x%08x\r\n", i, result);
     }
