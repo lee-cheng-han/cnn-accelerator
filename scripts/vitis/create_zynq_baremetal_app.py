@@ -65,6 +65,18 @@ if not src_main.exists():
 
 shutil.copyfile(src_main, dst_main)
 
+src_generated = root / "software" / "zynq_baremetal" / "generated"
+dst_generated = dst_main.parent / "generated"
+
+if dst_generated.exists():
+    shutil.rmtree(dst_generated)
+
+if src_generated.exists():
+    shutil.copytree(src_generated, dst_generated)
+    print(f"Copied generated headers to {dst_generated}")
+else:
+    raise FileNotFoundError(f"Missing generated headers directory: {src_generated}")
+
 # Vitis hello_world template uses UserConfig.cmake to choose app sources.
 # Replace helloworld.c with our real main.c.
 if user_config.exists():

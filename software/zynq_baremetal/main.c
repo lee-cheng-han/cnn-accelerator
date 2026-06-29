@@ -3,6 +3,9 @@
 #include "sleep.h"
 #include <stdint.h>
 
+#include "generated/test_image.h"
+#include "generated/expected_output.h"
+
 #define CNN_BASE        0x43C00000U
 
 #define REG_CONTROL     0x000U
@@ -21,13 +24,6 @@
 #define NUM_OUTPUT_CHANNELS  4
 #define KERNEL_TAPS          9
 #define NUM_WEIGHTS          (NUM_INPUT_CHANNELS * NUM_OUTPUT_CHANNELS * KERNEL_TAPS)
-
-static const int32_t expected_output_4x4[16] = {
-    2, 2, 3, 7,
-    3, 2, 4, 9,
-    2, 3, 4, 9,
-    3, 3, 5, 11
-};
 
 
 static inline void cnn_write(uint32_t offset, uint32_t value)
@@ -97,8 +93,8 @@ int main(void)
     usleep(1000);
 
     xil_printf("Configuring image size...\r\n");
-    cnn_write(REG_WIDTH,  4);
-    cnn_write(REG_HEIGHT, 4);
+    cnn_write(REG_WIDTH,  IMAGE_WIDTH);
+    cnn_write(REG_HEIGHT, IMAGE_HEIGHT);
 
     /*
      * mode flags:
@@ -122,18 +118,20 @@ int main(void)
     cnn_write(REG_CONTROL, 0x1);
     usleep(1000);
 
-    xil_printf("Writing 4x4 RGB test image...\r\n");
+    xil_printf("Writing generated RGB test image...\r\n");
+    xil_printf("Image size  = %d x %d\r\n", IMAGE_WIDTH, IMAGE_HEIGHT);
+    xil_printf("Image pixels = %d\r\n", IMAGE_PIXELS);
 
-    for (uint32_t y = 0; y < 4; y++) {
-        for (uint32_t x = 0; x < 4; x++) {
-            uint32_t r = x + 1;
-            uint32_t g = y + 1;
-            uint32_t b = x + y + 1;
+    for (uint32_t i = 0; i < IMAGE_PIXELS; i++) {
+        uint32_t pixel = input_image[i];
 
-            cnn_write(REG_PIXEL_IN, r);
-            cnn_write(REG_PIXEL_IN, g);
-            cnn_write(REG_PIXEL_IN, b);
-        }
+        uint32_t r = (pixel >> 0)  & 0xffU;
+        uint32_t g = (pixel >> 8)  & 0xffU;
+        uint32_t b = (pixel >> 16) & 0xffU;
+
+        cnn_write(REG_PIXEL_IN, r);
+        cnn_write(REG_PIXEL_IN, g);
+        cnn_write(REG_PIXEL_IN, b);
     }
 
     usleep(10000);
@@ -157,23 +155,26 @@ int main(void)
 
     uint32_t mismatches = 0;
 
-    if (expected_results != 16) {
-        xil_printf("[FAIL] Expected result count should be 16 for 4x4 test, got %d\r\n",
-                   expected_results);
+    if (expected_results != EXPECTED_OUTPUT_WORDS) {
+        xil_printf("[FAIL] Expected result count mismatch: computed=%d header=%d\r\n",
+                   expected_results, EXPECTED_OUTPUT_WORDS);
         mismatches++;
     }
 
-    for (uint32_t i = 0; i < expected_results; i++) {
+    uint32_t compare_count = expected_results;
+
+    if (compare_count > EXPECTED_OUTPUT_WORDS) {
+        compare_count = EXPECTED_OUTPUT_WORDS;
+    }
+
+    for (uint32_t i = 0; i < compare_count; i++) {
         int32_t result = (int32_t)cnn_read(REG_RESULT_DATA);
 
-        if ((i < 16) && (result == expected_output_4x4[i])) {
+        if (result == expected_output[i]) {
             xil_printf("[PASS] result[%02d] = %d\r\n", i, result);
-        } else if (i < 16) {
-            xil_printf("[FAIL] result[%02d] expected=%d got=%d\r\n",
-                       i, expected_output_4x4[i], result);
-            mismatches++;
         } else {
-            xil_printf("[FAIL] extra result[%02d] = %d\r\n", i, result);
+            xil_printf("[FAIL] result[%02d] expected=%d got=%d\r\n",
+                       i, expected_output[i], result);
             mismatches++;
         }
     }
