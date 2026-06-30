@@ -1,30 +1,61 @@
 #include "xil_io.h"
 #include "xil_printf.h"
+#include "xil_cache.h"
 #include "sleep.h"
 #include <stdint.h>
+#include <stddef.h>
 
 #include "generated/test_image.h"
 #include "generated/expected_output.h"
 
 #define CNN_BASE        0x43C00000U
+#define DMA_BASE        0x40400000U
 
 #define REG_CONTROL     0x000U
 #define REG_STATUS      0x004U
 #define REG_WIDTH       0x008U
 #define REG_HEIGHT      0x00CU
 #define REG_MODE_FLAGS  0x010U
-#define REG_PIXEL_IN    0x020U
-#define REG_PIXEL_INDEX 0x024U
-#define REG_RESULT_DATA 0x030U
 #define REG_RESULT_STAT 0x034U
 #define REG_WEIGHT_BASE 0x100U
 #define REG_BIAS_BASE   0x400U
 
-#define NUM_INPUT_CHANNELS   3
-#define NUM_OUTPUT_CHANNELS  4
-#define KERNEL_TAPS          9
+#define NUM_INPUT_CHANNELS   3U
+#define NUM_OUTPUT_CHANNELS  4U
+#define KERNEL_TAPS          9U
 #define NUM_WEIGHTS          (NUM_INPUT_CHANNELS * NUM_OUTPUT_CHANNELS * KERNEL_TAPS)
 
+/*
+ * AXI DMA simple-mode register map.
+ * MM2S = memory to stream: DDR input image -> CNN input stream.
+ * S2MM = stream to memory: CNN output stream -> DDR output buffer.
+ */
+#define DMA_MM2S_DMACR   0x00U
+#define DMA_MM2S_DMASR   0x04U
+#define DMA_MM2S_SA      0x18U
+#define DMA_MM2S_LENGTH  0x28U
+
+#define DMA_S2MM_DMACR   0x30U
+#define DMA_S2MM_DMASR   0x34U
+#define DMA_S2MM_DA      0x48U
+#define DMA_S2MM_LENGTH  0x58U
+
+#define DMA_CR_RUNSTOP   0x00000001U
+#define DMA_CR_RESET     0x00000004U
+
+#define DMA_SR_HALTED    0x00000001U
+#define DMA_SR_IDLE      0x00000002U
+#define DMA_SR_IOC_IRQ   0x00001000U
+#define DMA_SR_ERR_IRQ   0x00004000U
+#define DMA_SR_ERR_ALL   0x00007000U
+
+#define DMA_TIMEOUT      10000000U
+
+#define MAX_INPUT_PIXELS  IMAGE_PIXELS
+#define MAX_OUTPUT_WORDS  EXPECTED_OUTPUT_WORDS
+
+static uint32_t input_buffer[MAX_INPUT_PIXELS] __attribute__((aligned(64)));
+static int32_t  output_buffer[MAX_OUTPUT_WORDS] __attribute__((aligned(64)));
 
 static inline void cnn_write(uint32_t offset, uint32_t value)
 {
@@ -36,86 +67,215 @@ static inline uint32_t cnn_read(uint32_t offset)
     return Xil_In32(CNN_BASE + offset);
 }
 
+static inline void dma_write(uint32_t offset, uint32_t value)
+{
+    Xil_Out32(DMA_BASE + offset, value);
+}
+
+static inline uint32_t dma_read(uint32_t offset)
+{
+    return Xil_In32(DMA_BASE + offset);
+}
+
 static void load_weights_identity_like(uint32_t kernel_mode)
 {
     for (uint32_t i = 0; i < NUM_WEIGHTS; i++) {
-        cnn_write(REG_WEIGHT_BASE + (i * 4), 0);
+        cnn_write(REG_WEIGHT_BASE + (i * 4U), 0U);
     }
 
     /*
-     * Identity-like test weights.
-     *
      * kernel_mode = 1: 3x3 mode, use center tap index 4.
      * kernel_mode = 0: 1x1 mode, RTL uses tap index 0.
-     *
-     * oc0 reads input channel 0
-     * oc1 reads input channel 1
-     * oc2 reads input channel 2
-     * oc3 adds all 3 input channels
      */
     uint32_t active_tap = kernel_mode ? 4U : 0U;
     uint32_t idx;
 
-    idx = (((0 * NUM_INPUT_CHANNELS) + 0) * KERNEL_TAPS) + active_tap;
-    cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
+    idx = (((0U * NUM_INPUT_CHANNELS) + 0U) * KERNEL_TAPS) + active_tap;
+    cnn_write(REG_WEIGHT_BASE + (idx * 4U), 1U);
 
-    idx = (((1 * NUM_INPUT_CHANNELS) + 1) * KERNEL_TAPS) + active_tap;
-    cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
+    idx = (((1U * NUM_INPUT_CHANNELS) + 1U) * KERNEL_TAPS) + active_tap;
+    cnn_write(REG_WEIGHT_BASE + (idx * 4U), 1U);
 
-    idx = (((2 * NUM_INPUT_CHANNELS) + 2) * KERNEL_TAPS) + active_tap;
-    cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
+    idx = (((2U * NUM_INPUT_CHANNELS) + 2U) * KERNEL_TAPS) + active_tap;
+    cnn_write(REG_WEIGHT_BASE + (idx * 4U), 1U);
 
-    idx = (((3 * NUM_INPUT_CHANNELS) + 0) * KERNEL_TAPS) + active_tap;
-    cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
+    idx = (((3U * NUM_INPUT_CHANNELS) + 0U) * KERNEL_TAPS) + active_tap;
+    cnn_write(REG_WEIGHT_BASE + (idx * 4U), 1U);
 
-    idx = (((3 * NUM_INPUT_CHANNELS) + 1) * KERNEL_TAPS) + active_tap;
-    cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
+    idx = (((3U * NUM_INPUT_CHANNELS) + 1U) * KERNEL_TAPS) + active_tap;
+    cnn_write(REG_WEIGHT_BASE + (idx * 4U), 1U);
 
-    idx = (((3 * NUM_INPUT_CHANNELS) + 2) * KERNEL_TAPS) + active_tap;
-    cnn_write(REG_WEIGHT_BASE + (idx * 4), 1);
+    idx = (((3U * NUM_INPUT_CHANNELS) + 2U) * KERNEL_TAPS) + active_tap;
+    cnn_write(REG_WEIGHT_BASE + (idx * 4U), 1U);
 }
 
 static void load_bias_zero(void)
 {
     for (uint32_t oc = 0; oc < NUM_OUTPUT_CHANNELS; oc++) {
-        cnn_write(REG_BIAS_BASE + (oc * 4), 0);
+        cnn_write(REG_BIAS_BASE + (oc * 4U), 0U);
     }
+}
+
+static uint32_t expected_result_words(void)
+{
+    if (TEST_KERNEL_MODE == 0U) {
+        return IMAGE_WIDTH * IMAGE_HEIGHT * NUM_OUTPUT_CHANNELS;
+    }
+
+    if ((IMAGE_WIDTH < 3U) || (IMAGE_HEIGHT < 3U)) {
+        return 0U;
+    }
+
+    return (IMAGE_WIDTH - 2U) * (IMAGE_HEIGHT - 2U) * NUM_OUTPUT_CHANNELS;
+}
+
+static int dma_reset(void)
+{
+    dma_write(DMA_MM2S_DMACR, DMA_CR_RESET);
+    dma_write(DMA_S2MM_DMACR, DMA_CR_RESET);
+
+    for (uint32_t i = 0; i < DMA_TIMEOUT; i++) {
+        uint32_t mm2s_cr = dma_read(DMA_MM2S_DMACR);
+        uint32_t s2mm_cr = dma_read(DMA_S2MM_DMACR);
+
+        if (((mm2s_cr & DMA_CR_RESET) == 0U) &&
+            ((s2mm_cr & DMA_CR_RESET) == 0U)) {
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+static int dma_wait_done(uint32_t status_offset, const char *name)
+{
+    for (uint32_t i = 0; i < DMA_TIMEOUT; i++) {
+        uint32_t status = dma_read(status_offset);
+
+        if ((status & DMA_SR_ERR_ALL) != 0U) {
+            xil_printf("[FAIL] %s DMA error, status=0x%08x\r\n", name, status);
+            return -1;
+        }
+
+        if ((status & DMA_SR_IOC_IRQ) != 0U) {
+            return 0;
+        }
+    }
+
+    xil_printf("[FAIL] %s DMA timeout, status=0x%08x\r\n",
+               name, dma_read(status_offset));
+    return -1;
+}
+
+static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
+{
+    xil_printf("Resetting AXI DMA...\r\n");
+
+    if (dma_reset() != 0) {
+        xil_printf("[FAIL] AXI DMA reset timeout\r\n");
+        return -1;
+    }
+
+    xil_printf("DMA MM2S status after reset = 0x%08x\r\n", dma_read(DMA_MM2S_DMASR));
+    xil_printf("DMA S2MM status after reset = 0x%08x\r\n", dma_read(DMA_S2MM_DMASR));
+
+    /*
+     * Clear old completion/error bits by writing 1s.
+     */
+    dma_write(DMA_MM2S_DMASR, DMA_SR_IOC_IRQ | DMA_SR_ERR_ALL);
+    dma_write(DMA_S2MM_DMASR, DMA_SR_IOC_IRQ | DMA_SR_ERR_ALL);
+
+    /*
+     * Flush input so DMA sees latest CPU-written pixels.
+     * Flush output too so cache does not hold dirty stale data.
+     */
+    Xil_DCacheFlushRange((UINTPTR)input_buffer, input_bytes);
+    Xil_DCacheFlushRange((UINTPTR)output_buffer, output_bytes);
+
+    /*
+     * Start both DMA channels.
+     * Start S2MM first so it is ready to receive CNN outputs.
+     */
+    dma_write(DMA_S2MM_DMACR, DMA_CR_RUNSTOP);
+    dma_write(DMA_MM2S_DMACR, DMA_CR_RUNSTOP);
+
+    dma_write(DMA_S2MM_DA, (uint32_t)(UINTPTR)output_buffer);
+    dma_write(DMA_MM2S_SA, (uint32_t)(UINTPTR)input_buffer);
+
+    xil_printf("Input buffer  address = 0x%08x\r\n", (uint32_t)(UINTPTR)input_buffer);
+    xil_printf("Output buffer address = 0x%08x\r\n", (uint32_t)(UINTPTR)output_buffer);
+    xil_printf("Input bytes  = %d\r\n", input_bytes);
+    xil_printf("Output bytes = %d\r\n", output_bytes);
+
+    /*
+     * Writing LENGTH starts each simple-mode transfer.
+     */
+    dma_write(DMA_S2MM_LENGTH, output_bytes);
+    dma_write(DMA_MM2S_LENGTH, input_bytes);
+
+    if (dma_wait_done(DMA_MM2S_DMASR, "MM2S") != 0) {
+        return -1;
+    }
+
+    if (dma_wait_done(DMA_S2MM_DMASR, "S2MM") != 0) {
+        return -1;
+    }
+
+    Xil_DCacheInvalidateRange((UINTPTR)output_buffer, output_bytes);
+
+    xil_printf("DMA MM2S final status = 0x%08x\r\n", dma_read(DMA_MM2S_DMASR));
+    xil_printf("DMA S2MM final status = 0x%08x\r\n", dma_read(DMA_S2MM_DMASR));
+
+    return 0;
 }
 
 int main(void)
 {
     xil_printf("\r\n");
     xil_printf("========================================\r\n");
-    xil_printf(" Zynq CNN Accelerator Bare-Metal Test\r\n");
+    xil_printf(" Zynq CNN Accelerator DMA Test\r\n");
     xil_printf("========================================\r\n");
 
     xil_printf("CNN base address: 0x%08x\r\n", CNN_BASE);
+    xil_printf("DMA base address: 0x%08x\r\n", DMA_BASE);
+
+    xil_printf("Kernel mode = %s\r\n", TEST_KERNEL_NAME);
+    xil_printf("Image size  = %d x %d\r\n", IMAGE_WIDTH, IMAGE_HEIGHT);
+    xil_printf("Image pixels = %d\r\n", IMAGE_PIXELS);
+
+    uint32_t expected_results = expected_result_words();
+
+    xil_printf("Expected output words = %d\r\n", expected_results);
+    xil_printf("Header output words   = %d\r\n", EXPECTED_OUTPUT_WORDS);
+
+    if (expected_results != EXPECTED_OUTPUT_WORDS) {
+        xil_printf("[FAIL] Output count mismatch: computed=%d header=%d\r\n",
+                   expected_results, EXPECTED_OUTPUT_WORDS);
+        while (1) {
+            sleep(1);
+        }
+    }
+
+    for (uint32_t i = 0; i < IMAGE_PIXELS; i++) {
+        input_buffer[i] = input_image[i];
+    }
+
+    for (uint32_t i = 0; i < EXPECTED_OUTPUT_WORDS; i++) {
+        output_buffer[i] = 0x55555555;
+    }
 
     xil_printf("Clearing accelerator...\r\n");
-    cnn_write(REG_CONTROL, 0x2);
+    cnn_write(REG_CONTROL, 0x2U);
     usleep(1000);
 
-    xil_printf("Configuring image size...\r\n");
+    xil_printf("Configuring accelerator...\r\n");
     cnn_write(REG_WIDTH,  IMAGE_WIDTH);
     cnn_write(REG_HEIGHT, IMAGE_HEIGHT);
 
-    /*
-     * mode flags:
-     * bit 0 = kernel_mode
-     *   0 = 1x1 convolution
-     *   1 = 3x3 convolution
-     * bit 1 = relu_enable
-     * bit 2 = bias_enable
-     * bit 3 = quant_enable
-     *
-     * Current test:
-     * generated TEST_KERNEL_MODE + ReLU on, bias off, quant off.
-     */
     uint32_t mode_flags = (TEST_KERNEL_MODE & 0x1U) | 0x2U;
     cnn_write(REG_MODE_FLAGS, mode_flags);
 
-    xil_printf("Kernel mode = %s\r\n", TEST_KERNEL_NAME);
-    xil_printf("Mode flags  = 0x%08x\r\n", mode_flags);
+    xil_printf("Mode flags = 0x%08x\r\n", mode_flags);
 
     xil_printf("Loading weights...\r\n");
     load_weights_identity_like(TEST_KERNEL_MODE);
@@ -124,60 +284,35 @@ int main(void)
     load_bias_zero();
 
     xil_printf("Starting accelerator...\r\n");
-    cnn_write(REG_CONTROL, 0x1);
+    cnn_write(REG_CONTROL, 0x1U);
     usleep(1000);
 
-    xil_printf("Writing generated RGB test image...\r\n");
-    xil_printf("Image size  = %d x %d\r\n", IMAGE_WIDTH, IMAGE_HEIGHT);
-    xil_printf("Image pixels = %d\r\n", IMAGE_PIXELS);
+    uint32_t input_bytes = IMAGE_PIXELS * sizeof(uint32_t);
+    uint32_t output_bytes = EXPECTED_OUTPUT_WORDS * sizeof(int32_t);
 
-    for (uint32_t i = 0; i < IMAGE_PIXELS; i++) {
-        uint32_t pixel = input_image[i];
+    xil_printf("Starting DMA transfer...\r\n");
 
-        uint32_t r = (pixel >> 0)  & 0xffU;
-        uint32_t g = (pixel >> 8)  & 0xffU;
-        uint32_t b = (pixel >> 16) & 0xffU;
+    int dma_ok = run_dma_transfer(input_bytes, output_bytes);
 
-        cnn_write(REG_PIXEL_IN, r);
-        cnn_write(REG_PIXEL_IN, g);
-        cnn_write(REG_PIXEL_IN, b);
+    if (dma_ok != 0) {
+        xil_printf("[FAIL] DMA transfer failed\r\n");
+        while (1) {
+            sleep(1);
+        }
     }
-
-    usleep(10000);
 
     uint32_t status = cnn_read(REG_STATUS);
     uint32_t result_stat = cnn_read(REG_RESULT_STAT);
 
-    xil_printf("Status      = 0x%08x\r\n", status);
-    xil_printf("Result stat = 0x%08x\r\n", result_stat);
+    xil_printf("CNN status      = 0x%08x\r\n", status);
+    xil_printf("CNN result stat = 0x%08x\r\n", result_stat);
 
-    uint32_t expected_results = 0;
-
-    if ((cnn_read(REG_WIDTH) >= 3) && (cnn_read(REG_HEIGHT) >= 3)) {
-        expected_results = (cnn_read(REG_WIDTH) - 2) *
-                           (cnn_read(REG_HEIGHT) - 2) *
-                           NUM_OUTPUT_CHANNELS;
-    }
-
-    xil_printf("Expected results = %d\r\n", expected_results);
-    xil_printf("Checking result words against golden output:\r\n");
+    xil_printf("Checking DMA output buffer against golden output...\r\n");
 
     uint32_t mismatches = 0;
 
-    if (expected_results != EXPECTED_OUTPUT_WORDS) {
-        xil_printf("[FAIL] Expected result count mismatch: computed=%d header=%d\r\n",
-                   expected_results, EXPECTED_OUTPUT_WORDS);
-        mismatches++;
-    }
-
-    uint32_t compare_count = expected_results;
-
-    if (compare_count > EXPECTED_OUTPUT_WORDS) {
-        compare_count = EXPECTED_OUTPUT_WORDS;
-    }
-
-    for (uint32_t i = 0; i < compare_count; i++) {
-        int32_t result = (int32_t)cnn_read(REG_RESULT_DATA);
+    for (uint32_t i = 0; i < EXPECTED_OUTPUT_WORDS; i++) {
+        int32_t result = output_buffer[i];
 
         if (result == expected_output[i]) {
             xil_printf("[PASS] result[%02d] = %d\r\n", i, result);
@@ -188,10 +323,10 @@ int main(void)
         }
     }
 
-    if (mismatches == 0) {
-        xil_printf("[PASS] CNN accelerator test passed\r\n");
+    if (mismatches == 0U) {
+        xil_printf("[PASS] CNN DMA accelerator test passed\r\n");
     } else {
-        xil_printf("[FAIL] CNN accelerator test failed, mismatches=%d\r\n", mismatches);
+        xil_printf("[FAIL] CNN DMA accelerator test failed, mismatches=%d\r\n", mismatches);
     }
 
     xil_printf("Test done.\r\n");
