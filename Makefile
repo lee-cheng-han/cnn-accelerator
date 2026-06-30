@@ -87,3 +87,41 @@ full-arty-z7-flow:
 	$(MAKE) arty-z7-bitstream
 	$(MAKE) arty-z7-xsa
 	$(MAKE) vitis-app
+
+# ==============================
+# Zynq Arty Z7-20 DMA Flow
+# ==============================
+
+.PHONY: dma-sim
+dma-sim:
+	bash scripts/zynq/run_dma_top_tb.sh
+
+.PHONY: arty-z7-project
+arty-z7-project:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/create_arty_z7_20_project.tcl
+
+.PHONY: arty-z7-bitstream
+arty-z7-bitstream:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/build_arty_z7_20_bitstream.tcl
+
+.PHONY: arty-z7-xsa
+arty-z7-xsa:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/export_arty_z7_20_xsa.tcl
+
+.PHONY: vitis-dma-app
+vitis-dma-app:
+	$(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_baremetal_app.py
+
+.PHONY: full-arty-z7-dma-flow
+full-arty-z7-dma-flow:
+	python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 3x3
+	$(MAKE) dma-sim
+	$(MAKE) arty-z7-project
+	$(MAKE) arty-z7-bitstream
+	$(MAKE) arty-z7-xsa
+	$(MAKE) vitis-dma-app
+
+.PHONY: program-arty-z7-dma
+program-arty-z7-dma:
+	$(HOME)/Xilinx/2025.2/Vitis/bin/xsct scripts/zynq/program_and_run_dma.tcl
+
