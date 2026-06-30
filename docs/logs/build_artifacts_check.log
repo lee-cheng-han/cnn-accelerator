@@ -1,0 +1,8 @@
+Bitstream:
+-rw-r--r-- 1 leech leech 3.9M Jun 30 02:53 build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
+
+XSA:
+-rw-r--r-- 1 leech leech 583K Jun 30 02:55 build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+
+ELF:
+-rwxr-xr-x 1 leech leech 209K Jun 30 03:05 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf

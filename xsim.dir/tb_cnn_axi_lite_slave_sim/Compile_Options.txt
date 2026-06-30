@@ -1,1 +1,0 @@
-"tb_cnn_axi_lite_slave" -s "tb_cnn_axi_lite_slave_sim" 

@@ -1,9 +1,13 @@
+# ==============================
 # Build/generated output
+# ==============================
 build/
 dist/
 out/
 
+# ==============================
 # Vivado generated files
+# ==============================
 .Xil/
 *.jou
 *.log
@@ -16,6 +20,8 @@ out/
 *.dcp
 *.xsa
 *.hwdef
+*.pb
+
 *.runs/
 *.cache/
 *.gen/
@@ -23,7 +29,14 @@ out/
 *.sim/
 *.srcs/
 
+# Vivado backup files
+*.backup
+*.backup.jou
+*.backup.log
+
+# ==============================
 # Simulation generated files
+# ==============================
 xsim.dir/
 *.vcd
 *.fst
@@ -32,14 +45,27 @@ xsim.dir/
 *.o
 *.so
 
+# ==============================
 # Vitis generated files
+# ==============================
 *.elf
 *.map
 *.xpfm
 *.bif
 *.mmi
 
+# ==============================
 # Editor/OS files
+# ==============================
 .vscode/
 .DS_Store
 Thumbs.db
+
+# ==============================
+# Keep selected proof logs for docs
+# ==============================
+!docs/
+!docs/logs/
+!docs/logs/*.log
+!docs/logs/*.txt
+!docs/logs/*.md
