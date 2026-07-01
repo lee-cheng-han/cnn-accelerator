@@ -68,4 +68,4 @@ Thumbs.db
 !docs/logs/
 !docs/logs/*.log
 !docs/logs/*.txt
-!docs/logs/*.md
+!docs/logs/*.md.venv/

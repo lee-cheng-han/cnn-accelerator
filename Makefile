@@ -125,3 +125,16 @@ full-arty-z7-dma-flow:
 program-arty-z7-dma:
 	$(HOME)/Xilinx/2025.2/Vitis/bin/xsct scripts/zynq/program_and_run_dma.tcl
 
+
+# ==============================
+# UART Image Streaming App
+# ==============================
+
+.PHONY: vitis-uart-image-app
+vitis-uart-image-app:
+	$(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_uart_image_app.py
+
+.PHONY: program-arty-z7-uart-image
+program-arty-z7-uart-image:
+	$(HOME)/Xilinx/2025.2/Vitis/bin/xsct scripts/zynq/program_and_run_uart_image.tcl
+
