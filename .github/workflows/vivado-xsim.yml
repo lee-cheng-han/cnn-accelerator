@@ -1,0 +1,131 @@
+name: Vivado XSim
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Random seed passed to XSim testbenches
+        required: true
+        default: "12345"
+      run_bitstream:
+        description: Also run the full Arty Z7 DMA bitstream/Vitis flow
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vivado-xsim-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  xsim-regression:
+    name: XSim regression
+    runs-on:
+      - self-hosted
+      - linux
+      - vivado
+
+    env:
+      SEED: ${{ inputs.seed }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Vivado environment
+        run: |
+          if [[ -n "${VIVADO_SETTINGS:-}" && -f "${VIVADO_SETTINGS}" ]]; then
+            source "${VIVADO_SETTINGS}"
+          elif [[ -f "${HOME}/Xilinx/2025.2/Vivado/settings64.sh" ]]; then
+            source "${HOME}/Xilinx/2025.2/Vivado/settings64.sh"
+          elif [[ -f "/tools/Xilinx/2025.2/Vivado/settings64.sh" ]]; then
+            source "/tools/Xilinx/2025.2/Vivado/settings64.sh"
+          fi
+
+          command -v xvlog
+          command -v xelab
+          command -v xsim
+          command -v vivado
+
+      - name: Clean generated simulation files
+        run: |
+          make clean
+          rm -rf xsim.dir
+
+      - name: Run RTL regression
+        run: |
+          make regression SEED="${SEED}"
+
+      - name: Run DMA top simulation
+        run: |
+          make dma-sim
+
+      - name: Run Zynq AXI-Lite simulation
+        run: |
+          make axi-lite
+
+      - name: Run Zynq AXI system simulation
+        run: |
+          make axi-system
+
+      - name: Upload simulation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xsim-logs-seed-${{ env.SEED }}
+          if-no-files-found: ignore
+          path: |
+            regression_logs/**/*.log
+            sim/**/*.log
+            *.log
+            *.jou
+            *_xsim_run.log
+
+  arty-z7-dma-flow:
+    name: Arty Z7 DMA bitstream and Vitis flow
+    needs: xsim-regression
+    if: ${{ inputs.run_bitstream }}
+    runs-on:
+      - self-hosted
+      - linux
+      - vivado
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Vivado/Vitis environment
+        run: |
+          if [[ -n "${VIVADO_SETTINGS:-}" && -f "${VIVADO_SETTINGS}" ]]; then
+            source "${VIVADO_SETTINGS}"
+          elif [[ -f "${HOME}/Xilinx/2025.2/Vivado/settings64.sh" ]]; then
+            source "${HOME}/Xilinx/2025.2/Vivado/settings64.sh"
+          elif [[ -f "/tools/Xilinx/2025.2/Vivado/settings64.sh" ]]; then
+            source "/tools/Xilinx/2025.2/Vivado/settings64.sh"
+          fi
+
+          command -v vivado
+          command -v vitis
+
+      - name: Run full Arty Z7 DMA flow
+        run: |
+          make clean-generated
+          make full-arty-z7-dma-flow
+
+      - name: Upload FPGA build reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arty-z7-dma-build-reports
+          if-no-files-found: ignore
+          path: |
+            build/**/*.rpt
+            build/**/*.log
+            build/**/*.jou
+            build/**/*.bit
+            build/**/*.xsa
+            build/**/cnn_baremetal.elf
+

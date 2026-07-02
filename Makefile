@@ -50,28 +50,13 @@ zynq-regression:
 .PHONY: synth-zynq-axi-system
 
 synth-zynq-axi-system:
-	~/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/synth_axi_system_zynq.tcl
-
-.PHONY: arty-z7-project
-
-arty-z7-project:
-	~/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/create_arty_z7_20_project.tcl
-
-.PHONY: arty-z7-bitstream
-
-arty-z7-bitstream:
-	~/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/build_arty_z7_20_bitstream.tcl
-
-.PHONY: arty-z7-xsa
-
-arty-z7-xsa:
-	~/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/export_arty_z7_20_xsa.tcl
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/synth_axi_system_zynq.tcl
 
 .PHONY: vitis-app clean-vitis clean-generated full-arty-z7-flow
 
 vitis-app:
 	rm -rf build/vitis_ws
-	~/Xilinx/2025.2/Vitis/bin/vitis -source scripts/vitis/create_zynq_baremetal_app.py
+	$(HOME)/Xilinx/2025.2/Vitis/bin/vitis -source scripts/vitis/create_zynq_baremetal_app.py
 
 clean-vitis:
 	rm -rf build/vitis_ws
@@ -137,4 +122,3 @@ vitis-uart-image-app:
 .PHONY: program-arty-z7-uart-image
 program-arty-z7-uart-image:
 	$(HOME)/Xilinx/2025.2/Vitis/bin/xsct scripts/zynq/program_and_run_uart_image.tcl
-
