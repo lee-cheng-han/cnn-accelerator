@@ -60,25 +60,27 @@ module streaming_window_buffer #(
   logic signed [DATA_WIDTH-1:0] bot_new1;
   logic signed [DATA_WIDTH-1:0] bot_new2;
 
-  logic signed [DATA_WIDTH-1:0] row_m2_read;
-  logic signed [DATA_WIDTH-1:0] row_m1_read;
+  logic signed [DATA_WIDTH-1:0] row_m2_read [NUM_INPUT_CHANNELS];
+  logic signed [DATA_WIDTH-1:0] row_m1_read [NUM_INPUT_CHANNELS];
 
   assign pixel_ready = 1'b1;
 
   always_comb begin
-    row_m2_read = row_m2[cur_ch][X_W'(cur_x)];
-    row_m1_read = row_m1[cur_ch][X_W'(cur_x)];
+    for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
+      row_m2_read[c] = row_m2[c][X_W'(cur_x)];
+      row_m1_read[c] = row_m1[c][X_W'(cur_x)];
+    end
 
-    top_new0 = top_s1[cur_ch];
-    top_new1 = top_s2[cur_ch];
-    top_new2 = row_m2_read;
+    top_new0 = top_s1[NUM_INPUT_CHANNELS-1];
+    top_new1 = top_s2[NUM_INPUT_CHANNELS-1];
+    top_new2 = row_m2_read[NUM_INPUT_CHANNELS-1];
 
-    mid_new0 = mid_s1[cur_ch];
-    mid_new1 = mid_s2[cur_ch];
-    mid_new2 = row_m1_read;
+    mid_new0 = mid_s1[NUM_INPUT_CHANNELS-1];
+    mid_new1 = mid_s2[NUM_INPUT_CHANNELS-1];
+    mid_new2 = row_m1_read[NUM_INPUT_CHANNELS-1];
 
-    bot_new0 = bot_s1[cur_ch];
-    bot_new1 = bot_s2[cur_ch];
+    bot_new0 = bot_s1[NUM_INPUT_CHANNELS-1];
+    bot_new1 = bot_s2[NUM_INPUT_CHANNELS-1];
     bot_new2 = pixel_data;
   end
 
@@ -87,8 +89,12 @@ module streaming_window_buffer #(
   // behavior on every memory element.
   always_ff @(posedge clk) begin
     if (rst_n && !clear && pixel_valid) begin
-      row_m2[cur_ch][X_W'(cur_x)] <= row_m1_read;
-      row_m1[cur_ch][X_W'(cur_x)] <= pixel_data;
+      for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
+        if (cur_ch == CH_W'(c)) begin
+          row_m2[c][X_W'(cur_x)] <= row_m1_read[c];
+          row_m1[c][X_W'(cur_x)] <= pixel_data;
+        end
+      end
     end
   end
 
@@ -144,17 +150,21 @@ module streaming_window_buffer #(
         end
       end else if (pixel_valid) begin
         // Update horizontal shifts for this channel.
-        top_s0[cur_ch] <= top_new0;
-        top_s1[cur_ch] <= top_new1;
-        top_s2[cur_ch] <= top_new2;
+        for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
+          if (cur_ch == CH_W'(c)) begin
+            top_s0[c] <= top_s1[c];
+            top_s1[c] <= top_s2[c];
+            top_s2[c] <= row_m2_read[c];
 
-        mid_s0[cur_ch] <= mid_new0;
-        mid_s1[cur_ch] <= mid_new1;
-        mid_s2[cur_ch] <= mid_new2;
+            mid_s0[c] <= mid_s1[c];
+            mid_s1[c] <= mid_s2[c];
+            mid_s2[c] <= row_m1_read[c];
 
-        bot_s0[cur_ch] <= bot_new0;
-        bot_s1[cur_ch] <= bot_new1;
-        bot_s2[cur_ch] <= bot_new2;
+            bot_s0[c] <= bot_s1[c];
+            bot_s1[c] <= bot_s2[c];
+            bot_s2[c] <= pixel_data;
+          end
+        end
 
         // A full multi-channel 3x3 window is ready after the last channel
         // of a spatial pixel has arrived, once x >= 2 and y >= 2.
@@ -164,7 +174,7 @@ module streaming_window_buffer #(
           window_y     <= cur_y - 16'd2;
 
           for (int c = 0; c < NUM_INPUT_CHANNELS; c++) begin
-            if (c == cur_ch) begin
+            if (c == NUM_INPUT_CHANNELS - 1) begin
               window_data[c][0] <= top_new0;
               window_data[c][1] <= top_new1;
               window_data[c][2] <= top_new2;

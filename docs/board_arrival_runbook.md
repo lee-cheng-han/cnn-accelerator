@@ -7,7 +7,7 @@ Use this when the Arty Z7-20 arrives. The goal is to capture enough evidence tha
 Run the pre-board proof flow:
 
 ```bash
-XILINX_VITIS_DATA_DIR=/tmp/vitis_data make preboard-proof
+make preboard-proof
 ```
 
 Expected outputs:

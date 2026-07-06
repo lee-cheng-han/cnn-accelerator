@@ -18,9 +18,9 @@ The project is currently in the final pre-board stage: RTL simulation, Vivado im
 | CNN modes | True 1x1 and valid 3x3 convolution |
 | Input / output channels | 3 input channels, 4 output channels |
 | Data / weight / accumulator width | int8 / int8 / int32 |
-| Timing | Met at 100 MHz |
-| LUTs / registers | 7,811 LUTs / 10,728 registers |
-| BRAM / DSP | 2 BRAM tiles / 3 DSPs |
+| Timing | Met at 125 MHz |
+| LUTs / registers | 6,692 LUTs / 8,058 registers |
+| BRAM / DSP | 2 BRAM tiles / 1 DSP |
 | DMA top simulation | Passing, 80 checked outputs |
 | Bitstream / XSA / ELF | Built |
 | Board validation | Pending hardware |
@@ -245,10 +245,10 @@ This flow:
 For a board-arrival-ready proof package, run:
 
 ```bash
-XILINX_VITIS_DATA_DIR=/tmp/vitis_data make preboard-proof
+make preboard-proof
 ```
 
-That adds warning-budget checking, `BOOT.BIN` generation, and a generated flow summary.
+That adds warning-budget checking, `BOOT.BIN` generation, and a generated flow summary. Vitis cache/config data defaults to `build/vitis_data` so the flow does not depend on free space in the home-directory Vitis cache.
 
 Generated artifacts are ignored by Git, but after a successful local build they should exist:
 

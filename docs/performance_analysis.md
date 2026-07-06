@@ -6,7 +6,7 @@
 |---|---|
 | Board | Digilent Arty Z7-20 |
 | FPGA part | `xc7z020clg400-1` |
-| PL clock | 100 MHz |
+| PL clock | 125 MHz |
 | Input format | one 32-bit packed RGB pixel per AXI DMA MM2S beat |
 | Output format | one signed result per 32-bit AXI DMA S2MM beat |
 | CNN channels | 3 input channels, 4 output channels |
@@ -60,17 +60,18 @@ Latest documented implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 5,678 | 53,200 | 10.67% |
-| Slice registers | 7,749 | 106,400 | 7.28% |
-| Block RAM tile | 4.5 | 140 | 3.21% |
-| RAMB36/FIFO | 4 | 140 | 2.86% |
-| RAMB18 | 1 | 280 | 0.36% |
-| DSPs | 3 | 220 | 1.36% |
+| Slice LUTs | 6,692 | 53,200 | 12.58% |
+| Slice registers | 8,058 | 106,400 | 7.57% |
+| Block RAM tile | 2 | 140 | 1.43% |
+| DSPs | 1 | 220 | 0.45% |
 
 Timing:
 
 ```text
 All user specified timing constraints are met.
+Clock = 125.000 MHz
+WNS = 0.265 ns
+WHS = 0.018 ns
 ```
 
 ## Bottlenecks
@@ -97,7 +98,7 @@ Most useful scaling steps:
 ## Interview Talking Points
 
 - The design trades peak throughput for integration clarity and low resource use.
-- Only 3 DSPs are used, leaving large headroom on the Arty Z7-20.
+- Only 1 DSP is used, leaving large headroom on the Arty Z7-20.
 - The valid 3x3 mode reduces output dimensions by two in each spatial direction.
 - The generated identity-style weights make hardware bring-up easy because expected values are visually inspectable.
 - The next performance step would be output-channel parallelism, not a faster AXI-Lite path, because bulk image data already moves over AXI DMA.

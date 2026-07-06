@@ -20,7 +20,7 @@ The target board is the Digilent Arty Z7-20.
 | SoC | Xilinx Zynq-7000 |
 | FPGA part | `xc7z020clg400-1` |
 | Processor | Dual-core ARM Cortex-A9 |
-| PL clock | 100 MHz |
+| PL clock | 125 MHz |
 | Toolchain | Vivado / Vitis 2025.2 |
 | CNN AXI-Lite base | `0x43C00000` |
 | AXI DMA base | `0x40400000` |

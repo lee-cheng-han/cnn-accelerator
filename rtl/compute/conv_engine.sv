@@ -36,6 +36,7 @@ module conv_engine #(
   logic valid_s2;
   logic valid_s3;
   logic valid_s4;
+  logic valid_s5;
 
   logic kernel_mode_s1;
   logic kernel_mode_s2;
@@ -48,9 +49,8 @@ module conv_engine #(
     [NUM_INPUT_CHANNELS];
 
   logic signed [ACC_WIDTH-1:0] acc_s3;
-  logic signed [ACC_WIDTH-1:0] acc_bias_s4;
-  logic signed [ACC_WIDTH-1:0] acc_relu_s4;
-  logic signed [ACC_WIDTH-1:0] acc_quant_s4;
+  logic signed [ACC_WIDTH-1:0] acc_raw_s4;
+  logic signed [ACC_WIDTH-1:0] acc_post_s4;
 
   logic signed [BIAS_WIDTH-1:0] bias_s1;
   logic signed [BIAS_WIDTH-1:0] bias_s2;
@@ -158,6 +158,7 @@ module conv_engine #(
       valid_s2  <= 1'b0;
       valid_s3  <= 1'b0;
       valid_s4  <= 1'b0;
+      valid_s5  <= 1'b0;
       acc_raw   <= '0;
       out_data  <= '0;
 
@@ -193,10 +194,9 @@ module conv_engine #(
         end
       end
 
-      acc_s3       <= '0;
-      acc_bias_s4  <= '0;
-      acc_relu_s4  <= '0;
-      acc_quant_s4 <= '0;
+      acc_s3      <= '0;
+      acc_raw_s4  <= '0;
+      acc_post_s4 <= '0;
     end else if (pipe_en) begin
       // Stage 1: multiply pixels by weights.
       valid_s1 <= valid_in;
@@ -242,10 +242,11 @@ module conv_engine #(
 
       acc_s3 <= channel_sums_s2[0] + channel_sums_s2[1] + channel_sums_s2[2];
 
-      // Stage 4: postprocess and saturate.
+      // Stage 4: postprocess.
       valid_s4 <= valid_s3;
 
-      acc_bias_s4 <= saturating_postprocess(
+      acc_raw_s4 <= acc_s3;
+      acc_post_s4 <= saturating_postprocess(
         acc_s3,
         bias_s3,
         bias_enable_s3,
@@ -254,23 +255,14 @@ module conv_engine #(
         quant_shift_s3
       );
 
-      acc_relu_s4  <= acc_bias_s4;
-      acc_quant_s4 <= acc_bias_s4;
+      // Stage 5: output saturation.
+      valid_s5 <= valid_s4;
 
-      acc_raw  <= acc_s3;
-      out_data <= saturate_to_out(
-        saturating_postprocess(
-          acc_s3,
-          bias_s3,
-          bias_enable_s3,
-          relu_enable_s3,
-          quant_enable_s3,
-          quant_shift_s3
-        )
-      );
+      acc_raw  <= acc_raw_s4;
+      out_data <= saturate_to_out(acc_post_s4);
     end
   end
 
-  assign valid_out = valid_s4;
+  assign valid_out = valid_s5;
 
 endmodule

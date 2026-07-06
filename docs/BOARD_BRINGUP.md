@@ -16,7 +16,7 @@ build/BOOT.BIN
 
 Generate all board-ready files:
 
-XILINX_VITIS_DATA_DIR=/tmp/vitis_data make preboard-proof
+make preboard-proof
 
 ## Hardware setup
 

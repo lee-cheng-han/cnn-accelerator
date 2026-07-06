@@ -2,7 +2,7 @@
 
 module cnn_dma_system_bd_wrapper (
   (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 s_axi_aclk CLK" *)
-  (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF s_axi:s_axis:m_axis, ASSOCIATED_RESET s_axi_aresetn, FREQ_HZ 100000000" *)
+  (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF s_axi:s_axis:m_axis, ASSOCIATED_RESET s_axi_aresetn, FREQ_HZ 125000000" *)
   input  wire         s_axi_aclk,
 
   (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 s_axi_aresetn RST" *)
@@ -51,7 +51,7 @@ module cnn_dma_system_bd_wrapper (
 
   // AXI-Stream input from AXI DMA MM2S
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 s_axis TDATA" *)
-  (* X_INTERFACE_PARAMETER = "FREQ_HZ 100000000, HAS_TKEEP 0, HAS_TLAST 1, TDATA_NUM_BYTES 4, TDEST_WIDTH 0, TID_WIDTH 0, TUSER_WIDTH 0" *)
+  (* X_INTERFACE_PARAMETER = "FREQ_HZ 125000000, HAS_TKEEP 0, HAS_TLAST 1, TDATA_NUM_BYTES 4, TDEST_WIDTH 0, TID_WIDTH 0, TUSER_WIDTH 0" *)
   input  wire [31:0]  s_axis_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 s_axis TVALID" *)
   input  wire         s_axis_tvalid,
@@ -62,7 +62,7 @@ module cnn_dma_system_bd_wrapper (
 
   // AXI-Stream output to AXI DMA S2MM
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TDATA" *)
-  (* X_INTERFACE_PARAMETER = "FREQ_HZ 100000000, HAS_TKEEP 0, HAS_TLAST 1, TDATA_NUM_BYTES 4, TDEST_WIDTH 0, TID_WIDTH 0, TUSER_WIDTH 0" *)
+  (* X_INTERFACE_PARAMETER = "FREQ_HZ 125000000, HAS_TKEEP 0, HAS_TLAST 1, TDATA_NUM_BYTES 4, TDEST_WIDTH 0, TID_WIDTH 0, TUSER_WIDTH 0" *)
   output wire [31:0]  m_axis_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TVALID" *)
   output wire         m_axis_tvalid,

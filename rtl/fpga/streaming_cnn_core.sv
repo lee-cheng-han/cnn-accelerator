@@ -84,24 +84,31 @@ module streaming_cnn_core #(
   logic signed [WEIGHT_WIDTH-1:0] selected_weights
     [NUM_INPUT_CHANNELS][KERNEL_TAPS];
 
+  logic signed [WEIGHT_WIDTH-1:0] selected_weights_q
+    [NUM_INPUT_CHANNELS][KERNEL_TAPS];
+
   logic signed [BIAS_WIDTH-1:0] selected_bias;
+  logic signed [BIAS_WIDTH-1:0] selected_bias_q;
 
   logic conv_valid_in;
+  logic conv_valid_q;
   logic conv_valid_out;
   logic signed [ACC_WIDTH-1:0] conv_acc_unused;
   logic signed [OUT_WIDTH-1:0] conv_out;
 
   logic [31:0] total_windows_calc;
   logic [31:0] total_windows;
-  logic [31:0] total_windows_w_operand;
-  logic [31:0] total_windows_h_operand;
+  logic [15:0] total_windows_w_operand;
+  logic [15:0] total_windows_h_operand;
   logic [31:0] window_index;
 
   logic feed_last;
+  logic feed_last_q;
   logic conv_last_s1;
   logic conv_last_s2;
   logic conv_last_s3;
   logic conv_last_s4;
+  logic conv_last_s5;
   logic conv_last_out;
 
   logic signed [OUT_WIDTH-1:0] out_fifo_data [OUT_FIFO_DEPTH];
@@ -132,25 +139,25 @@ module streaming_cnn_core #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      total_windows_w_operand <= 32'd0;
-      total_windows_h_operand <= 32'd0;
+      total_windows_w_operand <= 16'd0;
+      total_windows_h_operand <= 16'd0;
       total_windows           <= 32'd0;
     end else if (clear) begin
-      total_windows_w_operand <= 32'd0;
-      total_windows_h_operand <= 32'd0;
+      total_windows_w_operand <= 16'd0;
+      total_windows_h_operand <= 16'd0;
       total_windows           <= 32'd0;
     end else begin
       if (kernel_mode) begin
         if ((image_width >= 16'd3) && (image_height >= 16'd3)) begin
-          total_windows_w_operand <= {16'd0, image_width - 16'd2};
-          total_windows_h_operand <= {16'd0, image_height - 16'd2};
+          total_windows_w_operand <= image_width - 16'd2;
+          total_windows_h_operand <= image_height - 16'd2;
         end else begin
-          total_windows_w_operand <= 32'd0;
-          total_windows_h_operand <= 32'd0;
+          total_windows_w_operand <= 16'd0;
+          total_windows_h_operand <= 16'd0;
         end
       end else begin
-        total_windows_w_operand <= {16'd0, image_width};
-        total_windows_h_operand <= {16'd0, image_height};
+        total_windows_w_operand <= image_width;
+        total_windows_h_operand <= image_height;
       end
 
       total_windows <= total_windows_calc;
@@ -163,7 +170,6 @@ module streaming_cnn_core #(
 
   // Stall compute before the FIFO gets full.
   assign conv_pipe_en  = !out_fifo_almost_full;
-  assign conv_valid_in = (state == S_FEED) && conv_pipe_en;
 
   // 3x3 mode uses the streaming window buffer.
   // 1x1 mode collects one full pixel across all input channels directly.
@@ -230,8 +236,8 @@ module streaming_cnn_core #(
     .kernel_mode(kernel_mode),
 
     .windows(window_q),
-    .weights(selected_weights),
-    .bias(selected_bias),
+    .weights(selected_weights_q),
+    .bias(selected_bias_q),
 
     .relu_enable(relu_enable),
     .bias_enable(bias_enable),
@@ -243,7 +249,8 @@ module streaming_cnn_core #(
     .out_data(conv_out)
   );
 
-  assign conv_last_out = conv_valid_out && conv_last_s4;
+  assign conv_valid_in = conv_valid_q;
+  assign conv_last_out = conv_valid_out && conv_last_s5;
 
   assign out_fifo_wr_en = conv_valid_out && !out_fifo_full;
   assign out_fifo_rd_en = m_axis_tvalid && m_axis_tready;
@@ -259,6 +266,9 @@ module streaming_cnn_core #(
       window_index <= 32'd0;
       windows_seen <= 32'd0;
       outputs_seen <= 32'd0;
+      selected_bias_q <= '0;
+      conv_valid_q <= 1'b0;
+      feed_last_q <= 1'b0;
 
       one_by_one_ch <= '0;
       one_by_one_x  <= 16'd0;
@@ -268,6 +278,7 @@ module streaming_cnn_core #(
       conv_last_s2 <= 1'b0;
       conv_last_s3 <= 1'b0;
       conv_last_s4 <= 1'b0;
+      conv_last_s5 <= 1'b0;
 
       out_fifo_wr_ptr <= '0;
       out_fifo_rd_ptr <= '0;
@@ -278,6 +289,7 @@ module streaming_cnn_core #(
 
         for (int k = 0; k < KERNEL_TAPS; k++) begin
           window_q[ic][k] <= '0;
+          selected_weights_q[ic][k] <= '0;
         end
       end
 
@@ -292,6 +304,9 @@ module streaming_cnn_core #(
         window_index <= 32'd0;
         windows_seen <= 32'd0;
         outputs_seen <= 32'd0;
+        selected_bias_q <= '0;
+        conv_valid_q <= 1'b0;
+        feed_last_q <= 1'b0;
 
         one_by_one_ch <= '0;
         one_by_one_x  <= 16'd0;
@@ -301,6 +316,7 @@ module streaming_cnn_core #(
         conv_last_s2 <= 1'b0;
         conv_last_s3 <= 1'b0;
         conv_last_s4 <= 1'b0;
+        conv_last_s5 <= 1'b0;
 
         out_fifo_wr_ptr <= '0;
         out_fifo_rd_ptr <= '0;
@@ -311,6 +327,7 @@ module streaming_cnn_core #(
 
           for (int k = 0; k < KERNEL_TAPS; k++) begin
             window_q[ic][k] <= '0;
+            selected_weights_q[ic][k] <= '0;
           end
         end
 
@@ -322,10 +339,21 @@ module streaming_cnn_core #(
         // Keep TLAST aligned with the conv_engine pipeline.
         // If the conv pipeline stalls, the TLAST sideband stalls too.
         if (conv_pipe_en) begin
-          conv_last_s1 <= conv_valid_in && feed_last;
+          conv_last_s1 <= conv_valid_q && feed_last_q;
           conv_last_s2 <= conv_last_s1;
           conv_last_s3 <= conv_last_s2;
           conv_last_s4 <= conv_last_s3;
+          conv_last_s5 <= conv_last_s4;
+
+          conv_valid_q <= (state == S_FEED);
+          feed_last_q  <= feed_last;
+          selected_bias_q <= selected_bias;
+
+          for (int ic = 0; ic < NUM_INPUT_CHANNELS; ic++) begin
+            for (int k = 0; k < KERNEL_TAPS; k++) begin
+              selected_weights_q[ic][k] <= selected_weights[ic][k];
+            end
+          end
         end
 
         // Output FIFO.

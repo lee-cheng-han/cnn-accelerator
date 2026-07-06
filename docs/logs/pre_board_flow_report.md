@@ -1,6 +1,6 @@
 # Pre-Board Flow Report
 
-Generated: 2026-07-06 04:32:30
+Generated: 2026-07-06 08:49:26
 
 ## Artifacts
 
@@ -18,12 +18,12 @@ Generated: 2026-07-06 04:32:30
 
 | Metric | Value |
 |---|---:|
-| Clock | 100.000 MHz |
-| Period | 10.000 ns |
-| WNS | 0.143 ns |
+| Clock | 125.000 MHz |
+| Period | 8.000 ns |
+| WNS | 0.265 ns |
 | TNS | 0.000 ns |
 | Failing setup endpoints | 0 |
-| WHS | 0.012 ns |
+| WHS | 0.018 ns |
 | THS | 0.000 ns |
 | Failing hold endpoints | 0 |
 | Constraints met | True |
@@ -32,10 +32,10 @@ Generated: 2026-07-06 04:32:30
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7811 | 53200 | 14.68% |
-| Slice Registers | 10728 | 106400 | 10.08% |
+| Slice LUTs | 6692 | 53200 | 12.58% |
+| Slice Registers | 8058 | 106400 | 7.57% |
 | Block RAM Tile | 2 | 140 | 1.43% |
-| DSPs | 3 | 220 | 1.36% |
+| DSPs | 1 | 220 | 0.45% |
 
 ## Next Hardware Evidence
 

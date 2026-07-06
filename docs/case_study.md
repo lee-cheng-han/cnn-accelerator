@@ -12,7 +12,7 @@ The project goal is not to compete with a production neural-network accelerator.
 |---|---|
 | Target board | Digilent Arty Z7-20 |
 | FPGA part | `xc7z020clg400-1` |
-| Clock target | 100 MHz PL clock |
+| Clock target | 125 MHz PL clock |
 | Software control | ARM Cortex-A9 through AXI-Lite |
 | Bulk data movement | AXI DMA |
 | Bring-up data format | packed RGB, `0x00BBGGRR` |
@@ -89,15 +89,18 @@ Latest documented implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 5,678 | 53,200 | 10.67% |
-| Slice registers | 7,749 | 106,400 | 7.28% |
-| Block RAM tile | 4.5 | 140 | 3.21% |
-| DSPs | 3 | 220 | 1.36% |
+| Slice LUTs | 6,692 | 53,200 | 12.58% |
+| Slice registers | 8,058 | 106,400 | 7.57% |
+| Block RAM tile | 2 | 140 | 1.43% |
+| DSPs | 1 | 220 | 0.45% |
 
 Timing result:
 
 ```text
 All user specified timing constraints are met.
+Clock = 125.000 MHz
+WNS = 0.265 ns
+WHS = 0.018 ns
 ```
 
 ## Software

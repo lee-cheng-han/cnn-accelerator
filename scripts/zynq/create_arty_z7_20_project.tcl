@@ -63,7 +63,7 @@ set_property -dict [list \
   CONFIG.PCW_USE_M_AXI_GP0 {1} \
   CONFIG.PCW_USE_S_AXI_HP0 {1} \
   CONFIG.PCW_EN_CLK0_PORT {1} \
-  CONFIG.PCW_FPGA0_PERIPHERAL_FREQMHZ {100.0} \
+  CONFIG.PCW_FPGA0_PERIPHERAL_FREQMHZ {125.0} \
 ] [get_bd_cells ps7]
 
 # Processor reset block

@@ -2,6 +2,7 @@ SHELL := /bin/bash
 
 TB ?= tb_cnn_accel_top_small
 SEED ?= 12345
+VITIS_DATA_DIR ?= $(CURDIR)/build/vitis_data
 
 .PHONY: xsim regression xsim-regression lint vectors synth clean flow-report report-flow check-warnings preboard-proof
 
@@ -64,7 +65,8 @@ synth-zynq-axi-system:
 
 vitis-app:
 	rm -rf build/vitis_ws
-	$(HOME)/Xilinx/2025.2/Vitis/bin/vitis -source scripts/vitis/create_zynq_baremetal_app.py
+	mkdir -p $(VITIS_DATA_DIR)
+	XILINX_VITIS_DATA_DIR=$(VITIS_DATA_DIR) $(HOME)/Xilinx/2025.2/Vitis/bin/vitis -source scripts/vitis/create_zynq_baremetal_app.py
 
 clean-vitis:
 	rm -rf build/vitis_ws
@@ -112,7 +114,8 @@ arty-z7-xsa:
 
 .PHONY: vitis-dma-app
 vitis-dma-app:
-	$(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_baremetal_app.py
+	mkdir -p $(VITIS_DATA_DIR)
+	XILINX_VITIS_DATA_DIR=$(VITIS_DATA_DIR) $(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_baremetal_app.py
 
 .PHONY: boot-image
 boot-image:
@@ -149,7 +152,8 @@ program-arty-z7-dma:
 
 .PHONY: vitis-uart-image-app
 vitis-uart-image-app:
-	$(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_uart_image_app.py
+	mkdir -p $(VITIS_DATA_DIR)
+	XILINX_VITIS_DATA_DIR=$(VITIS_DATA_DIR) $(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_uart_image_app.py
 
 .PHONY: program-arty-z7-uart-image
 program-arty-z7-uart-image:

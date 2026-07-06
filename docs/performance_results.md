@@ -26,17 +26,18 @@ Latest implemented design:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,811 | 53,200 | 14.68% |
-| Slice Registers | 10,728 | 106,400 | 10.08% |
+| Slice LUTs | 6,692 | 53,200 | 12.58% |
+| Slice Registers | 8,058 | 106,400 | 7.57% |
 | Block RAM Tile | 2 | 140 | 1.43% |
-| DSPs | 3 | 220 | 1.36% |
+| DSPs | 1 | 220 | 0.45% |
 
 ## Timing Result
 
 ```text
 All user specified timing constraints are met.
-WNS = 0.143 ns
-WHS = 0.012 ns
+Clock = 125.000 MHz
+WNS = 0.265 ns
+WHS = 0.018 ns
 ```
 
 ## Generated Outputs

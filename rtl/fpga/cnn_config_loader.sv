@@ -56,15 +56,10 @@ module cnn_config_loader #(
 
   localparam int NUM_WEIGHTS = NUM_OUTPUT_CHANNELS * NUM_INPUT_CHANNELS * KERNEL_TAPS;
 
-  int oc_idx;
-  int ic_idx;
-  int tap_idx;
-
-  always_comb begin
-    oc_idx  = weight_index / (NUM_INPUT_CHANNELS * KERNEL_TAPS);
-    ic_idx  = (weight_index / KERNEL_TAPS) % NUM_INPUT_CHANNELS;
-    tap_idx = weight_index % KERNEL_TAPS;
-  end
+  logic [NUM_WEIGHTS-1:0] weight_write_sel_q;
+  logic signed [WEIGHT_WIDTH-1:0] weight_data_q;
+  logic weight_valid_q;
+  logic weights_done_q;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -84,6 +79,11 @@ module cnn_config_loader #(
       cfg_write_count    <= 32'd0;
       weight_write_count <= 32'd0;
       bias_write_count   <= 32'd0;
+
+      weight_write_sel_q <= '0;
+      weight_data_q      <= '0;
+      weight_valid_q     <= 1'b0;
+      weights_done_q     <= 1'b0;
 
       for (int oc = 0; oc < NUM_OUTPUT_CHANNELS; oc++) begin
         bias[oc] <= '0;
@@ -113,6 +113,11 @@ module cnn_config_loader #(
         weight_write_count <= 32'd0;
         bias_write_count   <= 32'd0;
 
+        weight_write_sel_q <= '0;
+        weight_data_q      <= '0;
+        weight_valid_q     <= 1'b0;
+        weights_done_q     <= 1'b0;
+
         for (int oc = 0; oc < NUM_OUTPUT_CHANNELS; oc++) begin
           bias[oc] <= '0;
 
@@ -137,14 +142,35 @@ module cnn_config_loader #(
           cfg_write_count <= cfg_write_count + 32'd1;
         end
 
+        weight_write_sel_q <= '0;
+        weight_valid_q     <= 1'b0;
+        weights_done_q     <= weights_done;
+
         if (weight_valid) begin
           if (weight_index < NUM_WEIGHTS) begin
-            weights[oc_idx][ic_idx][tap_idx] <= weight_data;
+            weight_valid_q <= 1'b1;
+            weight_data_q  <= weight_data;
             weight_write_count <= weight_write_count + 32'd1;
+
+            for (int i = 0; i < NUM_WEIGHTS; i++) begin
+              weight_write_sel_q[i] <= (weight_index == 8'(i));
+            end
           end
         end
 
-        if (weights_done) begin
+        if (weight_valid_q) begin
+          for (int oc = 0; oc < NUM_OUTPUT_CHANNELS; oc++) begin
+            for (int ic = 0; ic < NUM_INPUT_CHANNELS; ic++) begin
+              for (int k = 0; k < KERNEL_TAPS; k++) begin
+                if (weight_write_sel_q[oc * NUM_INPUT_CHANNELS * KERNEL_TAPS + ic * KERNEL_TAPS + k]) begin
+                  weights[oc][ic][k] <= weight_data_q;
+                end
+              end
+            end
+          end
+        end
+
+        if (weights_done_q) begin
           weights_loaded <= 1'b1;
         end
 
