@@ -1,19 +1,24 @@
 `timescale 1ns/1ps
 
-import cnn_accel_pkg::*;
-
 module tb_cnn_accel_top_small;
 
   localparam int MAX_H = 8;
   localparam int MAX_W = 8;
-  localparam int IC = NUM_INPUT_CHANNELS;
-  localparam int OC = NUM_OUTPUT_CHANNELS;
+  localparam int IC = 3;
+  localparam int OC = 4;
+  localparam int KERNEL_TAPS = 9;
   localparam int MAX_OUT_TOTAL = (MAX_H - 2) * (MAX_W - 2) * OC;
+
+  typedef logic signed [7:0] data8_t;
+  typedef logic [7:0] axis_data_t;
+  typedef logic [15:0] addr16_t;
+  typedef logic [31:0] u32_t;
+  typedef logic signed [31:0] s32_t;
 
   logic clk = 1'b0;
   logic rst_n;
 
-  always #5 clk = ~clk;
+  always #5 clk <= ~clk;
 
   logic cfg_we;
   logic [15:0] cfg_addr;
@@ -155,16 +160,16 @@ module tb_cnn_accel_top_small;
     end
   endtask
 
-  task automatic init_scenario(input int scenario, input int h, input int w);
+  task automatic init_scenario(input int scenario);
     begin
       for (int ic = 0; ic < IC; ic++) begin
         for (int r = 0; r < MAX_H; r++) begin
           for (int c = 0; c < MAX_W; c++) begin
             unique case (scenario)
-              0: input_mem[ic][r][c] = $signed((ic + r + c) & 8'h7f);
+              0: input_mem[ic][r][c] = data8_t'((ic + r + c) & 32'h7f);
               1: input_mem[ic][r][c] = 8'sd3;
               2: input_mem[ic][r][c] = 8'sd127;
-              default: input_mem[ic][r][c] = rand_range(-16, 15);
+              default: input_mem[ic][r][c] = data8_t'(rand_range(-16, 15));
             endcase
           end
         end
@@ -172,10 +177,10 @@ module tb_cnn_accel_top_small;
 
       for (int oc = 0; oc < OC; oc++) begin
         unique case (scenario)
-          0: bias_mem[oc] = oc;
+          0: bias_mem[oc] = s32_t'(oc);
           1: bias_mem[oc] = -32'sd5;
           2: bias_mem[oc] = 32'sd0;
-          default: bias_mem[oc] = rand_range(-128, 127);
+          default: bias_mem[oc] = s32_t'(rand_range(-128, 127));
         endcase
 
         for (int ic = 0; ic < IC; ic++) begin
@@ -195,7 +200,7 @@ module tb_cnn_accel_top_small;
 
               1: weight_mem[oc][ic][k] = -8'sd2;
               2: weight_mem[oc][ic][k] = 8'sd127;
-              default: weight_mem[oc][ic][k] = rand_range(-16, 15);
+              default: weight_mem[oc][ic][k] = data8_t'(rand_range(-16, 15));
             endcase
           end
         end
@@ -316,20 +321,20 @@ module tb_cnn_accel_top_small;
     logic [31:0] ctrl;
 
     begin
-      cfg_write(16'h0008, w[31:0]);
-      cfg_write(16'h000C, h[31:0]);
-      cfg_write(16'h0010, qshift[31:0]);
+      cfg_write(16'h0008, u32_t'(w));
+      cfg_write(16'h000C, u32_t'(h));
+      cfg_write(16'h0010, u32_t'(qshift));
 
       ctrl = {27'd0, kernel_mode_arg, quant_en, bias_en, relu_en, 1'b0};
       cfg_write(16'h0000, ctrl);
 
       for (int oc = 0; oc < OC; oc++) begin
-        cfg_write(16'h0400 + oc * 4, bias_mem[oc]);
+        cfg_write(addr16_t'(32'h0400 + (oc * 4)), bias_mem[oc]);
 
         for (int ic = 0; ic < IC; ic++) begin
           for (int k = 0; k < KERNEL_TAPS; k++) begin
             cfg_write(
-              16'h0100 + (((oc * IC * KERNEL_TAPS) + (ic * KERNEL_TAPS) + k) * 4),
+              addr16_t'(32'h0100 + (((oc * IC * KERNEL_TAPS) + (ic * KERNEL_TAPS) + k) * 4)),
               {{24{weight_mem[oc][ic][k][7]}}, weight_mem[oc][ic][k]}
             );
           end
@@ -384,7 +389,7 @@ module tb_cnn_accel_top_small;
       accepted = 1'b0;
 
       @(negedge clk);
-      s_axis_tdata  = pix;
+      s_axis_tdata  = axis_data_t'(pix);
       s_axis_tlast  = last;
       s_axis_tvalid = 1'b1;
 
@@ -601,9 +606,10 @@ module tb_cnn_accel_top_small;
     input bit kernel_mode_arg = 1'b1
   );
     int total_outputs;
-    int expected_input_count;
-    int expected_window_count;
-    int expected_mac_count;
+    u32_t expected_input_count;
+    u32_t expected_output_count;
+    u32_t expected_window_count;
+    u32_t expected_mac_count;
     int errors_before;
 
     begin
@@ -617,7 +623,7 @@ module tb_cnn_accel_top_small;
       reset_dut();
 
       $display("[SCENARIO] init inputs/weights/bias");
-      init_scenario(scenario, h, w);
+      init_scenario(scenario);
 
       $display("[SCENARIO] compute expected output");
       compute_expected(h, w, relu_en, bias_en, quant_en, qshift, total_outputs, kernel_mode_arg);
@@ -641,14 +647,15 @@ module tb_cnn_accel_top_small;
       $display("[SCENARIO] wait done");
       wait_done(name);
 
-      expected_input_count = h * w * IC;
+      expected_input_count  = u32_t'(h * w * IC);
+      expected_output_count = u32_t'(total_outputs);
 
       if (kernel_mode_arg) begin
-        expected_window_count = (h - 2) * (w - 2);
-        expected_mac_count    = expected_window_count * IC * OC * KERNEL_TAPS;
+        expected_window_count = u32_t'((h - 2) * (w - 2));
+        expected_mac_count    = u32_t'(expected_window_count * IC * OC * KERNEL_TAPS);
       end else begin
-        expected_window_count = h * w;
-        expected_mac_count    = expected_window_count * IC * OC;
+        expected_window_count = u32_t'(h * w);
+        expected_mac_count    = u32_t'(expected_window_count * IC * OC);
       end
 
       tests++;
@@ -665,13 +672,13 @@ module tb_cnn_accel_top_small;
 
       tests++;
 
-      if (output_count !== total_outputs) begin
+      if (output_count !== expected_output_count) begin
         errors++;
         $error(
           "%s output counter got=%0d expected=%0d",
           name,
           output_count,
-          total_outputs
+          expected_output_count
         );
       end
 

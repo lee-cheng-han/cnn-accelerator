@@ -1,403 +1,314 @@
 # Zynq CNN Accelerator
 
-A SystemVerilog CNN accelerator targeting the Digilent Arty Z7-20 / Zynq-7000 platform. The accelerator is controlled by the ARM Cortex-A9 through AXI-Lite and streams image data through AXI DMA.
+A SystemVerilog CNN accelerator for the Digilent Arty Z7-20 / Zynq-7000 platform. The programmable logic implements a small streaming CNN datapath; the ARM Cortex-A9 configures it through AXI-Lite and moves image/result data through AXI DMA.
 
-The design supports both true 1x1 convolution and 3x3 convolution. It includes generated-image test vectors, XSim testbenches, Vivado block design automation, and a bare-metal C test application for board validation.
+The project is currently in the final pre-board stage: RTL simulation, Vivado implementation, XSA export, and Vitis bare-metal build are complete. Physical board validation is the next milestone when the Arty Z7-20 arrives.
 
-## Project Status
+## Results Snapshot
 
-Current status before physical board validation:
+| Area | Status |
+|---|---|
+| RTL language | SystemVerilog |
+| Target board | Digilent Arty Z7-20 |
+| FPGA part | `xc7z020clg400-1` |
+| Toolchain | Vivado / Vitis 2025.2 |
+| Control interface | AXI-Lite |
+| Data interface | AXI DMA + AXI-Stream |
+| Input format | Packed RGB, `0x00BBGGRR` |
+| CNN modes | True 1x1 and valid 3x3 convolution |
+| Input / output channels | 3 input channels, 4 output channels |
+| Data / weight / accumulator width | int8 / int8 / int32 |
+| Timing | Met at 100 MHz |
+| LUTs / registers | 5,678 LUTs / 7,749 registers |
+| BRAM / DSP | 4.5 BRAM tiles / 3 DSPs |
+| DMA top simulation | Passing, 80 checked outputs |
+| Bitstream / XSA / ELF | Built |
+| Board validation | Pending hardware |
 
-- RTL simulation: passing
-- AXI-Lite control path: implemented
-- AXI-Stream data path: implemented
-- AXI DMA block design: implemented
-- Vivado bitstream: built
-- XSA export: complete
-- Vitis bare-metal ELF: built
-- Board validation: pending Arty Z7-20 hardware
+Expected board-level result:
 
-Expected final board result:
+```text
+[PASS] CNN DMA accelerator test passed
+```
 
-    [PASS] CNN DMA accelerator test passed
+## Why This Project Matters
 
-## Features
+This repository demonstrates a complete FPGA accelerator slice:
 
-- Zynq-7000 PS + FPGA accelerator design
-- AXI-Lite register interface for configuration
-- AXI DMA input and output streaming
-- Packed RGB input format: 0x00BBGGRR
-- 3 input channels: R, G, B
-- 4 output channels
-- True 1x1 convolution mode
-- 3x3 valid convolution mode
-- Bias support
-- ReLU support
-- Quantization-shift support in the register map
-- Generated C image headers for repeatable testing
-- Golden-output comparison in bare-metal software
-- XSim simulation testbenches
-- Vivado block design script for Arty Z7-20
-- Vitis bare-metal application build script
+- Microarchitecture: streaming RGB input, 1x1/3x3 convolution, post-processing, output buffering.
+- Integration: Zynq PS, AXI-Lite control, AXI DMA, AXI-Stream datapath, Vivado block design automation.
+- Verification: unit tests, randomized datapath tests, AXI-Lite tests, DMA-style system simulation, generated golden vectors.
+- Software: bare-metal C application that configures the accelerator, runs DMA transfers, and compares hardware output against golden data.
+- Implementation: scripted Vivado project creation, bitstream generation, XSA export, and Vitis app build.
 
-## System Architecture
+## Current Architecture
 
-High-level data path:
-
-    ARM Cortex-A9
-         |
-         | AXI-Lite
-         v
-    CNN configuration registers
-         |
-         | width / height / mode / weights / bias
-         v
-    CNN accelerator core
+```text
+ARM Cortex-A9
+    |
+    | AXI-Lite writes
+    v
+CNN config/status registers
+    |
+    | width, height, mode, weights, bias
+    v
+CNN accelerator core
 
 
-    DDR input buffer
-         |
-         | AXI memory-mapped read
-         v
-    AXI DMA MM2S
-         |
-         | AXI-Stream packed RGB pixels
-         | one beat = 0x00BBGGRR
-         v
-    axis_rgb_to_channels
-         |
-         | R, G, B channel stream
-         v
-    streaming_cnn_core
-         |
-         | signed 8-bit CNN outputs
-         v
-    axis_output_widen
-         |
-         | 32-bit AXI-Stream outputs
-         v
-    AXI DMA S2MM
-         |
-         | AXI memory-mapped write
-         v
-    DDR output buffer
+DDR input buffer
+    |
+    | AXI memory-mapped read
+    v
+AXI DMA MM2S
+    |
+    | AXI-Stream packed RGB pixels, one beat = 0x00BBGGRR
+    v
+axis_rgb_to_channels
+    |
+    | channel-serial R, G, B samples
+    v
+streaming_cnn_core
+    |
+    | signed 8-bit CNN outputs
+    v
+axis_output_widen
+    |
+    | sign-extended 32-bit AXI-Stream words
+    v
+AXI DMA S2MM
+    |
+    | AXI memory-mapped write
+    v
+DDR output buffer
+```
 
-## Hardware Address Map
-
-The Vivado block design exports the following base addresses:
-
-    CNN AXI-Lite base: 0x43C00000
-    AXI DMA base:      0x40400000
-
-## CNN Register Map
-
-    Offset      Register
-    0x000       CONTROL
-    0x004       STATUS
-    0x008       WIDTH
-    0x00C       HEIGHT
-    0x010       MODE_FLAGS
-    0x020       PIXEL_IN        legacy AXI-Lite input path
-    0x024       PIXEL_INDEX     legacy AXI-Lite input path
-    0x030       RESULT_DATA     legacy AXI-Lite output path
-    0x034       RESULT_STAT
-    0x100       WEIGHT_BASE
-    0x400       BIAS_BASE
-
-The DMA design uses AXI DMA for pixel input and output, but the AXI-Lite registers are still used for configuration.
-
-## Mode Flags
-
-    Bit(s)      Meaning
-    0           kernel_mode
-                0 = 1x1 convolution
-                1 = 3x3 convolution
-
-    1           relu_enable
-    2           bias_enable
-    3           quant_enable
-    12:8        quant_shift
+The active board-facing top is [rtl/zynq/cnn_dma_system_top.sv](rtl/zynq/cnn_dma_system_top.sv).
 
 ## Convolution Modes
 
 ### 1x1 Mode
 
-In 1x1 mode, the core performs convolution using only one tap.
+```text
+kernel_mode  = 0
+active tap   = 0
+output words = width * height * 4
+```
 
-    kernel_mode = 0
-    active tap  = 0
-    output words = width * height * 4
-
-For each input pixel, the accelerator produces 4 output-channel values.
+For each RGB input pixel, the accelerator emits four output-channel values.
 
 ### 3x3 Mode
 
-In 3x3 mode, the core performs valid 3x3 convolution.
+```text
+kernel_mode  = 1
+output words = (width - 2) * (height - 2) * 4
+```
 
-    kernel_mode = 1
-    center tap  = 4
-    output words = (width - 2) * (height - 2) * 4
+Tap order:
 
-3x3 tap order:
+```text
+tap 0   tap 1   tap 2
+tap 3   tap 4   tap 5
+tap 6   tap 7   tap 8
+```
 
-    tap 0   tap 1   tap 2
-    tap 3   tap 4   tap 5
-    tap 6   tap 7   tap 8
+The generated identity-style test uses tap 4 as the center tap.
 
-For the identity-style generated test, tap 4 is used as the center tap.
+## Test Weights
 
-## CNN Test Weights
+The generated board test uses easy-to-inspect weights:
 
-The generated test uses simple identity-like weights:
+```text
+output channel 0 = input channel R
+output channel 1 = input channel G
+output channel 2 = input channel B
+output channel 3 = R + G + B
+```
 
-    output channel 0 = input channel R
-    output channel 1 = input channel G
-    output channel 2 = input channel B
-    output channel 3 = R + G + B
+This makes simulation and bare-metal output comparison deterministic.
 
-This makes the hardware output easy to compare against a software-generated golden output.
+## Hardware Address Map
 
-## Main RTL Files
+| Base | Peripheral |
+|---:|---|
+| `0x43C00000` | CNN AXI-Lite registers |
+| `0x40400000` | AXI DMA registers |
 
-    rtl/zynq/cnn_dma_system_top.sv
-        Top-level DMA-capable CNN system.
-        Combines AXI-Lite configuration, AXI-Stream input, CNN core, and AXI-Stream output.
+## CNN Register Map
 
-    rtl/zynq/cnn_dma_system_bd_wrapper.v
-        Vivado block design module wrapper for cnn_dma_system_top.
+| Offset | Register | Notes |
+|---:|---|---|
+| `0x000` | `CONTROL` | bit 0 start, bit 1 clear |
+| `0x004` | `STATUS` | busy/done/result status |
+| `0x008` | `WIDTH` | input image width |
+| `0x00C` | `HEIGHT` | input image height |
+| `0x010` | `MODE_FLAGS` | kernel/ReLU/bias/quantization controls |
+| `0x020` | `PIXEL_IN` | legacy AXI-Lite pixel path |
+| `0x024` | `PIXEL_INDEX` | legacy/debug pixel index |
+| `0x030` | `RESULT_DATA` | legacy AXI-Lite result path |
+| `0x034` | `RESULT_STAT` | result status |
+| `0x100` | `WEIGHT_BASE` | 108 signed 8-bit weights in 32-bit slots |
+| `0x400` | `BIAS_BASE` | four signed 32-bit biases |
 
-    rtl/zynq/cnn_axi_lite_slave.sv
-        AXI-Lite register interface used by the ARM processor.
+The current board path uses AXI DMA for image input and result output. AXI-Lite is still used for configuration.
 
-    rtl/stream/axis_rgb_to_channels.sv
-        Converts 32-bit packed RGB AXI-Stream input into sequential R, G, B channel samples.
+## Mode Flags
 
-    rtl/stream/axis_output_widen.sv
-        Converts signed 8-bit CNN outputs into 32-bit AXI-Stream words for AXI DMA S2MM.
+| Bits | Name | Meaning |
+|---:|---|---|
+| `0` | `kernel_mode` | `0` = 1x1, `1` = 3x3 |
+| `1` | `relu_enable` | enable ReLU |
+| `2` | `bias_enable` | enable bias add |
+| `3` | `quant_enable` | enable arithmetic right shift |
+| `12:8` | `quant_shift` | quantization shift amount |
 
-    rtl/fpga/streaming_cnn_core.sv
-        Main streaming CNN computation core.
-        Supports both 1x1 and 3x3 modes.
+## Important RTL Files
 
-    rtl/fpga/streaming_window_buffer.sv
-        Generates 3x3 windows from the incoming channel stream.
+| File | Purpose |
+|---|---|
+| [rtl/zynq/cnn_dma_system_top.sv](rtl/zynq/cnn_dma_system_top.sv) | Current DMA-capable top level |
+| [rtl/zynq/cnn_axi_lite_slave.sv](rtl/zynq/cnn_axi_lite_slave.sv) | AXI-Lite register interface |
+| [rtl/stream/axis_rgb_to_channels.sv](rtl/stream/axis_rgb_to_channels.sv) | Converts packed RGB stream into R/G/B channel samples |
+| [rtl/fpga/streaming_cnn_core.sv](rtl/fpga/streaming_cnn_core.sv) | Main streaming 1x1/3x3 CNN core |
+| [rtl/fpga/streaming_window_buffer.sv](rtl/fpga/streaming_window_buffer.sv) | Generates valid 3x3 windows |
+| [rtl/compute/conv_engine.sv](rtl/compute/conv_engine.sv) | Pipelined MAC, bias, ReLU, quantization, saturation |
+| [rtl/stream/axis_output_widen.sv](rtl/stream/axis_output_widen.sv) | Sign-extends int8 outputs to 32-bit DMA words |
+| [rtl/cnn_accel_top.sv](rtl/cnn_accel_top.sv) | Earlier non-DMA prototype top used by legacy regression tests |
+| [rtl/zynq/cnn_axi_system_top.sv](rtl/zynq/cnn_axi_system_top.sv) | Legacy AXI-Lite pixel/result system top |
 
-    rtl/compute/conv_engine.sv
-        Performs the multiply-accumulate convolution operation.
+## Verification
 
-## Testbench Files
+Run the full DMA top-level simulation:
 
-    tb/stream/tb_axis_rgb_to_channels.sv
-        Unit test for the AXI-Stream RGB input adapter.
+```bash
+make dma-sim
+```
 
-    tb/stream/tb_axis_output_widen.sv
-        Unit test for the AXI-Stream output widening adapter.
+Expected result:
 
-    tb/stream/tb_cnn_dma_system_top.sv
-        Full DMA-style top-level simulation.
-        Tests AXI-Lite configuration, AXI-Stream input, CNN processing, and AXI-Stream output.
+```text
+[TEST] DMA top 3x3 mode
+[TEST] DMA top 1x1 mode
+[PASS] tb_cnn_dma_system_top tests=80
+```
 
-    tb/zynq/tb_cnn_axi_lite_slave.sv
-        AXI-Lite register testbench.
+Other useful checks:
 
-    tb/zynq/tb_cnn_axi_system_top.sv
-        Legacy AXI-Lite system-level testbench.
+```bash
+make regression
+make axi-lite
+make axi-system
+make lint
+```
 
-## Software Files
+Verification docs:
 
-    software/zynq_baremetal/main.c
-        Bare-metal C test application.
-        Configures the CNN accelerator, starts AXI DMA transfers, and compares the output buffer against golden data.
-
-    software/zynq_baremetal/generated/test_image.h
-        Generated input image data.
-
-    software/zynq_baremetal/generated/expected_output.h
-        Generated golden output data.
-
-## Script Files
-
-    scripts/image/generate_test_headers.py
-        Generates test_image.h and expected_output.h.
-
-    scripts/zynq/create_arty_z7_20_project.tcl
-        Creates the Vivado project and block design for Arty Z7-20.
-
-    scripts/zynq/build_arty_z7_20_bitstream.tcl
-        Builds the FPGA bitstream.
-
-    scripts/zynq/export_arty_z7_20_xsa.tcl
-        Exports the hardware XSA for Vitis.
-
-    scripts/zynq/run_dma_top_tb.sh
-        Runs the full DMA top-level XSim testbench.
-
-    scripts/zynq/program_and_run_dma.tcl
-        Programs the board and runs the bare-metal ELF through XSCT.
-
-    scripts/vitis/create_zynq_baremetal_app.py
-        Creates and builds the Vitis bare-metal application.
-
-## Requirements
-
-Tested with:
-
-    Vivado 2025.2
-    Vitis 2025.2
-    XSim
-    Ubuntu / WSL
-    Target board: Digilent Arty Z7-20
-
-Expected tool paths:
-
-    ~/Xilinx/2025.2/Vivado/bin/vivado
-    ~/Xilinx/2025.2/Vitis/bin/vitis
-    ~/Xilinx/2025.2/Vitis/bin/xsct
+- [docs/verification_matrix.md](docs/verification_matrix.md)
+- [docs/verification_plan.md](docs/verification_plan.md)
+- [docs/logs/dma_top_sim_pass.log](docs/logs/dma_top_sim_pass.log)
 
 ## Generate Test Images
 
 Generate a 3x3 test:
 
-    python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 3x3
+```bash
+python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 3x3
+```
 
 Generate a 1x1 test:
 
-    python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 1x1
+```bash
+python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 1x1
+```
 
 Generated files:
 
-    software/zynq_baremetal/generated/test_image.h
-    software/zynq_baremetal/generated/expected_output.h
-
-## Run Simulation
-
-Run the full DMA top-level simulation:
-
-    make dma-sim
-
-Expected result:
-
-    [TEST] DMA top 3x3 mode
-    [TEST] DMA top 1x1 mode
-    [PASS] tb_cnn_dma_system_top tests=80
-
-This verifies:
-
-- AXI-Lite configuration writes
-- AXI-Stream packed RGB input
-- 1x1 mode
-- 3x3 mode
-- 32-bit AXI-Stream output
-- Correct output ordering
-- Correct TLAST behavior
+```text
+software/zynq_baremetal/generated/test_image.h
+software/zynq_baremetal/generated/expected_output.h
+```
 
 ## Full Pre-Board Build Flow
 
-Run:
+```bash
+make full-arty-z7-dma-flow
+```
 
-    make full-arty-z7-dma-flow
+This flow:
 
-This performs:
+1. Generates image headers.
+2. Runs the DMA top simulation.
+3. Creates the Vivado block design.
+4. Builds the FPGA bitstream.
+5. Exports the XSA.
+6. Builds the Vitis bare-metal ELF.
 
-1. Generate image headers
-2. Run DMA top simulation
-3. Create Vivado block design
-4. Build FPGA bitstream
-5. Export XSA
-6. Build Vitis bare-metal ELF
+Generated artifacts are ignored by Git, but after a successful local build they should exist:
 
-## Build Artifacts
-
-Generated artifacts are ignored by Git, but after a successful build they should exist locally:
-
-    build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
-    build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
-    build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
-
-## XSA Hardware Check
-
-To confirm the exported XSA contains the DMA system:
-
-    mkdir -p /tmp/cnn_xsa_check
-    unzip -o build/arty_z7_20_cnn/arty_z7_20_cnn.xsa -d /tmp/cnn_xsa_check >/dev/null
-
-    grep -R "43C00000\|40400000\|axi_dma\|cnn_axi" -n /tmp/cnn_xsa_check | head -100
-
-Expected evidence:
-
-    axi_dma_0
-    cnn_axi_0
-    0x40400000
-    0x43C00000
-    M_AXIS_MM2S connected to CNN input
-    CNN output connected to S_AXIS_S2MM
+```text
+build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
+build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
+```
 
 ## Board Bring-Up
 
-Board bring-up instructions are in:
+Board bring-up instructions are in [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md).
 
-    docs/BOARD_BRINGUP.md
+When the Arty Z7-20 is available:
 
-When the Arty Z7-20 board is available:
-
-1. Connect board over USB.
+1. Connect the board over USB.
 2. Set boot mode to JTAG.
 3. Open UART at 115200 baud.
 4. Run:
 
-       make program-arty-z7-dma
+```bash
+make program-arty-z7-dma
+```
 
-Expected UART output:
+Expected UART output includes:
 
-    Zynq CNN Accelerator DMA Test
-    CNN base address: 0x43c00000
-    DMA base address: 0x40400000
-    Kernel mode = 3x3
-    ...
-    [PASS] CNN DMA accelerator test passed
+```text
+Zynq CNN Accelerator DMA Test
+CNN base address: 0x43c00000
+DMA base address: 0x40400000
+Kernel mode = 3x3
+...
+[PASS] CNN DMA accelerator test passed
+```
 
-## Verification Completed Before Board
+## Documentation Map
 
-Completed pre-board checks:
-
-- AXI-Lite register simulation
-- AXI-Lite system simulation
-- Generated image header flow
-- 1x1 generated-image software build
-- 3x3 generated-image software build
-- AXI-Stream input adapter simulation
-- AXI-Stream output adapter simulation
-- Full DMA top simulation
-- DMA Vivado block design creation
-- DMA bitstream build
-- DMA XSA export
-- DMA bare-metal ELF build
+| Document | Purpose |
+|---|---|
+| [docs/case_study.md](docs/case_study.md) | Interview-ready project narrative |
+| [docs/block_diagram.md](docs/block_diagram.md) | DMA system and CNN pipeline diagrams |
+| [docs/verification_matrix.md](docs/verification_matrix.md) | What has been tested and what remains |
+| [docs/performance_analysis.md](docs/performance_analysis.md) | Throughput, latency, resource, and scaling analysis |
+| [docs/pre_board_checklist.md](docs/pre_board_checklist.md) | Work to complete before hardware arrives |
+| [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md) | Board programming and debug checklist |
 
 ## Current Limitations
 
-- Board validation is pending until physical Arty Z7-20 hardware is available.
-- Current generated tests use small images for bring-up.
-- Current software uses polling instead of DMA interrupts.
-- The design is intended as a portfolio/learning accelerator, not a production neural-network accelerator.
+- Physical Arty Z7-20 validation is pending hardware arrival.
+- The bring-up CNN is intentionally small: 3 input channels and 4 output channels.
+- Weights and biases are loaded through AXI-Lite registers, not through a DMA weight loader.
+- Software currently polls DMA completion instead of using interrupts.
+- The project is a portfolio/learning accelerator, not a production neural-network accelerator.
 
 ## Future Improvements
 
-Possible next improvements:
-
-- Add interrupt-driven DMA completion
-- Add larger image tests
-- Add more output channels
-- Add multiple convolution layers
-- Add pooling
-- Add configurable stride/padding
-- Add performance counters visible in software
-- Add UART performance summary
-- Add board PASS log and screenshot after hardware validation
+- Capture real board UART PASS log, setup photo, and demo clip.
+- Add AXI protocol assertions and coverage-style reporting.
+- Add randomized DMA top tests with output backpressure.
+- Expose performance counters to software.
+- Add interrupt-driven DMA completion.
+- Add stride, padding, pooling, or a second layer.
+- Add a DMA-based weight-loading path.
 
 ## Repository Status
 
-This repository is currently ready for physical board validation.
+The repository is ready for physical board validation. The next major milestone is running the generated DMA bare-metal test on the Arty Z7-20 and capturing proof of:
 
-The next major milestone is running the generated DMA bare-metal test on the Arty Z7-20 and capturing UART proof of:
-
-    [PASS] CNN DMA accelerator test passed
+```text
+[PASS] CNN DMA accelerator test passed
+```
