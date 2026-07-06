@@ -26,17 +26,17 @@ Latest implemented design:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 5,678 | 53,200 | 10.67% |
-| Slice Registers | 7,749 | 106,400 | 7.28% |
-| Block RAM Tile | 4.5 | 140 | 3.21% |
-| RAMB36/FIFO | 4 | 140 | 2.86% |
-| RAMB18 | 1 | 280 | 0.36% |
+| Slice LUTs | 7,811 | 53,200 | 14.68% |
+| Slice Registers | 10,728 | 106,400 | 10.08% |
+| Block RAM Tile | 2 | 140 | 1.43% |
 | DSPs | 3 | 220 | 1.36% |
 
 ## Timing Result
 
 ```text
 All user specified timing constraints are met.
+WNS = 0.143 ns
+WHS = 0.012 ns
 ```
 
 ## Generated Outputs
@@ -48,6 +48,8 @@ All user specified timing constraints are met.
 | Utilization Report | `build/arty_z7_20_bitstream_util.rpt` |
 | XSA | `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa` |
 | Bare-metal ELF | `build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf` |
+| BOOT.BIN | `build/BOOT.BIN` |
+| Flow Report | `build/flow_report.md` |
 
 ## Notes
 

@@ -54,6 +54,15 @@ module tb_cnn_dma_system_top;
 
   int errors;
   int tests;
+  int seed;
+  int seed_warmup;
+  int output_stall_percent;
+
+  logic output_ready_randomize;
+
+  int unsigned axil_assert_errors;
+  int unsigned s_axis_assert_errors;
+  int unsigned m_axis_assert_errors;
 
   int out_count;
   int expected_count;
@@ -98,7 +107,76 @@ module tb_cnn_dma_system_top;
     .m_axis_tlast(m_axis_tlast)
   );
 
+  axi_lite_protocol_assertions #(
+    .ADDR_WIDTH(AXI_ADDR_WIDTH),
+    .DATA_WIDTH(AXI_DATA_WIDTH),
+    .NAME("cnn_dma_s_axi")
+  ) u_axi_lite_protocol_assertions (
+    .clk(clk),
+    .rst_n(rst_n),
+
+    .awaddr(s_axi_awaddr),
+    .awvalid(s_axi_awvalid),
+    .awready(s_axi_awready),
+
+    .wdata(s_axi_wdata),
+    .wstrb(s_axi_wstrb),
+    .wvalid(s_axi_wvalid),
+    .wready(s_axi_wready),
+
+    .bresp(s_axi_bresp),
+    .bvalid(s_axi_bvalid),
+    .bready(s_axi_bready),
+
+    .araddr(s_axi_araddr),
+    .arvalid(s_axi_arvalid),
+    .arready(s_axi_arready),
+
+    .rdata(s_axi_rdata),
+    .rresp(s_axi_rresp),
+    .rvalid(s_axi_rvalid),
+    .rready(s_axi_rready),
+
+    .error_count(axil_assert_errors)
+  );
+
+  axis_stream_assertions #(
+    .DATA_WIDTH(32),
+    .NAME("dma_mm2s_to_cnn")
+  ) u_s_axis_protocol_assertions (
+    .clk(clk),
+    .rst_n(rst_n),
+    .tdata(s_axis_tdata),
+    .tvalid(s_axis_tvalid),
+    .tready(s_axis_tready),
+    .tlast(s_axis_tlast),
+    .error_count(s_axis_assert_errors)
+  );
+
+  axis_stream_assertions #(
+    .DATA_WIDTH(32),
+    .NAME("cnn_to_dma_s2mm")
+  ) u_m_axis_protocol_assertions (
+    .clk(clk),
+    .rst_n(rst_n),
+    .tdata(m_axis_tdata),
+    .tvalid(m_axis_tvalid),
+    .tready(m_axis_tready),
+    .tlast(m_axis_tlast),
+    .error_count(m_axis_assert_errors)
+  );
+
   always #5 clk = ~clk;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      m_axis_tready <= 1'b0;
+    end else if (!output_ready_randomize) begin
+      m_axis_tready <= 1'b1;
+    end else begin
+      m_axis_tready <= ($urandom_range(0, 99) >= output_stall_percent);
+    end
+  end
 
   function automatic int pixel_r(input int x, input int y);
     return x + 1;
@@ -366,6 +444,9 @@ module tb_cnn_dma_system_top;
 
   task automatic run_case(input bit kernel_mode);
     begin
+      output_stall_percent = kernel_mode ? 35 : 50;
+      output_ready_randomize = 1'b1;
+
       clear_accel();
 
       axi_write(REG_WIDTH,  32'd4);
@@ -397,6 +478,8 @@ module tb_cnn_dma_system_top;
         end
       join
 
+      output_ready_randomize = 1'b0;
+
       repeat (20) @(posedge clk);
     end
   endtask
@@ -420,10 +503,20 @@ module tb_cnn_dma_system_top;
     s_axis_tvalid = 1'b0;
     s_axis_tlast = 1'b0;
 
-    m_axis_tready = 1'b1;
+    output_ready_randomize = 1'b0;
+    output_stall_percent = 0;
 
     errors = 0;
     tests = 0;
+
+    seed = 12345;
+    if ($value$plusargs("SEED=%d", seed)) begin
+      $display("[INFO] Random seed = %0d", seed);
+    end else begin
+      $display("[INFO] Random seed = %0d (default)", seed);
+    end
+
+    seed_warmup = $urandom(seed);
 
     init_expected();
 
@@ -436,6 +529,13 @@ module tb_cnn_dma_system_top;
 
     $display("[TEST] DMA top 1x1 mode");
     run_case(1'b0);
+
+    errors += axil_assert_errors + s_axis_assert_errors + m_axis_assert_errors;
+
+    if ((axil_assert_errors + s_axis_assert_errors + m_axis_assert_errors) != 0) begin
+      $display("[FAIL] AXI assertion errors: axil=%0d s_axis=%0d m_axis=%0d",
+               axil_assert_errors, s_axis_assert_errors, m_axis_assert_errors);
+    end
 
     if (errors == 0) begin
       $display("[PASS] tb_cnn_dma_system_top tests=%0d", tests);

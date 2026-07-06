@@ -11,6 +11,13 @@ build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
 XSA:
 build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
 
+Optional SD boot image:
+build/BOOT.BIN
+
+Generate all board-ready files:
+
+XILINX_VITIS_DATA_DIR=/tmp/vitis_data make preboard-proof
+
 ## Hardware setup
 
 1. Connect the Arty Z7-20 board over USB.
@@ -35,6 +42,22 @@ This uses:
 
 ~/Xilinx/2025.2/Vitis/bin/xsct scripts/zynq/program_and_run_dma.tcl
 
+## SD boot option
+
+After JTAG passes, copy `build/BOOT.BIN` to a FAT32 microSD card, set the board boot mode to SD, and power-cycle the board.
+
+## Optional ILA debug bitstream
+
+If the first board run needs signal-level debug, build an ILA variant:
+
+make arty-z7-ila-bitstream
+
+This creates a separate project under:
+
+build/arty_z7_20_cnn_ila
+
+The ILA probes the DMA-to-CNN input stream, the CNN-to-DMA output stream, and a few AXI-Lite control handshakes. Use the normal bitstream for final measurements; use the ILA bitstream only for bring-up visibility.
+
 ## Expected UART output
 
 The test should print:
@@ -44,6 +67,7 @@ CNN base address: 0x43c00000
 DMA base address: 0x40400000
 Kernel mode = 3x3
 ...
+DMA+CNN transfer usec   = <measured>
 [PASS] CNN DMA accelerator test passed
 
 ## Important addresses
@@ -71,4 +95,6 @@ DMA MM2S status after reset
 DMA S2MM status after reset
 DMA MM2S final status
 DMA S2MM final status
+DMA+CNN transfer cycles
+DMA+CNN transfer usec
 [FAIL] lines

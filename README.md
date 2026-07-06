@@ -19,8 +19,8 @@ The project is currently in the final pre-board stage: RTL simulation, Vivado im
 | Input / output channels | 3 input channels, 4 output channels |
 | Data / weight / accumulator width | int8 / int8 / int32 |
 | Timing | Met at 100 MHz |
-| LUTs / registers | 5,678 LUTs / 7,749 registers |
-| BRAM / DSP | 4.5 BRAM tiles / 3 DSPs |
+| LUTs / registers | 7,811 LUTs / 10,728 registers |
+| BRAM / DSP | 2 BRAM tiles / 3 DSPs |
 | DMA top simulation | Passing, 80 checked outputs |
 | Bitstream / XSA / ELF | Built |
 | Board validation | Pending hardware |
@@ -242,12 +242,30 @@ This flow:
 5. Exports the XSA.
 6. Builds the Vitis bare-metal ELF.
 
+For a board-arrival-ready proof package, run:
+
+```bash
+XILINX_VITIS_DATA_DIR=/tmp/vitis_data make preboard-proof
+```
+
+That adds warning-budget checking, `BOOT.BIN` generation, and a generated flow summary.
+
 Generated artifacts are ignored by Git, but after a successful local build they should exist:
 
 ```text
 build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
 build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
+build/BOOT.BIN
+build/flow_report.md
+```
+
+Health-report commands:
+
+```bash
+make check-warnings
+make flow-report
+make boot-image
 ```
 
 ## Board Bring-Up
@@ -282,10 +300,15 @@ Kernel mode = 3x3
 |---|---|
 | [docs/case_study.md](docs/case_study.md) | Interview-ready project narrative |
 | [docs/block_diagram.md](docs/block_diagram.md) | DMA system and CNN pipeline diagrams |
+| [docs/assets/arty_z7_dma_architecture.svg](docs/assets/arty_z7_dma_architecture.svg) | Generated architecture visual for portfolio/readme use |
 | [docs/verification_matrix.md](docs/verification_matrix.md) | What has been tested and what remains |
 | [docs/performance_analysis.md](docs/performance_analysis.md) | Throughput, latency, resource, and scaling analysis |
 | [docs/pre_board_checklist.md](docs/pre_board_checklist.md) | Work to complete before hardware arrives |
 | [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md) | Board programming and debug checklist |
+| [docs/known_warnings.md](docs/known_warnings.md) | Vivado warning budget and accepted generated-IP warnings |
+| [docs/board_arrival_runbook.md](docs/board_arrival_runbook.md) | Exact evidence to capture when the board arrives |
+| [docs/logs/pre_board_flow_report.md](docs/logs/pre_board_flow_report.md) | Snapshot of the latest pre-board artifact/timing/utilization report |
+| [docs/logs/pre_board_warning_budget.log](docs/logs/pre_board_warning_budget.log) | Snapshot of the latest Vivado warning-budget pass |
 
 ## Current Limitations
 
@@ -298,8 +321,7 @@ Kernel mode = 3x3
 ## Future Improvements
 
 - Capture real board UART PASS log, setup photo, and demo clip.
-- Add AXI protocol assertions and coverage-style reporting.
-- Add randomized DMA top tests with output backpressure.
+- Archive measured board latency/throughput and optional ILA captures.
 - Expose performance counters to software.
 - Add interrupt-driven DMA completion.
 - Add stride, padding, pooling, or a second layer.

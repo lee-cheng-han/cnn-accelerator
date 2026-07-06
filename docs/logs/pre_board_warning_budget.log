@@ -1,0 +1,20 @@
+python3 scripts/check_vivado_warnings.py
+Vivado warning budget
+=====================
+Logs checked: 3
+Warnings: 154
+Known warnings: 154
+Unknown warnings: 0
+Critical warnings: 0
+Errors: 0
+
+Known warning categories:
+    71  Board store entries for unavailable installed parts
+    52  Generated interconnect clock/reset or ID bits trimmed
+    18  Optional generated IP port left unconnected
+     6  Generated interconnect port-width adaptation
+     5  Generated wrapper omits optional IP ports
+     1  Project created by part when board metadata is absent
+     1  Vectorless power estimate reset activity warning
+
+PASS: no errors, no critical warnings, and no warnings outside docs/known_warnings.md.

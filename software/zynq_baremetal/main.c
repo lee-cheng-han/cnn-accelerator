@@ -1,6 +1,8 @@
 #include "xil_io.h"
 #include "xil_printf.h"
 #include "xil_cache.h"
+#include "xiltimer.h"
+#include "xtimer_config.h"
 #include "sleep.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -56,6 +58,8 @@
 
 static uint32_t input_buffer[MAX_INPUT_PIXELS] __attribute__((aligned(64)));
 static int32_t  output_buffer[MAX_OUTPUT_WORDS] __attribute__((aligned(64)));
+static uint32_t last_dma_cnn_cycles;
+static uint32_t last_dma_cnn_usec;
 
 static inline void cnn_write(uint32_t offset, uint32_t value)
 {
@@ -167,8 +171,16 @@ static int dma_wait_done(uint32_t status_offset, const char *name)
     return -1;
 }
 
+static uint32_t cycles_to_usec(uint64_t cycles)
+{
+    return (uint32_t)((cycles * 1000000ULL) / COUNTS_PER_SECOND);
+}
+
 static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
 {
+    XTime transfer_start;
+    XTime transfer_end;
+
     xil_printf("Resetting AXI DMA...\r\n");
 
     if (dma_reset() != 0) {
@@ -210,6 +222,8 @@ static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
     /*
      * Writing LENGTH starts each simple-mode transfer.
      */
+    XTime_GetTime(&transfer_start);
+
     dma_write(DMA_S2MM_LENGTH, output_bytes);
     dma_write(DMA_MM2S_LENGTH, input_bytes);
 
@@ -221,10 +235,17 @@ static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
         return -1;
     }
 
+    XTime_GetTime(&transfer_end);
+    uint64_t transfer_cycles = (uint64_t)(transfer_end - transfer_start);
+    last_dma_cnn_cycles = (uint32_t)transfer_cycles;
+    last_dma_cnn_usec = cycles_to_usec(transfer_cycles);
+
     Xil_DCacheInvalidateRange((UINTPTR)output_buffer, output_bytes);
 
     xil_printf("DMA MM2S final status = 0x%08x\r\n", dma_read(DMA_MM2S_DMASR));
     xil_printf("DMA S2MM final status = 0x%08x\r\n", dma_read(DMA_S2MM_DMASR));
+    xil_printf("DMA+CNN transfer cycles = %d\r\n", last_dma_cnn_cycles);
+    xil_printf("DMA+CNN transfer usec   = %d\r\n", last_dma_cnn_usec);
 
     return 0;
 }

@@ -102,6 +102,9 @@ app.build()
 
 elf = workspace / app_name / "build" / f"{app_name}.elf"
 
+if not elf.exists():
+    raise RuntimeError(f"Vitis app build did not produce ELF: {elf}")
+
 print("")
 print("Vitis bare-metal app build done.")
 print("ELF:")

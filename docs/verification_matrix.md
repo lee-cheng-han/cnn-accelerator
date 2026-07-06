@@ -74,10 +74,6 @@ The checked-in proof log is `docs/logs/dma_top_sim_pass.log`.
 
 ## Gaps To Close Before A 10/10 Portfolio Version
 
-- Add SystemVerilog assertions for AXI-Stream stable data while stalled.
-- Add assertions for exactly one final TLAST per transaction.
-- Add AXI-Lite protocol assertions or a small reusable AXI-Lite checker.
-- Add randomized DMA top-level tests with output backpressure.
 - Add generated random images and random weights compared against a Python golden model.
 - Add coverage-style reporting for mode, image size, ReLU, bias, quantization, saturation, and stall scenarios.
 - Capture board UART PASS log once hardware arrives.

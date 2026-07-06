@@ -3,6 +3,19 @@ set proj_name arty_z7_20_cnn
 set proj_dir  build/arty_z7_20_cnn
 set bd_name   system
 
+if {[info exists ::env(PROJ_NAME)]} {
+  set proj_name $::env(PROJ_NAME)
+}
+
+if {[info exists ::env(PROJ_DIR)]} {
+  set proj_dir $::env(PROJ_DIR)
+}
+
+set enable_ila 0
+if {[info exists ::env(ENABLE_ILA)] && ($::env(ENABLE_ILA) eq "1")} {
+  set enable_ila 1
+}
+
 file delete -force $proj_dir
 
 create_project $proj_name $proj_dir -part $part_name
@@ -135,6 +148,26 @@ connect_bd_intf_net [get_bd_intf_pins axi_mem_interconnect/M00_AXI] [get_bd_intf
 connect_bd_intf_net [get_bd_intf_pins axi_dma_0/M_AXIS_MM2S] [get_bd_intf_pins cnn_axi_0/S_AXIS]
 connect_bd_intf_net [get_bd_intf_pins cnn_axi_0/M_AXIS] [get_bd_intf_pins axi_dma_0/S_AXIS_S2MM]
 
+if {$enable_ila} {
+  puts "ENABLE_ILA=1: adding System ILA interface monitors"
+
+  create_bd_cell -type ip -vlnv xilinx.com:ip:system_ila ila_cnn_axis
+  set_property -dict [list \
+    CONFIG.C_MON_TYPE {INTERFACE} \
+    CONFIG.C_DATA_DEPTH {1024} \
+    CONFIG.C_NUM_MONITOR_SLOTS {3} \
+    CONFIG.C_SLOT_0_INTF_TYPE {xilinx.com:interface:axis_rtl:1.0} \
+    CONFIG.C_SLOT_1_INTF_TYPE {xilinx.com:interface:axis_rtl:1.0} \
+    CONFIG.C_SLOT_2_INTF_TYPE {xilinx.com:interface:aximm_rtl:1.0} \
+  ] [get_bd_cells ila_cnn_axis]
+
+  connect_bd_net [get_bd_pins ps7/FCLK_CLK0] [get_bd_pins ila_cnn_axis/clk]
+
+  connect_bd_intf_net [get_bd_intf_pins axi_dma_0/M_AXIS_MM2S] [get_bd_intf_pins ila_cnn_axis/SLOT_0_AXIS]
+  connect_bd_intf_net [get_bd_intf_pins cnn_axi_0/M_AXIS]      [get_bd_intf_pins ila_cnn_axis/SLOT_1_AXIS]
+  connect_bd_intf_net [get_bd_intf_pins cnn_axi_0/S_AXI]       [get_bd_intf_pins ila_cnn_axis/SLOT_2_AXI]
+}
+
 # Address map: CNN AXI-Lite at 0x43C00000
 set cnn_slave_seg [get_bd_addr_segs -quiet /cnn_axi_0/s_axi/reg0]
 
@@ -195,4 +228,8 @@ puts "CNN base address:"
 puts "  0x43C00000"
 puts "AXI DMA base address:"
 puts "  0x40400000"
+if {$enable_ila} {
+  puts "ILA debug core:"
+  puts "  ila_cnn_axis"
+}
 puts ""

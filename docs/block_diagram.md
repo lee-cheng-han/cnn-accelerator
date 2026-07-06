@@ -1,5 +1,9 @@
 # Block Diagram
 
+## Architecture Visual
+
+![Arty Z7 CNN DMA architecture](assets/arty_z7_dma_architecture.svg)
+
 ## Current Zynq DMA System
 
 ```text

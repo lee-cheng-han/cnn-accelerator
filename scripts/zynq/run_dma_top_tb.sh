@@ -9,6 +9,7 @@ rm -rf xsim.dir tb_cnn_dma_system_top_sim.wdb tb_cnn_dma_system_top_sim
 rm -f tb_cnn_dma_system_top_xsim_run.log
 
 "$VIVADO/xvlog" -sv \
+tb/stream/axi_protocol_assertions.sv \
 rtl/zynq/cnn_axi_lite_slave.sv \
 rtl/fpga/cnn_config_loader.sv \
 rtl/stream/axis_rgb_to_channels.sv \

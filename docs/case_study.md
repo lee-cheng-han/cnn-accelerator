@@ -142,7 +142,6 @@ Pre-board work is complete enough for hardware validation:
 
 - Run the bare-metal DMA test on physical hardware.
 - Capture UART PASS log and setup photo.
-- Add protocol assertions for AXI-Stream and AXI-Lite behavior.
-- Add randomized DMA top tests with backpressure.
+- Archive measured hardware latency/throughput and any useful ILA captures.
 - Expose performance counters to software.
 - Add one architectural scaling feature, such as a second layer, stride/padding, or DMA-based weight loading.

@@ -23,10 +23,14 @@ This checklist captures work that can be completed before the Arty Z7-20 arrives
 | Verification matrix | Done | `docs/verification_matrix.md` |
 | Performance analysis | Done | `docs/performance_analysis.md` |
 | Board bring-up checklist | Done | `docs/BOARD_BRINGUP.md` |
-| AXI-Stream assertions | Todo | stable data while stalled, TLAST checks |
-| More randomized DMA top tests | Todo | include output backpressure |
-| Coverage-style summary | Todo | modes, shapes, post-processing, stalls |
-| Fresh XSim logs | Todo | rerun after local XSim launch-wrapper issue is resolved |
+| Warning budget | Done | `make check-warnings`, `docs/known_warnings.md` |
+| Automated flow summary | Done | `make flow-report`, writes `build/flow_report.md`; latest docs snapshot in `docs/logs/pre_board_flow_report.md` |
+| SD boot image packaging | Done | `make boot-image`, writes `build/BOOT.BIN` |
+| Board arrival runbook | Done | `docs/board_arrival_runbook.md` |
+| AXI protocol assertions | Done | AXI-Stream stable-data/TLAST checks and AXI-Lite channel hold checks |
+| More randomized DMA top tests | Done | deterministic randomized output backpressure in 3x3 and 1x1 DMA tests |
+| Coverage-style summary | Done | `docs/verification_matrix.md`, `docs/logs/dma_top_sim_pass.log`, and `build/flow_report.md` |
+| Fresh XSim logs | Done | `make dma-sim` passes with AXI assertions and output backpressure |
 
 ## Board Arrival Checklist
 
@@ -38,6 +42,7 @@ This checklist captures work that can be completed before the Arty Z7-20 arrives
 6. Save a passing log under `docs/logs/board_dma_pass.log`.
 7. Add a setup photo under a docs asset directory.
 8. Update README board status from pending to passing.
+9. Copy `build/flow_report.md` to `docs/logs/board_flow_report.md`.
 
 ## Debug Data To Capture If Bring-Up Fails
 

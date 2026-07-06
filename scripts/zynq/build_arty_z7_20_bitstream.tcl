@@ -2,6 +2,14 @@ set proj_name arty_z7_20_cnn
 set proj_dir  build/arty_z7_20_cnn
 set bd_name   system
 
+if {[info exists ::env(PROJ_NAME)]} {
+  set proj_name $::env(PROJ_NAME)
+}
+
+if {[info exists ::env(PROJ_DIR)]} {
+  set proj_dir $::env(PROJ_DIR)
+}
+
 open_project $proj_dir/$proj_name.xpr
 
 update_compile_order -fileset sources_1
