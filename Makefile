@@ -15,6 +15,13 @@ regression:
 xsim-regression:
 	SEED=$(SEED) bash scripts/run_xsim_regression.sh
 
+.PHONY: v2-unit v2-regression
+
+v2-unit:
+	bash scripts/run_v2_unit.sh
+
+v2-regression: v2-unit
+
 lint:
 	bash scripts/lint_verilator.sh
 

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <testbench_name>"
+  exit 1
+fi
+
+TB_NAME="$1"
+TB_FILE="tb/${TB_NAME}.sv"
+
+if [[ ! -f "$TB_FILE" ]]; then
+  echo "ERROR: Could not find testbench file: $TB_FILE"
+  exit 1
+fi
+
+if ! command -v xvlog >/dev/null 2>&1; then
+  echo "ERROR: xvlog not found. Source Vivado settings first."
+  exit 1
+fi
+
+mkdir -p sim/xsim
+
+cd sim/xsim
+
+rm -rf \
+  ${TB_NAME}_xsim.dir \
+  ${TB_NAME}.jou \
+  ${TB_NAME}.log \
+  ${TB_NAME}_xsim_run.log \
+  xvlog.log \
+  xelab.log \
+  xsim.log
+
+echo "[XSim] Compiling v2 RTL and ../../${TB_FILE}"
+
+xvlog -sv -L work \
+  ../../rtl/scheduler/tail_mask_generator.sv \
+  ../../rtl/postprocess_v2/parallel_bias_add.sv \
+  ../../rtl/postprocess_v2/parallel_relu.sv \
+  ../../rtl/postprocess_v2/parallel_quantizer.sv \
+  ../../rtl/postprocess_v2/parallel_saturate.sv \
+  ../../rtl/postprocess_v2/residual_add.sv \
+  ../../rtl/tensor/tensor_address_gen.sv \
+  ../../rtl/compute_v2/reduction_tree.sv \
+  ../../rtl/compute_v2/parallel_mac_array.sv \
+  ../../rtl/compute_v2/psum_accumulator.sv \
+  ../../rtl/compute_v2/tiled_conv1x1_engine.sv \
+  ../../rtl/compute_v2/tiled_conv3x3_engine.sv \
+  ../../${TB_FILE}
+
+echo "[XSim] Elaborating $TB_NAME"
+xelab -debug typical ${TB_NAME} -s ${TB_NAME}_sim
+
+echo "[XSim] Running $TB_NAME"
+set +e
+xsim ${TB_NAME}_sim -runall | tee ${TB_NAME}_xsim_run.log
+XSIM_STATUS=${PIPESTATUS[0]}
+set -e
+
+if [[ $XSIM_STATUS -ne 0 ]]; then
+  echo "[FAIL] $TB_NAME: xsim exited with status $XSIM_STATUS"
+  exit $XSIM_STATUS
+fi
+
+if grep -E "\[FAIL\]|FAILED|Fatal:|ERROR:" ${TB_NAME}_xsim_run.log >/dev/null; then
+  echo "[FAIL] $TB_NAME: failure pattern found in simulation log"
+  exit 1
+fi
+
+if grep -E "\[PASS\]|PASS" ${TB_NAME}_xsim_run.log >/dev/null; then
+  echo "[PASS] $TB_NAME"
+else
+  echo "[FAIL] $TB_NAME: no PASS message found in simulation log"
+  exit 1
+fi

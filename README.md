@@ -84,6 +84,30 @@ DDR output buffer
 
 The active board-facing top is [rtl/zynq/cnn_dma_system_top.sv](rtl/zynq/cnn_dma_system_top.sv).
 
+## Experimental V2 Image-to-Image Path
+
+The repository now has a separate v2 compute path for the future tiled image-to-image CNN architecture. The v2 work is intentionally isolated from the board-ready v1 DMA flow.
+
+Current v2 status:
+
+- PC x PK signed INT8 MAC array foundation.
+- Default target: `PC=4`, `PK=8`, 32 multiplies per compute issue.
+- 8-lane INT32 partial-sum accumulator.
+- Runtime tail masks for non-divisible channel tiles.
+- 8-lane bias, ReLU, quantization, and saturation blocks.
+- First 1x1 tiled engine milestone for one spatial sample with runtime `Cin/Cout`.
+- Tensor address generation for stride/padding and first 3x3 tiled engine milestone for one output spatial sample.
+- Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
+- Dedicated v2 unit target.
+
+Run:
+
+```bash
+make v2-unit
+```
+
+See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md).
+
 ## Convolution Modes
 
 ### 1x1 Mode
