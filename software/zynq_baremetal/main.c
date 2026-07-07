@@ -22,6 +22,17 @@
 #define REG_WEIGHT_BASE 0x100U
 #define REG_BIAS_BASE   0x400U
 
+#define CNN_CONTROL_START 0x00000001U
+#define CNN_CONTROL_CLEAR 0x00000002U
+
+#define CNN_STATUS_BUSY         0x00000002U
+#define CNN_STATUS_DONE         0x00000004U
+#define CNN_STATUS_RESULT_VALID 0x00000008U
+#define CNN_STATUS_RESULT_LAST  0x00000010U
+
+#define CNN_RESULT_VALID        0x00000001U
+#define CNN_RESULT_LAST         0x00000002U
+
 #define NUM_INPUT_CHANNELS   3U
 #define NUM_OUTPUT_CHANNELS  4U
 #define KERNEL_TAPS          9U
@@ -45,13 +56,25 @@
 #define DMA_CR_RUNSTOP   0x00000001U
 #define DMA_CR_RESET     0x00000004U
 
-#define DMA_SR_HALTED    0x00000001U
-#define DMA_SR_IDLE      0x00000002U
-#define DMA_SR_IOC_IRQ   0x00001000U
-#define DMA_SR_ERR_IRQ   0x00004000U
-#define DMA_SR_ERR_ALL   0x00007000U
+#define DMA_SR_HALTED      0x00000001U
+#define DMA_SR_IDLE        0x00000002U
+#define DMA_SR_SG_INCLD    0x00000008U
+#define DMA_SR_DMA_INT_ERR 0x00000010U
+#define DMA_SR_DMA_SLV_ERR 0x00000020U
+#define DMA_SR_DMA_DEC_ERR 0x00000040U
+#define DMA_SR_SG_INT_ERR  0x00000100U
+#define DMA_SR_SG_SLV_ERR  0x00000200U
+#define DMA_SR_SG_DEC_ERR  0x00000400U
+#define DMA_SR_IOC_IRQ     0x00001000U
+#define DMA_SR_DLY_IRQ     0x00002000U
+#define DMA_SR_ERR_IRQ     0x00004000U
+#define DMA_SR_IRQ_ALL     (DMA_SR_IOC_IRQ | DMA_SR_DLY_IRQ | DMA_SR_ERR_IRQ)
+#define DMA_SR_ERR_ALL     (DMA_SR_DMA_INT_ERR | DMA_SR_DMA_SLV_ERR | DMA_SR_DMA_DEC_ERR | \
+                            DMA_SR_SG_INT_ERR | DMA_SR_SG_SLV_ERR | DMA_SR_SG_DEC_ERR | \
+                            DMA_SR_ERR_IRQ)
 
 #define DMA_TIMEOUT      10000000U
+#define CNN_TIMEOUT      10000000U
 
 #define MAX_INPUT_PIXELS  IMAGE_PIXELS
 #define MAX_OUTPUT_WORDS  EXPECTED_OUTPUT_WORDS
@@ -79,6 +102,86 @@ static inline void dma_write(uint32_t offset, uint32_t value)
 static inline uint32_t dma_read(uint32_t offset)
 {
     return Xil_In32(DMA_BASE + offset);
+}
+
+static void print_dma_status_bits(const char *name, uint32_t status)
+{
+    xil_printf("%s status decode:", name);
+
+    if ((status & DMA_SR_HALTED) != 0U) {
+        xil_printf(" halted");
+    }
+    if ((status & DMA_SR_IDLE) != 0U) {
+        xil_printf(" idle");
+    }
+    if ((status & DMA_SR_SG_INCLD) != 0U) {
+        xil_printf(" sg-included");
+    }
+    if ((status & DMA_SR_DMA_INT_ERR) != 0U) {
+        xil_printf(" dma-internal-error");
+    }
+    if ((status & DMA_SR_DMA_SLV_ERR) != 0U) {
+        xil_printf(" dma-slave-error");
+    }
+    if ((status & DMA_SR_DMA_DEC_ERR) != 0U) {
+        xil_printf(" dma-decode-error");
+    }
+    if ((status & DMA_SR_SG_INT_ERR) != 0U) {
+        xil_printf(" sg-internal-error");
+    }
+    if ((status & DMA_SR_SG_SLV_ERR) != 0U) {
+        xil_printf(" sg-slave-error");
+    }
+    if ((status & DMA_SR_SG_DEC_ERR) != 0U) {
+        xil_printf(" sg-decode-error");
+    }
+    if ((status & DMA_SR_IOC_IRQ) != 0U) {
+        xil_printf(" complete");
+    }
+    if ((status & DMA_SR_DLY_IRQ) != 0U) {
+        xil_printf(" delay-irq");
+    }
+    if ((status & DMA_SR_ERR_IRQ) != 0U) {
+        xil_printf(" error-irq");
+    }
+
+    xil_printf("\r\n");
+}
+
+static void print_dma_status(const char *name, uint32_t status)
+{
+    xil_printf("%s status = 0x%08x\r\n", name, status);
+    print_dma_status_bits(name, status);
+}
+
+static void print_cnn_status(uint32_t status, uint32_t result_stat)
+{
+    xil_printf("CNN status      = 0x%08x\r\n", status);
+    xil_printf("CNN result stat = 0x%08x\r\n", result_stat);
+
+    xil_printf("CNN status decode:");
+    if ((status & CNN_STATUS_BUSY) != 0U) {
+        xil_printf(" busy");
+    }
+    if ((status & CNN_STATUS_DONE) != 0U) {
+        xil_printf(" done");
+    }
+    if ((status & CNN_STATUS_RESULT_VALID) != 0U) {
+        xil_printf(" result-valid");
+    }
+    if ((status & CNN_STATUS_RESULT_LAST) != 0U) {
+        xil_printf(" result-last");
+    }
+    xil_printf("\r\n");
+
+    xil_printf("CNN result decode:");
+    if ((result_stat & CNN_RESULT_VALID) != 0U) {
+        xil_printf(" valid");
+    }
+    if ((result_stat & CNN_RESULT_LAST) != 0U) {
+        xil_printf(" last");
+    }
+    xil_printf("\r\n");
 }
 
 static void load_weights_identity_like(uint32_t kernel_mode)
@@ -148,6 +251,8 @@ static int dma_reset(void)
         }
     }
 
+    print_dma_status("DMA MM2S reset-timeout", dma_read(DMA_MM2S_DMASR));
+    print_dma_status("DMA S2MM reset-timeout", dma_read(DMA_S2MM_DMASR));
     return -1;
 }
 
@@ -157,7 +262,8 @@ static int dma_wait_done(uint32_t status_offset, const char *name)
         uint32_t status = dma_read(status_offset);
 
         if ((status & DMA_SR_ERR_ALL) != 0U) {
-            xil_printf("[FAIL] %s DMA error, status=0x%08x\r\n", name, status);
+            xil_printf("[FAIL] %s DMA error while waiting for completion\r\n", name);
+            print_dma_status(name, status);
             return -1;
         }
 
@@ -166,8 +272,25 @@ static int dma_wait_done(uint32_t status_offset, const char *name)
         }
     }
 
-    xil_printf("[FAIL] %s DMA timeout, status=0x%08x\r\n",
-               name, dma_read(status_offset));
+    xil_printf("[FAIL] %s DMA timeout while waiting for completion\r\n", name);
+    print_dma_status(name, dma_read(status_offset));
+    return -1;
+}
+
+static int cnn_wait_done(void)
+{
+    for (uint32_t i = 0; i < CNN_TIMEOUT; i++) {
+        uint32_t status = cnn_read(REG_STATUS);
+
+        if ((status & CNN_STATUS_DONE) != 0U) {
+            return 0;
+        }
+    }
+
+    xil_printf("[FAIL] CNN accelerator done timeout\r\n");
+    print_cnn_status(cnn_read(REG_STATUS), cnn_read(REG_RESULT_STAT));
+    print_dma_status("DMA MM2S at CNN timeout", dma_read(DMA_MM2S_DMASR));
+    print_dma_status("DMA S2MM at CNN timeout", dma_read(DMA_S2MM_DMASR));
     return -1;
 }
 
@@ -188,14 +311,14 @@ static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
         return -1;
     }
 
-    xil_printf("DMA MM2S status after reset = 0x%08x\r\n", dma_read(DMA_MM2S_DMASR));
-    xil_printf("DMA S2MM status after reset = 0x%08x\r\n", dma_read(DMA_S2MM_DMASR));
+    print_dma_status("DMA MM2S after reset", dma_read(DMA_MM2S_DMASR));
+    print_dma_status("DMA S2MM after reset", dma_read(DMA_S2MM_DMASR));
 
     /*
      * Clear old completion/error bits by writing 1s.
      */
-    dma_write(DMA_MM2S_DMASR, DMA_SR_IOC_IRQ | DMA_SR_ERR_ALL);
-    dma_write(DMA_S2MM_DMASR, DMA_SR_IOC_IRQ | DMA_SR_ERR_ALL);
+    dma_write(DMA_MM2S_DMASR, DMA_SR_IRQ_ALL);
+    dma_write(DMA_S2MM_DMASR, DMA_SR_IRQ_ALL);
 
     /*
      * Flush input so DMA sees latest CPU-written pixels.
@@ -228,10 +351,12 @@ static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
     dma_write(DMA_MM2S_LENGTH, input_bytes);
 
     if (dma_wait_done(DMA_MM2S_DMASR, "MM2S") != 0) {
+        print_dma_status("S2MM peer at MM2S failure", dma_read(DMA_S2MM_DMASR));
         return -1;
     }
 
     if (dma_wait_done(DMA_S2MM_DMASR, "S2MM") != 0) {
+        print_dma_status("MM2S peer at S2MM failure", dma_read(DMA_MM2S_DMASR));
         return -1;
     }
 
@@ -242,8 +367,8 @@ static int run_dma_transfer(uint32_t input_bytes, uint32_t output_bytes)
 
     Xil_DCacheInvalidateRange((UINTPTR)output_buffer, output_bytes);
 
-    xil_printf("DMA MM2S final status = 0x%08x\r\n", dma_read(DMA_MM2S_DMASR));
-    xil_printf("DMA S2MM final status = 0x%08x\r\n", dma_read(DMA_S2MM_DMASR));
+    print_dma_status("DMA MM2S final", dma_read(DMA_MM2S_DMASR));
+    print_dma_status("DMA S2MM final", dma_read(DMA_S2MM_DMASR));
     xil_printf("DMA+CNN transfer cycles = %d\r\n", last_dma_cnn_cycles);
     xil_printf("DMA+CNN transfer usec   = %d\r\n", last_dma_cnn_usec);
 
@@ -286,7 +411,7 @@ int main(void)
     }
 
     xil_printf("Clearing accelerator...\r\n");
-    cnn_write(REG_CONTROL, 0x2U);
+    cnn_write(REG_CONTROL, CNN_CONTROL_CLEAR);
     usleep(1000);
 
     xil_printf("Configuring accelerator...\r\n");
@@ -305,7 +430,7 @@ int main(void)
     load_bias_zero();
 
     xil_printf("Starting accelerator...\r\n");
-    cnn_write(REG_CONTROL, 0x1U);
+    cnn_write(REG_CONTROL, CNN_CONTROL_START);
     usleep(1000);
 
     uint32_t input_bytes = IMAGE_PIXELS * sizeof(uint32_t);
@@ -317,6 +442,13 @@ int main(void)
 
     if (dma_ok != 0) {
         xil_printf("[FAIL] DMA transfer failed\r\n");
+        print_cnn_status(cnn_read(REG_STATUS), cnn_read(REG_RESULT_STAT));
+        while (1) {
+            sleep(1);
+        }
+    }
+
+    if (cnn_wait_done() != 0) {
         while (1) {
             sleep(1);
         }
@@ -325,8 +457,7 @@ int main(void)
     uint32_t status = cnn_read(REG_STATUS);
     uint32_t result_stat = cnn_read(REG_RESULT_STAT);
 
-    xil_printf("CNN status      = 0x%08x\r\n", status);
-    xil_printf("CNN result stat = 0x%08x\r\n", result_stat);
+    print_cnn_status(status, result_stat);
 
     xil_printf("Checking DMA output buffer against golden output...\r\n");
 

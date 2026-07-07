@@ -91,10 +91,16 @@ DDR output buffer
 
 Paste these UART lines when debugging:
 
-DMA MM2S status after reset
-DMA S2MM status after reset
+DMA MM2S after reset status
+DMA MM2S after reset status decode
+DMA S2MM after reset status
+DMA S2MM after reset status decode
 DMA MM2S final status
+DMA MM2S final status decode
 DMA S2MM final status
+DMA S2MM final status decode
 DMA+CNN transfer cycles
 DMA+CNN transfer usec
+CNN status decode
+CNN result decode
 [FAIL] lines
