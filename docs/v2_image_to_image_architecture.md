@@ -74,9 +74,23 @@ Chunks 4-6 have simulation-focused first milestones:
 
 Current v2 scope remains intentionally pre-board and simulation-first. The scheduler proves full-image loop control against local arrays; DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
 
+The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
+
+- signed INT8 input tensors and weights
+- INT32 accumulation
+- optional bias add
+- ReLU before quantization
+- arithmetic right shift quantization
+- signed INT8 saturation
+- optional residual add/subtract, including the denoising form `output = input - predicted_noise`
+
+The golden tensor flow is also present. `models/generate_v2_golden_tensors.py` writes deterministic input, weight, bias, config, and expected-output memories under `build/v2_golden`; `tb_v2_golden_tensor_flow` loads those files into RTL and compares the scheduler output bit-for-bit against the Python model.
+
 Run:
 
 ```bash
+make v2-model-test
+make v2-golden-test
 make v2-unit
 ```
 
@@ -97,9 +111,9 @@ Expected board result:
 
 ## Next V2 Milestones
 
-1. Connect the scratchpad interfaces to explicit tensor load/store controllers.
-2. Add ping-pong activation and weight buffering so load and compute can overlap.
-3. Add a multi-layer job controller that sequences the three denoising descriptors.
-4. Add the bit-accurate Python integer model and image workflow.
+1. Extend golden tensor tests from single-layer fixtures to the full 3-layer denoising network.
+2. Connect the scratchpad interfaces to explicit tensor load/store controllers.
+3. Add ping-pong activation and weight buffering so load and compute can overlap.
+4. Add a multi-layer job controller that sequences the three denoising descriptors.
 5. Connect the v2 scheduler to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
 6. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.

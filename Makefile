@@ -15,12 +15,19 @@ regression:
 xsim-regression:
 	SEED=$(SEED) bash scripts/run_xsim_regression.sh
 
-.PHONY: v2-unit v2-regression
+.PHONY: v2-unit v2-model-test v2-golden-test v2-regression
 
 v2-unit:
 	bash scripts/run_v2_unit.sh
 
-v2-regression: v2-unit
+v2-model-test:
+	python3 tests/test_image2image_int8.py
+
+v2-golden-test:
+	python3 models/generate_v2_golden_tensors.py
+	bash scripts/run_v2_unit_tb.sh tb_v2_golden_tensor_flow
+
+v2-regression: v2-model-test v2-golden-test v2-unit
 
 lint:
 	bash scripts/lint_verilator.sh

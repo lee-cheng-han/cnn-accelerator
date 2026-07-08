@@ -100,12 +100,15 @@ Current v2 status:
 - Activation and weight scratchpads with scalar load/debug ports and vector read ports for `PC` and `PK x PC` lanes.
 - Full-image single-layer scheduler that reuses the 1x1/3x3 engines across output `x/y` positions.
 - Three-layer RGB denoising descriptor ROM for the planned `3 -> 16 -> 16 -> 3` image-to-image network.
+- Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
 - Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
 - Dedicated v2 unit target.
 
 Run:
 
 ```bash
+make v2-model-test
+make v2-golden-test
 make v2-unit
 ```
 
