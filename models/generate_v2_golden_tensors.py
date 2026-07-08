@@ -10,7 +10,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from models.image2image_int8 import LayerConfig, conv2d_layer_int8, tensor_shape_hwc
+from models.image2image_int8 import (
+    LayerConfig,
+    conv2d_layer_int8,
+    make_denoise_layer_configs,
+    run_layers_int8,
+    tensor_shape_hwc,
+)
 
 
 MAX_CIN = 16
@@ -32,6 +38,13 @@ CFG_QUANT_ENABLE = 11
 CFG_QUANT_SHIFT = 12
 CFG_WORDS = 13
 
+FULL_CFG_INPUT_WIDTH = 0
+FULL_CFG_INPUT_HEIGHT = 1
+FULL_CFG_OUTPUT_WIDTH = 2
+FULL_CFG_OUTPUT_HEIGHT = 3
+FULL_CFG_FINAL_RESIDUAL_ENABLE = 4
+FULL_CFG_WORDS = 5
+
 
 def int_to_hex(value: int, bits: int) -> str:
     mask = (1 << bits) - 1
@@ -51,10 +64,12 @@ def make_random_weights(
     cin: int,
     kernel: int,
     rng: random.Random,
+    low: int = -5,
+    high: int = 5,
 ) -> list[list[list[list[int]]]]:
     return [
         [
-            [[rng.randint(-5, 5) for _ in range(kernel)] for _ in range(kernel)]
+            [[rng.randint(low, high) for _ in range(kernel)] for _ in range(kernel)]
             for _ in range(cin)
         ]
         for _ in range(cout)
@@ -117,6 +132,99 @@ def flatten_output(y, *, output_width: int, output_height: int, cout: int) -> li
                 flat[((oy * output_width + ox) * MAX_COUT) + co] = int(y[oy][ox][co])
 
     return flat
+
+
+def generate_full_network_case(out_dir: Path, *, name: str, seed: int, input_width: int, input_height: int) -> None:
+    rng = random.Random(seed)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    residual_configs = make_denoise_layer_configs(final_residual=True)
+    no_residual_configs = make_denoise_layer_configs(final_residual=False)
+    x = make_random_tensor(input_height, input_width, 3, rng)
+
+    weights = [
+        make_random_weights(cfg.output_channels, cfg.input_channels, cfg.kernel_size, rng, -2, 2)
+        for cfg in residual_configs
+    ]
+    biases = [
+        [rng.randint(-8, 8) for _ in range(cfg.output_channels)]
+        for cfg in residual_configs
+    ]
+
+    residual_layers = [
+        (cfg, layer_weights, layer_bias)
+        for cfg, layer_weights, layer_bias in zip(residual_configs, weights, biases)
+    ]
+    no_residual_layers = [
+        (cfg, layer_weights, layer_bias)
+        for cfg, layer_weights, layer_bias in zip(no_residual_configs, weights, biases)
+    ]
+
+    y_residual = run_layers_int8(x, residual_layers)
+    y_no_residual = run_layers_int8(x, no_residual_layers)
+    output_height, output_width_model, output_channels = tensor_shape_hwc(y_residual)
+
+    if output_width_model != input_width or output_height != input_height:
+        raise ValueError(
+            f"{name}: expected same-sized image output, got {output_width_model}x{output_height}"
+        )
+    if input_width * input_height > MAX_PIXELS:
+        raise ValueError(f"{name}: input tensor exceeds MAX_PIXELS={MAX_PIXELS}")
+    if output_channels != 3:
+        raise ValueError(f"{name}: output channel mismatch")
+
+    config = [0 for _ in range(FULL_CFG_WORDS)]
+    config[FULL_CFG_INPUT_WIDTH] = input_width
+    config[FULL_CFG_INPUT_HEIGHT] = input_height
+    config[FULL_CFG_OUTPUT_WIDTH] = output_width_model
+    config[FULL_CFG_OUTPUT_HEIGHT] = output_height
+    config[FULL_CFG_FINAL_RESIDUAL_ENABLE] = 1
+
+    write_mem(out_dir / "config.mem", config, 32)
+    write_mem(
+        out_dir / "input.mem",
+        flatten_activation(x, input_width=input_width, input_height=input_height, cin=3),
+        8,
+    )
+
+    for layer_idx, (cfg, layer_weights, layer_bias) in enumerate(zip(residual_configs, weights, biases)):
+        write_mem(
+            out_dir / f"weights_l{layer_idx}.mem",
+            flatten_weights_3x3(
+                layer_weights,
+                cout=cfg.output_channels,
+                cin=cfg.input_channels,
+                kernel_size=cfg.kernel_size,
+            ),
+            8,
+        )
+        write_mem(out_dir / f"bias_l{layer_idx}.mem", flatten_bias(layer_bias, cout=cfg.output_channels), 32)
+
+    write_mem(
+        out_dir / "expected_residual.mem",
+        flatten_output(y_residual, output_width=output_width_model, output_height=output_height, cout=3),
+        8,
+    )
+    write_mem(
+        out_dir / "expected_no_residual.mem",
+        flatten_output(y_no_residual, output_width=output_width_model, output_height=output_height, cout=3),
+        8,
+    )
+
+    summary = [
+        f"name={name}",
+        f"seed={seed}",
+        f"input_width={input_width}",
+        f"input_height={input_height}",
+        f"output_width={output_width_model}",
+        f"output_height={output_height}",
+        "network=3x3 3->16 relu, 3x3 16->16 relu, 3x3 16->3",
+        "bias_enable=1",
+        "quant_enable=1",
+        "quant_shift=0,0,0",
+        "expected_residual=output = input - predicted_noise",
+    ]
+    (out_dir / "summary.txt").write_text("\n".join(summary) + "\n", encoding="utf-8")
 
 
 def generate_case(
@@ -249,6 +357,13 @@ def main() -> int:
             quant_enable=True,
             quant_shift=1,
         ),
+    )
+    generate_full_network_case(
+        out_root / "full_network_3layer",
+        name="full_network_3layer",
+        seed=303,
+        input_width=4,
+        input_height=3,
     )
 
     print(f"Wrote v2 golden tensor fixtures to {out_root}")

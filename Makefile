@@ -26,6 +26,7 @@ v2-model-test:
 v2-golden-test:
 	python3 models/generate_v2_golden_tensors.py
 	bash scripts/run_v2_unit_tb.sh tb_v2_golden_tensor_flow
+	bash scripts/run_v2_unit_tb.sh tb_v2_full_network_golden_flow
 
 v2-regression: v2-model-test v2-golden-test v2-unit
 

@@ -44,6 +44,8 @@ xvlog -sv -L work \
   ../../rtl/tensor/tensor_address_gen.sv \
   ../../rtl/tensor/activation_scratchpad.sv \
   ../../rtl/tensor/weight_scratchpad.sv \
+  ../../rtl/tensor/activation_tensor_load_controller.sv \
+  ../../rtl/tensor/weight_tensor_load_controller.sv \
   ../../rtl/scheduler/denoise_layer_descriptor_rom.sv \
   ../../rtl/compute_v2/reduction_tree.sv \
   ../../rtl/compute_v2/parallel_mac_array.sv \

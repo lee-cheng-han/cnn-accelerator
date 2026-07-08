@@ -98,10 +98,12 @@ Current v2 status:
 - First 1x1 tiled engine milestone for one spatial sample with runtime `Cin/Cout`.
 - Tensor address generation for stride/padding and first 3x3 tiled engine milestone for one output spatial sample.
 - Activation and weight scratchpads with scalar load/debug ports and vector read ports for `PC` and `PK x PC` lanes.
+- Stream-to-scratchpad activation and weight load controllers with valid/ready handshakes, sequential tensor addressing, and config error checks.
 - Full-image single-layer scheduler that reuses the 1x1/3x3 engines across output `x/y` positions.
 - Three-layer RGB denoising descriptor ROM for the planned `3 -> 16 -> 16 -> 3` image-to-image network.
 - Multi-layer job controller that sequences the three denoising layers through one reusable scheduler with intermediate feature buffers and optional final residual subtraction.
 - Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
+- Golden tensor flow for both single-layer scheduler fixtures and the full 3-layer denoising controller.
 - Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
 - Dedicated v2 unit target.
 
