@@ -51,6 +51,7 @@ xvlog -sv -L work \
   ../../rtl/compute_v2/tiled_conv1x1_engine.sv \
   ../../rtl/compute_v2/tiled_conv3x3_engine.sv \
   ../../rtl/scheduler/single_layer_scheduler.sv \
+  ../../rtl/scheduler/multi_layer_job_controller.sv \
   ../../${TB_FILE}
 
 echo "[XSim] Elaborating $TB_NAME"

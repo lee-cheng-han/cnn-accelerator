@@ -11,6 +11,7 @@ TESTS=(
   tb_v2_scratchpads
   tb_v2_layer_descriptors
   tb_v2_single_layer_scheduler
+  tb_v2_multi_layer_job_controller
 )
 
 for tb in "${TESTS[@]}"; do

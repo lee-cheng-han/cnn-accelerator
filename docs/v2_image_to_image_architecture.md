@@ -71,8 +71,9 @@ Chunks 4-6 have simulation-focused first milestones:
 | `weight_scratchpad` | Local weight memory with scalar load/debug access and PK x PC matrix reads for the MAC array |
 | `single_layer_scheduler` | Full-image single-layer scheduler that walks output `x/y`, starts one reusable 1x1 or 3x3 engine per output position, and writes an output tensor |
 | `denoise_layer_descriptor_rom` | Hardware-readable descriptors for the planned 3-layer RGB denoising network: `3 -> 16`, `16 -> 16`, `16 -> 3` |
+| `multi_layer_job_controller` | Sequences the three denoising descriptors through one reusable scheduler, stores intermediate feature maps, and optionally performs final residual subtraction |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The scheduler proves full-image loop control against local arrays; DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control against local arrays; DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -114,6 +115,6 @@ Expected board result:
 1. Extend golden tensor tests from single-layer fixtures to the full 3-layer denoising network.
 2. Connect the scratchpad interfaces to explicit tensor load/store controllers.
 3. Add ping-pong activation and weight buffering so load and compute can overlap.
-4. Add a multi-layer job controller that sequences the three denoising descriptors.
-5. Connect the v2 scheduler to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
+4. Add memory-backed weight and activation loading for the multi-layer controller.
+5. Connect the v2 scheduler stack to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
 6. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
