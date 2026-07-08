@@ -46,6 +46,7 @@ xvlog -sv -L work \
   ../../rtl/tensor/weight_scratchpad.sv \
   ../../rtl/tensor/activation_tensor_load_controller.sv \
   ../../rtl/tensor/weight_tensor_load_controller.sv \
+  ../../rtl/tensor/output_tensor_store_controller.sv \
   ../../rtl/scheduler/denoise_layer_descriptor_rom.sv \
   ../../rtl/compute_v2/reduction_tree.sv \
   ../../rtl/compute_v2/parallel_mac_array.sv \
@@ -54,6 +55,7 @@ xvlog -sv -L work \
   ../../rtl/compute_v2/tiled_conv3x3_engine.sv \
   ../../rtl/scheduler/single_layer_scheduler.sv \
   ../../rtl/scheduler/multi_layer_job_controller.sv \
+  ../../rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
   ../../${TB_FILE}
 
 echo "[XSim] Elaborating $TB_NAME"

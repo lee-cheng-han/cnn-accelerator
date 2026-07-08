@@ -71,11 +71,13 @@ Chunks 4-6 have simulation-focused first milestones:
 | `weight_scratchpad` | Local weight memory with scalar load/debug access and PK x PC matrix reads for the MAC array |
 | `activation_tensor_load_controller` | Streams activation values into `activation_scratchpad` in pixel-major, channel-minor order with valid/ready backpressure |
 | `weight_tensor_load_controller` | Streams 1x1 or 3x3 weights into `weight_scratchpad` in output-channel, input-channel, kernel-tap order |
+| `output_tensor_store_controller` | Streams computed output tensor values out in pixel-major, channel-minor order with valid/ready backpressure and final-word `last` signaling |
 | `single_layer_scheduler` | Full-image single-layer scheduler that walks output `x/y`, starts one reusable 1x1 or 3x3 engine per output position, and writes an output tensor |
 | `denoise_layer_descriptor_rom` | Hardware-readable descriptors for the planned 3-layer RGB denoising network: `3 -> 16`, `16 -> 16`, `16 -> 3` |
 | `multi_layer_job_controller` | Sequences the three denoising descriptors through one reusable scheduler, stores intermediate feature maps, and optionally performs final residual subtraction |
+| `stream_loaded_multi_layer_job_controller` | Loads activation, bias, and weight streams into internal memories, runs the three-layer controller, and streams final RGB output with backpressure |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control against local arrays, while the tensor load controllers prove the first explicit stream-to-scratchpad movement path. DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, compute, and output-store path around local memories. DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -87,7 +89,7 @@ The v2 Python reference model is present in `models/image2image_int8.py`. It is 
 - signed INT8 saturation
 - optional residual add/subtract, including the denoising form `output = input - predicted_noise`
 
-The golden tensor flow is also present. `models/generate_v2_golden_tensors.py` writes deterministic input, weight, bias, config, and expected-output memories under `build/v2_golden`; `tb_v2_golden_tensor_flow` loads single-layer fixtures into RTL and compares the scheduler output bit-for-bit against the Python model. `tb_v2_full_network_golden_flow` does the same for the full 3-layer denoising controller, including both final residual reconstruction and raw final-layer output.
+The golden tensor flow is also present. `models/generate_v2_golden_tensors.py` writes deterministic input, weight, bias, config, and expected-output memories under `build/v2_golden`; `tb_v2_golden_tensor_flow` loads single-layer fixtures into RTL and compares the scheduler output bit-for-bit against the Python model. `tb_v2_full_network_golden_flow` does the same for the full 3-layer denoising controller, including both final residual reconstruction and raw final-layer output. `tb_v2_stream_loaded_full_network_golden_flow` feeds those generated tensors through the stream-loaded wrapper and checks the streamed RGB output under backpressure.
 
 Run:
 
@@ -114,8 +116,7 @@ Expected board result:
 
 ## Next V2 Milestones
 
-1. Add explicit output store controllers for writing computed tensors back to scratchpad or memory.
-2. Add memory-backed weight and activation loading for the multi-layer controller.
-3. Add ping-pong activation and weight buffering so load and compute can overlap.
-4. Connect the v2 scheduler stack to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
-5. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
+1. Add ping-pong activation and weight buffering so load and compute can overlap.
+2. Connect the v2 scheduler stack to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
+3. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
+4. Add an AXI-stream packet format document for v2 activation, bias, weight, and output tensors.

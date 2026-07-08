@@ -10,9 +10,11 @@ TESTS=(
   tb_v2_tiled_conv3x3_engine
   tb_v2_scratchpads
   tb_v2_tensor_load_controllers
+  tb_v2_output_store_controller
   tb_v2_layer_descriptors
   tb_v2_single_layer_scheduler
   tb_v2_multi_layer_job_controller
+  tb_v2_stream_loaded_multi_layer_job_controller
 )
 
 for tb in "${TESTS[@]}"; do
