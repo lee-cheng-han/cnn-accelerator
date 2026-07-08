@@ -97,6 +97,9 @@ Current v2 status:
 - 8-lane bias, ReLU, quantization, and saturation blocks.
 - First 1x1 tiled engine milestone for one spatial sample with runtime `Cin/Cout`.
 - Tensor address generation for stride/padding and first 3x3 tiled engine milestone for one output spatial sample.
+- Activation and weight scratchpads with scalar load/debug ports and vector read ports for `PC` and `PK x PC` lanes.
+- Full-image single-layer scheduler that reuses the 1x1/3x3 engines across output `x/y` positions.
+- Three-layer RGB denoising descriptor ROM for the planned `3 -> 16 -> 16 -> 3` image-to-image network.
 - Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
 - Dedicated v2 unit target.
 

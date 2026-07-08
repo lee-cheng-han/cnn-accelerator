@@ -1,0 +1,233 @@
+`timescale 1ns/1ps
+
+module single_layer_scheduler #(
+  parameter int PC         = 4,
+  parameter int PK         = 8,
+  parameter int MAX_CIN    = 64,
+  parameter int MAX_COUT   = 64,
+  parameter int MAX_PIXELS = 4096,
+  parameter int DATA_W     = 8,
+  parameter int PROD_W     = 16,
+  parameter int ACC_W      = 32,
+  parameter int BIAS_W     = 32,
+  parameter int OUT_W      = 8,
+  parameter int COUNT_W    = 8,
+  parameter int DIM_W      = 16
+)(
+  input  logic clk,
+  input  logic rst_n,
+
+  input  logic start,
+  input  logic [DIM_W-1:0] input_width,
+  input  logic [DIM_W-1:0] input_height,
+  input  logic [DIM_W-1:0] output_width,
+  input  logic [DIM_W-1:0] output_height,
+  input  logic [1:0] kernel_size,
+  input  logic [1:0] stride,
+  input  logic [1:0] padding,
+  input  logic [COUNT_W-1:0] cin,
+  input  logic [COUNT_W-1:0] cout,
+
+  input  logic bias_enable,
+  input  logic relu_enable,
+  input  logic quant_enable,
+  input  logic [4:0] quant_shift,
+
+  input  logic signed [DATA_W-1:0] activation [MAX_PIXELS*MAX_CIN],
+  input  logic signed [DATA_W-1:0] weights_1x1 [MAX_COUT][MAX_CIN],
+  input  logic signed [DATA_W-1:0] weights_3x3 [MAX_COUT][MAX_CIN][9],
+  input  logic signed [BIAS_W-1:0] bias [MAX_COUT],
+
+  output logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT],
+  output logic [DIM_W-1:0] current_x,
+  output logic [DIM_W-1:0] current_y,
+  output logic busy,
+  output logic done
+);
+
+  typedef enum logic [2:0] {
+    S_IDLE,
+    S_START_PIXEL,
+    S_WAIT_PIXEL,
+    S_WRITE_PIXEL,
+    S_NEXT_PIXEL,
+    S_DONE
+  } state_t;
+
+  state_t state;
+
+  logic [DIM_W-1:0] out_x;
+  logic [DIM_W-1:0] out_y;
+  logic [31:0] input_pixel_index_1x1;
+  logic [31:0] output_pixel_index;
+
+  logic start_1x1;
+  logic start_3x3;
+  logic done_1x1;
+  logic done_3x3;
+  logic busy_1x1;
+  logic busy_3x3;
+
+  logic signed [DATA_W-1:0] activation_1x1 [MAX_CIN];
+  logic signed [OUT_W-1:0] output_1x1 [MAX_COUT];
+  logic signed [OUT_W-1:0] output_3x3 [MAX_COUT];
+
+  assign current_x = out_x;
+  assign current_y = out_y;
+  assign busy = (state != S_IDLE) && (state != S_DONE);
+  assign start_1x1 = (state == S_START_PIXEL) && (kernel_size == 2'd1);
+  assign start_3x3 = (state == S_START_PIXEL) && (kernel_size == 2'd3);
+  assign input_pixel_index_1x1 = ((out_y * DIM_W'(stride)) * input_width) +
+                                 (out_x * DIM_W'(stride));
+  assign output_pixel_index = (out_y * output_width) + out_x;
+
+  always_comb begin
+    for (int ci = 0; ci < MAX_CIN; ci++) begin
+      if ((ci < cin) && (input_pixel_index_1x1 < 32'(MAX_PIXELS))) begin
+        activation_1x1[ci] = activation[(input_pixel_index_1x1 * 32'(MAX_CIN)) + 32'(ci)];
+      end else begin
+        activation_1x1[ci] = '0;
+      end
+    end
+  end
+
+  tiled_conv1x1_engine #(
+    .PC(PC),
+    .PK(PK),
+    .MAX_CIN(MAX_CIN),
+    .MAX_COUT(MAX_COUT),
+    .DATA_W(DATA_W),
+    .PROD_W(PROD_W),
+    .ACC_W(ACC_W),
+    .BIAS_W(BIAS_W),
+    .OUT_W(OUT_W),
+    .COUNT_W(COUNT_W)
+  ) u_tiled_conv1x1_engine (
+    .clk(clk),
+    .rst_n(rst_n),
+    .start(start_1x1),
+    .cin(cin),
+    .cout(cout),
+    .bias_enable(bias_enable),
+    .relu_enable(relu_enable),
+    .quant_enable(quant_enable),
+    .quant_shift(quant_shift),
+    .activation(activation_1x1),
+    .weights(weights_1x1),
+    .bias(bias),
+    .output_data(output_1x1),
+    .busy(busy_1x1),
+    .done(done_1x1)
+  );
+
+  tiled_conv3x3_engine #(
+    .PC(PC),
+    .PK(PK),
+    .MAX_CIN(MAX_CIN),
+    .MAX_COUT(MAX_COUT),
+    .MAX_PIXELS(MAX_PIXELS),
+    .DATA_W(DATA_W),
+    .PROD_W(PROD_W),
+    .ACC_W(ACC_W),
+    .BIAS_W(BIAS_W),
+    .OUT_W(OUT_W),
+    .COUNT_W(COUNT_W),
+    .DIM_W(DIM_W)
+  ) u_tiled_conv3x3_engine (
+    .clk(clk),
+    .rst_n(rst_n),
+    .start(start_3x3),
+    .input_width(input_width),
+    .input_height(input_height),
+    .out_x(out_x),
+    .out_y(out_y),
+    .stride(stride),
+    .padding(padding),
+    .cin(cin),
+    .cout(cout),
+    .bias_enable(bias_enable),
+    .relu_enable(relu_enable),
+    .quant_enable(quant_enable),
+    .quant_shift(quant_shift),
+    .activation(activation),
+    .weights(weights_3x3),
+    .bias(bias),
+    .output_data(output_3x3),
+    .busy(busy_3x3),
+    .done(done_3x3)
+  );
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      state <= S_IDLE;
+      out_x <= '0;
+      out_y <= '0;
+      done  <= 1'b0;
+
+      for (int i = 0; i < MAX_PIXELS*MAX_COUT; i++) begin
+        output_tensor[i] <= '0;
+      end
+    end else begin
+      done <= 1'b0;
+
+      case (state)
+        S_IDLE: begin
+          if (start) begin
+            out_x <= '0;
+            out_y <= '0;
+            state <= ((output_width == '0) || (output_height == '0) || (cout == '0)) ?
+                     S_DONE : S_START_PIXEL;
+          end
+        end
+
+        S_START_PIXEL: begin
+          state <= S_WAIT_PIXEL;
+        end
+
+        S_WAIT_PIXEL: begin
+          if (((kernel_size == 2'd1) && done_1x1) ||
+              ((kernel_size == 2'd3) && done_3x3) ||
+              ((kernel_size != 2'd1) && (kernel_size != 2'd3))) begin
+            state <= S_WRITE_PIXEL;
+          end
+        end
+
+        S_WRITE_PIXEL: begin
+          for (int co = 0; co < MAX_COUT; co++) begin
+            if ((co < cout) &&
+                (output_pixel_index < 32'(MAX_PIXELS)) &&
+                (((output_pixel_index * 32'(MAX_COUT)) + 32'(co)) <
+                 32'(MAX_PIXELS*MAX_COUT))) begin
+              output_tensor[(output_pixel_index * 32'(MAX_COUT)) + 32'(co)] <=
+                (kernel_size == 2'd1) ? output_1x1[co] : output_3x3[co];
+            end
+          end
+          state <= S_NEXT_PIXEL;
+        end
+
+        S_NEXT_PIXEL: begin
+          if ((out_x + DIM_W'(1)) < output_width) begin
+            out_x <= out_x + DIM_W'(1);
+            state <= S_START_PIXEL;
+          end else if ((out_y + DIM_W'(1)) < output_height) begin
+            out_x <= '0;
+            out_y <= out_y + DIM_W'(1);
+            state <= S_START_PIXEL;
+          end else begin
+            state <= S_DONE;
+          end
+        end
+
+        S_DONE: begin
+          done  <= 1'b1;
+          state <= S_IDLE;
+        end
+
+        default: begin
+          state <= S_IDLE;
+        end
+      endcase
+    end
+  end
+
+endmodule

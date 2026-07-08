@@ -42,11 +42,15 @@ xvlog -sv -L work \
   ../../rtl/postprocess_v2/parallel_saturate.sv \
   ../../rtl/postprocess_v2/residual_add.sv \
   ../../rtl/tensor/tensor_address_gen.sv \
+  ../../rtl/tensor/activation_scratchpad.sv \
+  ../../rtl/tensor/weight_scratchpad.sv \
+  ../../rtl/scheduler/denoise_layer_descriptor_rom.sv \
   ../../rtl/compute_v2/reduction_tree.sv \
   ../../rtl/compute_v2/parallel_mac_array.sv \
   ../../rtl/compute_v2/psum_accumulator.sv \
   ../../rtl/compute_v2/tiled_conv1x1_engine.sv \
   ../../rtl/compute_v2/tiled_conv3x3_engine.sv \
+  ../../rtl/scheduler/single_layer_scheduler.sv \
   ../../${TB_FILE}
 
 echo "[XSim] Elaborating $TB_NAME"

@@ -63,6 +63,17 @@ The first Chunk 3 milestone is present:
 | `tensor_address_gen` | Converts output coordinate, kernel tap, stride, and padding into a valid input pixel index |
 | `tiled_conv3x3_engine` | Single-output-position 3x3 layer engine with runtime `Cin`, runtime `Cout`, PC/PK tiling, zero padding, stride 1/2 support, tail masks, bias, ReLU, quantization, and saturation |
 
+Chunks 4-6 have simulation-focused first milestones:
+
+| Module | Purpose |
+|---|---|
+| `activation_scratchpad` | Local activation memory with scalar load/debug access and PC-lane vector reads |
+| `weight_scratchpad` | Local weight memory with scalar load/debug access and PK x PC matrix reads for the MAC array |
+| `single_layer_scheduler` | Full-image single-layer scheduler that walks output `x/y`, starts one reusable 1x1 or 3x3 engine per output position, and writes an output tensor |
+| `denoise_layer_descriptor_rom` | Hardware-readable descriptors for the planned 3-layer RGB denoising network: `3 -> 16`, `16 -> 16`, `16 -> 3` |
+
+Current v2 scope remains intentionally pre-board and simulation-first. The scheduler proves full-image loop control against local arrays; DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
+
 Run:
 
 ```bash
@@ -86,9 +97,9 @@ Expected board result:
 
 ## Next V2 Milestones
 
-1. Expand 1x1 and 3x3 support from one output spatial sample to full image/tensor loops.
-2. Add activation and weight scratchpads with explicit load/store interfaces.
-3. Build the first tiled single-layer scheduler around the 1x1/3x3 engines.
-4. Add layer descriptors for the 3-layer denoising network.
-5. Add the bit-accurate Python integer model and image workflow.
-6. Connect the v2 scheduler to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
+1. Connect the scratchpad interfaces to explicit tensor load/store controllers.
+2. Add ping-pong activation and weight buffering so load and compute can overlap.
+3. Add a multi-layer job controller that sequences the three denoising descriptors.
+4. Add the bit-accurate Python integer model and image workflow.
+5. Connect the v2 scheduler to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
+6. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.

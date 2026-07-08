@@ -8,6 +8,9 @@ TESTS=(
   tb_v2_tiled_conv1x1_engine
   tb_v2_tensor_address_gen
   tb_v2_tiled_conv3x3_engine
+  tb_v2_scratchpads
+  tb_v2_layer_descriptors
+  tb_v2_single_layer_scheduler
 )
 
 for tb in "${TESTS[@]}"; do
