@@ -9,6 +9,7 @@ TESTS=(
   tb_v2_tensor_address_gen
   tb_v2_tiled_conv3x3_engine
   tb_v2_scratchpads
+  tb_v2_ping_pong_buffers
   tb_v2_tensor_load_controllers
   tb_v2_output_store_controller
   tb_v2_layer_descriptors

@@ -98,6 +98,7 @@ Current v2 status:
 - First 1x1 tiled engine milestone for one spatial sample with runtime `Cin/Cout`.
 - Tensor address generation for stride/padding and first 3x3 tiled engine milestone for one output spatial sample.
 - Activation and weight scratchpads with scalar load/debug ports and vector read ports for `PC` and `PK x PC` lanes.
+- Ping-pong activation and weight scratchpads with lifecycle control for concurrent loading and compute-bank reads.
 - Stream-to-scratchpad activation and weight load controllers with valid/ready handshakes, sequential tensor addressing, and config error checks.
 - Output tensor store controller that streams computed tensors out in pixel/channel order with backpressure and `last` signaling.
 - Full-image single-layer scheduler that reuses the 1x1/3x3 engines across output `x/y` positions.
@@ -117,7 +118,7 @@ make v2-golden-test
 make v2-unit
 ```
 
-See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md).
+See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md) and [docs/v2_stream_interface.md](docs/v2_stream_interface.md).
 
 ## Convolution Modes
 

@@ -44,6 +44,9 @@ xvlog -sv -L work \
   ../../rtl/tensor/tensor_address_gen.sv \
   ../../rtl/tensor/activation_scratchpad.sv \
   ../../rtl/tensor/weight_scratchpad.sv \
+  ../../rtl/tensor/ping_pong_bank_controller.sv \
+  ../../rtl/tensor/ping_pong_activation_scratchpad.sv \
+  ../../rtl/tensor/ping_pong_weight_scratchpad.sv \
   ../../rtl/tensor/activation_tensor_load_controller.sv \
   ../../rtl/tensor/weight_tensor_load_controller.sv \
   ../../rtl/tensor/output_tensor_store_controller.sv \

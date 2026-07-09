@@ -69,6 +69,9 @@ Chunks 4-6 have simulation-focused first milestones:
 |---|---|
 | `activation_scratchpad` | Local activation memory with scalar load/debug access and PC-lane vector reads |
 | `weight_scratchpad` | Local weight memory with scalar load/debug access and PK x PC matrix reads for the MAC array |
+| `ping_pong_bank_controller` | Tracks two memory banks through load, valid, compute, release, overlap, and illegal-request states |
+| `ping_pong_activation_scratchpad` | Two activation scratchpad banks with independent load-bank and compute-bank selection |
+| `ping_pong_weight_scratchpad` | Two weight scratchpad banks with independent load-bank and compute-bank selection |
 | `activation_tensor_load_controller` | Streams activation values into `activation_scratchpad` in pixel-major, channel-minor order with valid/ready backpressure |
 | `weight_tensor_load_controller` | Streams 1x1 or 3x3 weights into `weight_scratchpad` in output-channel, input-channel, kernel-tap order |
 | `output_tensor_store_controller` | Streams computed output tensor values out in pixel-major, channel-minor order with valid/ready backpressure and final-word `last` signaling |
@@ -77,7 +80,7 @@ Chunks 4-6 have simulation-focused first milestones:
 | `multi_layer_job_controller` | Sequences the three denoising descriptors through one reusable scheduler, stores intermediate feature maps, and optionally performs final residual subtraction |
 | `stream_loaded_multi_layer_job_controller` | Loads activation, bias, and weight streams into internal memories, runs the three-layer controller, and streams final RGB output with backpressure |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, compute, and output-store path around local memories. DMA tensor movement, ping-pong buffering, and AXI-facing v2 integration are still future work.
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, compute, and output-store path around local memories. The ping-pong scratchpads and bank controller prove that one bank can be loaded while the other remains selected for compute; scheduler-level prefetch integration is still pending. The v2 stream ordering and future AXI mapping are defined in [v2_stream_interface.md](v2_stream_interface.md). DMA tensor movement and AXI-facing v2 integration are still future work.
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -116,7 +119,7 @@ Expected board result:
 
 ## Next V2 Milestones
 
-1. Add ping-pong activation and weight buffering so load and compute can overlap.
+1. Integrate the ping-pong banks into the multi-layer scheduler so the next layer can prefetch while the current layer computes.
 2. Connect the v2 scheduler stack to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
 3. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
-4. Add an AXI-stream packet format document for v2 activation, bias, weight, and output tensors.
+4. Add a concrete v2 AXI wrapper that validates packet lengths and sequence before starting compute.
