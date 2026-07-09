@@ -73,6 +73,7 @@ module tb_v2_full_network_golden_flow;
     .final_residual_enable(final_residual_enable),
     .image_width(image_width),
     .image_height(image_height),
+    .layer_ready(3'b111),
     .input_tensor(input_tensor),
     .weights_l0(weights_l0),
     .weights_l1(weights_l1),
@@ -82,6 +83,9 @@ module tb_v2_full_network_golden_flow;
     .bias_l2(bias_l2),
     .output_tensor(output_tensor),
     .active_layer(active_layer),
+    .activation_read_bank(),
+    .activation_write_bank(),
+    .waiting_for_layer(),
     .busy(busy),
     .done(done)
   );

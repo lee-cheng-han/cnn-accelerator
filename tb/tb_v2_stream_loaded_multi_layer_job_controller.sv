@@ -38,6 +38,9 @@ module tb_v2_stream_loaded_multi_layer_job_controller;
   logic output_stream_last;
   logic [3:0] phase;
   logic [1:0] active_layer;
+  logic [2:0] weight_layers_ready;
+  logic prefetch_active;
+  logic prefetch_seen;
   logic busy;
   logic done;
   logic error;
@@ -81,6 +84,9 @@ module tb_v2_stream_loaded_multi_layer_job_controller;
     .output_stream_last(output_stream_last),
     .phase(phase),
     .active_layer(active_layer),
+    .weight_layers_ready(weight_layers_ready),
+    .prefetch_active(prefetch_active),
+    .prefetch_seen(prefetch_seen),
     .busy(busy),
     .done(done),
     .error(error)
@@ -328,6 +334,12 @@ module tb_v2_stream_loaded_multi_layer_job_controller;
 
       if (busy || error) begin
         $display("[FAIL] %s: busy=%0b error=%0b at done", name, busy, error);
+        $finish;
+      end
+
+      if (!prefetch_seen || (weight_layers_ready != 3'b111)) begin
+        $display("[FAIL] %s: prefetch_seen=%0b weight_layers_ready=%b",
+                 name, prefetch_seen, weight_layers_ready);
         $finish;
       end
 

@@ -45,6 +45,9 @@ module stream_loaded_multi_layer_job_controller #(
 
   output logic [3:0] phase,
   output logic [1:0] active_layer,
+  output logic [2:0] weight_layers_ready,
+  output logic prefetch_active,
+  output logic prefetch_seen,
   output logic busy,
   output logic done,
   output logic error
@@ -84,6 +87,7 @@ module stream_loaded_multi_layer_job_controller #(
   logic signed [DATA_W-1:0] weight_write_data;
   logic compute_start;
   logic compute_done;
+  logic compute_busy;
   logic store_start;
   logic store_done;
   logic store_error;
@@ -110,6 +114,10 @@ module stream_loaded_multi_layer_job_controller #(
   assign bias_stream_ready = (state == S_LOAD_BIAS);
   assign bias_transfer = bias_stream_valid && bias_stream_ready;
   assign last_bias = bias_index == (bias_count - COUNT_W'(1));
+  assign prefetch_active =
+    compute_busy && (load_layer != 2'd0) &&
+    ((state == S_START_BIAS) || (state == S_LOAD_BIAS) ||
+     (state == S_START_WEIGHT) || (state == S_LOAD_WEIGHT));
 
   always_comb begin
     unique case (load_layer)
@@ -194,6 +202,7 @@ module stream_loaded_multi_layer_job_controller #(
     .final_residual_enable(final_residual_enable),
     .image_width(image_width),
     .image_height(image_height),
+    .layer_ready(weight_layers_ready),
     .input_tensor(input_tensor),
     .weights_l0(weights_l0),
     .weights_l1(weights_l1),
@@ -203,7 +212,10 @@ module stream_loaded_multi_layer_job_controller #(
     .bias_l2(bias_l2),
     .output_tensor(output_tensor),
     .active_layer(active_layer),
-    .busy(),
+    .activation_read_bank(),
+    .activation_write_bank(),
+    .waiting_for_layer(),
+    .busy(compute_busy),
     .done(compute_done)
   );
 
@@ -241,6 +253,8 @@ module stream_loaded_multi_layer_job_controller #(
       done <= 1'b0;
       error <= 1'b0;
       loaded_error <= 1'b0;
+      weight_layers_ready <= 3'b000;
+      prefetch_seen <= 1'b0;
 
       for (int i = 0; i < MAX_PIXELS*MAX_CIN; i++) begin
         input_tensor[i] <= '0;
@@ -274,6 +288,9 @@ module stream_loaded_multi_layer_job_controller #(
       end
     end else begin
       done <= 1'b0;
+      if (prefetch_active) begin
+        prefetch_seen <= 1'b1;
+      end
 
       if (act_write_enable) begin
         input_tensor[(act_write_pixel * ADDR_W'(MAX_CIN)) + ADDR_W'(act_write_channel)] <= act_write_data;
@@ -325,6 +342,8 @@ module stream_loaded_multi_layer_job_controller #(
             bias_index <= '0;
             error <= 1'b0;
             loaded_error <= 1'b0;
+            weight_layers_ready <= 3'b000;
+            prefetch_seen <= 1'b0;
             state <= S_START_ACT;
           end
         end
@@ -364,13 +383,18 @@ module stream_loaded_multi_layer_job_controller #(
 
         S_LOAD_WEIGHT: begin
           if (weight_loader_done) begin
-            loaded_error <= weight_loader_error;
+            loaded_error <= loaded_error || weight_loader_error;
 
             if (weight_loader_error) begin
               state <= S_DONE;
-            end else if (load_layer == 2'd2) begin
+            end else if (load_layer == 2'd0) begin
+              weight_layers_ready[0] <= 1'b1;
               state <= S_START_COMPUTE;
+            end else if (load_layer == 2'd2) begin
+              weight_layers_ready[2] <= 1'b1;
+              state <= S_WAIT_COMPUTE;
             end else begin
+              weight_layers_ready[1] <= 1'b1;
               load_layer <= load_layer + 2'd1;
               state <= S_START_BIAS;
             end
@@ -378,7 +402,9 @@ module stream_loaded_multi_layer_job_controller #(
         end
 
         S_START_COMPUTE: begin
-          state <= S_WAIT_COMPUTE;
+          load_layer <= 2'd1;
+          bias_index <= '0;
+          state <= S_START_BIAS;
         end
 
         S_WAIT_COMPUTE: begin

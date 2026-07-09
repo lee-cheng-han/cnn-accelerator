@@ -29,6 +29,10 @@ module tb_v2_multi_layer_job_controller;
   logic signed [ACC_W-1:0] bias_l2 [OUTPUT_C];
   logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT];
   logic [1:0] active_layer;
+  logic [2:0] layer_ready;
+  logic activation_read_bank;
+  logic activation_write_bank;
+  logic waiting_for_layer;
   logic busy;
   logic done;
 
@@ -54,6 +58,7 @@ module tb_v2_multi_layer_job_controller;
     .final_residual_enable(final_residual_enable),
     .image_width(image_width),
     .image_height(image_height),
+    .layer_ready(layer_ready),
     .input_tensor(input_tensor),
     .weights_l0(weights_l0),
     .weights_l1(weights_l1),
@@ -63,6 +68,9 @@ module tb_v2_multi_layer_job_controller;
     .bias_l2(bias_l2),
     .output_tensor(output_tensor),
     .active_layer(active_layer),
+    .activation_read_bank(activation_read_bank),
+    .activation_write_bank(activation_write_bank),
+    .waiting_for_layer(waiting_for_layer),
     .busy(busy),
     .done(done)
   );
@@ -197,10 +205,69 @@ module tb_v2_multi_layer_job_controller;
     end
   endtask
 
+  task automatic run_gated_job;
+    int timeout;
+    begin
+      final_residual_enable = 1'b0;
+      layer_ready = 3'b001;
+      start = 1'b1;
+      @(posedge clk);
+      start = 1'b0;
+
+      timeout = 0;
+      while (!(waiting_for_layer && (active_layer == 2'd1)) && (timeout < 100000)) begin
+        @(posedge clk);
+        timeout++;
+      end
+
+      if (!waiting_for_layer || activation_read_bank || !activation_write_bank) begin
+        $display("[FAIL] gated_prefetch: layer 1 did not wait on feature bank 0");
+        $finish;
+      end
+      tests++;
+
+      repeat (5) @(posedge clk);
+      if (done) begin
+        $display("[FAIL] gated_prefetch: job completed before layer 1 became ready");
+        $finish;
+      end
+
+      layer_ready[1] = 1'b1;
+      timeout = 0;
+      while (!(waiting_for_layer && (active_layer == 2'd2)) && (timeout < 100000)) begin
+        @(posedge clk);
+        timeout++;
+      end
+
+      if (!waiting_for_layer || !activation_read_bank || activation_write_bank) begin
+        $display("[FAIL] gated_prefetch: layer 2 did not wait on feature bank 1");
+        $finish;
+      end
+      tests++;
+
+      layer_ready[2] = 1'b1;
+      timeout = 0;
+      while (!done && (timeout < 100000)) begin
+        @(posedge clk);
+        timeout++;
+      end
+
+      if (!done) begin
+        $display("[FAIL] gated_prefetch: timed out after releasing layer 2");
+        $finish;
+      end
+
+      check_outputs("gated_prefetch", 1'b0);
+      tests++;
+      @(posedge clk);
+    end
+  endtask
+
   initial begin
     rst_n = 1'b0;
     start = 1'b0;
     final_residual_enable = 1'b1;
+    layer_ready = 3'b111;
     image_width = 16'd4;
     image_height = 16'd3;
     tests = 0;
@@ -219,8 +286,11 @@ module tb_v2_multi_layer_job_controller;
     run_job("three_layer_identity_without_residual_subtract", 1'b0);
     check_outputs("three_layer_identity_without_residual_subtract", 1'b0);
 
+    run_gated_job();
+
     image_width = '0;
     image_height = '0;
+    layer_ready = 3'b111;
     run_job("zero_sized_job", 1'b1);
 
     $display("[PASS] tb_v2_multi_layer_job_controller tests=%0d", tests);

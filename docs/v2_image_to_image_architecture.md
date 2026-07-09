@@ -77,10 +77,12 @@ Chunks 4-6 have simulation-focused first milestones:
 | `output_tensor_store_controller` | Streams computed output tensor values out in pixel-major, channel-minor order with valid/ready backpressure and final-word `last` signaling |
 | `single_layer_scheduler` | Full-image single-layer scheduler that walks output `x/y`, starts one reusable 1x1 or 3x3 engine per output position, and writes an output tensor |
 | `denoise_layer_descriptor_rom` | Hardware-readable descriptors for the planned 3-layer RGB denoising network: `3 -> 16`, `16 -> 16`, `16 -> 3` |
-| `multi_layer_job_controller` | Sequences the three denoising descriptors through one reusable scheduler, stores intermediate feature maps, and optionally performs final residual subtraction |
-| `stream_loaded_multi_layer_job_controller` | Loads activation, bias, and weight streams into internal memories, runs the three-layer controller, and streams final RGB output with backpressure |
+| `multi_layer_job_controller` | Sequences the three denoising descriptors through one reusable scheduler, alternates two intermediate activation banks, gates each layer on parameter readiness, and optionally performs final residual subtraction |
+| `stream_loaded_multi_layer_job_controller` | Loads layer 0, starts compute, prefetches layer 1/2 parameters while compute is active, and streams final RGB output with backpressure |
+| `v2_tensor_packet_router` | Converts one 32-bit AXI input stream into ordered activation, bias, and weight streams while validating headers, lengths, and `TLAST` |
+| `cnn_image2image_axi_stream_top` | Connects the packet router, multi-layer scheduler stack, and sign-extended 32-bit AXI output stream with job status and protocol errors |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, compute, and output-store path around local memories. The ping-pong scratchpads and bank controller prove that one bank can be loaded while the other remains selected for compute; scheduler-level prefetch integration is still pending. The v2 stream ordering and future AXI mapping are defined in [v2_stream_interface.md](v2_stream_interface.md). DMA tensor movement and AXI-facing v2 integration are still future work.
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The AXI-Stream top now proves a concrete packetized data-plane boundary, but it is not yet integrated into the Zynq block design or controlled by a v2 AXI-Lite register bank. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md).
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -119,7 +121,6 @@ Expected board result:
 
 ## Next V2 Milestones
 
-1. Integrate the ping-pong banks into the multi-layer scheduler so the next layer can prefetch while the current layer computes.
-2. Connect the v2 scheduler stack to an AXI-facing top-level wrapper after the offline model and unit tests are stable.
-3. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
-4. Add a concrete v2 AXI wrapper that validates packet lengths and sequence before starting compute.
+1. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
+2. Add a v2 AXI-Lite control/status register block and integrate the AXI-Stream top into a separate Vivado block design.
+3. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.

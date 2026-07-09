@@ -97,6 +97,9 @@ module tb_v2_stream_loaded_full_network_golden_flow;
     .output_stream_last(output_stream_last),
     .phase(phase),
     .active_layer(active_layer),
+    .weight_layers_ready(),
+    .prefetch_active(),
+    .prefetch_seen(),
     .busy(busy),
     .done(done),
     .error(error)

@@ -103,11 +103,13 @@ Current v2 status:
 - Output tensor store controller that streams computed tensors out in pixel/channel order with backpressure and `last` signaling.
 - Full-image single-layer scheduler that reuses the 1x1/3x3 engines across output `x/y` positions.
 - Three-layer RGB denoising descriptor ROM for the planned `3 -> 16 -> 16 -> 3` image-to-image network.
-- Multi-layer job controller that sequences the three denoising layers through one reusable scheduler with intermediate feature buffers and optional final residual subtraction.
-- Stream-loaded multi-layer job wrapper that accepts activation, bias, and weight streams, runs the three-layer controller from internal memories, and streams final image output.
+- Multi-layer job controller that sequences the three denoising layers through one reusable scheduler, alternates intermediate feature-map banks, waits for per-layer parameter readiness, and optionally performs final residual subtraction.
+- Stream-loaded multi-layer job wrapper that starts compute after layer 0 is loaded, prefetches layer 1/2 parameters during compute, and streams final image output with backpressure.
+- AXI-Stream v2 top-level wrapper with a single packetized tensor input, signed 32-bit output words, packet order/length validation, and protocol error reporting.
 - Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
 - Golden tensor flow for single-layer scheduler fixtures, the full 3-layer denoising controller, and the stream-loaded full-network wrapper.
 - Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
+- Integrated AXI packet tests covering a complete seven-packet job, output backpressure, malformed lengths, packet ordering, invalid dimensions, and repeated starts.
 - Dedicated v2 unit target.
 
 Run:

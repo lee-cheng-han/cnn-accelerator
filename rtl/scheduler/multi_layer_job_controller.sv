@@ -24,6 +24,7 @@ module multi_layer_job_controller #(
   input  logic final_residual_enable,
   input  logic [DIM_W-1:0] image_width,
   input  logic [DIM_W-1:0] image_height,
+  input  logic [2:0] layer_ready,
 
   input  logic signed [DATA_W-1:0] input_tensor [MAX_PIXELS*MAX_CIN],
   input  logic signed [DATA_W-1:0] weights_l0 [HIDDEN_C][INPUT_C][9],
@@ -35,6 +36,9 @@ module multi_layer_job_controller #(
 
   output logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT],
   output logic [1:0] active_layer,
+  output logic activation_read_bank,
+  output logic activation_write_bank,
+  output logic waiting_for_layer,
   output logic busy,
   output logic done
 );
@@ -53,6 +57,7 @@ module multi_layer_job_controller #(
   logic [1:0] layer_index;
   logic scheduler_start;
   logic scheduler_done;
+  logic current_layer_ready;
   logic descriptor_valid;
   logic [DIM_W-1:0] desc_input_width;
   logic [DIM_W-1:0] desc_input_height;
@@ -67,8 +72,8 @@ module multi_layer_job_controller #(
   logic [4:0] desc_quant_shift;
   logic desc_residual_enable;
 
-  logic signed [DATA_W-1:0] feature_a [MAX_PIXELS*MAX_CIN];
-  logic signed [DATA_W-1:0] feature_b [MAX_PIXELS*MAX_CIN];
+  logic signed [DATA_W-1:0] feature_bank0 [MAX_PIXELS*MAX_CIN];
+  logic signed [DATA_W-1:0] feature_bank1 [MAX_PIXELS*MAX_CIN];
   logic signed [DATA_W-1:0] scheduler_activation [MAX_PIXELS*MAX_CIN];
   logic signed [DATA_W-1:0] scheduler_weights_1x1 [MAX_COUT][MAX_CIN];
   logic signed [DATA_W-1:0] scheduler_weights_3x3 [MAX_COUT][MAX_CIN][9];
@@ -76,8 +81,22 @@ module multi_layer_job_controller #(
   logic signed [OUT_W-1:0] scheduler_output [MAX_PIXELS*MAX_COUT];
 
   assign active_layer = layer_index;
+  assign activation_read_bank = (layer_index == 2'd2);
+  assign activation_write_bank = (layer_index == 2'd1);
+  assign waiting_for_layer =
+    (state == S_START_LAYER) && descriptor_valid && !current_layer_ready;
   assign busy = (state != S_IDLE) && (state != S_DONE);
-  assign scheduler_start = (state == S_START_LAYER);
+  assign scheduler_start =
+    (state == S_START_LAYER) && descriptor_valid && current_layer_ready;
+
+  always_comb begin
+    unique case (layer_index)
+      2'd0: current_layer_ready = layer_ready[0];
+      2'd1: current_layer_ready = layer_ready[1];
+      2'd2: current_layer_ready = layer_ready[2];
+      default: current_layer_ready = 1'b0;
+    endcase
+  end
 
   function automatic logic signed [OUT_W-1:0] sat8(input logic signed [ACC_W-1:0] value);
     begin
@@ -135,8 +154,8 @@ module multi_layer_job_controller #(
     for (int i = 0; i < MAX_PIXELS*MAX_CIN; i++) begin
       unique case (layer_index)
         2'd0: scheduler_activation[i] = input_tensor[i];
-        2'd1: scheduler_activation[i] = feature_a[i];
-        2'd2: scheduler_activation[i] = feature_b[i];
+        2'd1: scheduler_activation[i] = feature_bank0[i];
+        2'd2: scheduler_activation[i] = feature_bank1[i];
         default: scheduler_activation[i] = '0;
       endcase
     end
@@ -235,8 +254,8 @@ module multi_layer_job_controller #(
       done <= 1'b0;
 
       for (int i = 0; i < MAX_PIXELS*MAX_CIN; i++) begin
-        feature_a[i] <= '0;
-        feature_b[i] <= '0;
+        feature_bank0[i] <= '0;
+        feature_bank1[i] <= '0;
       end
 
       for (int i = 0; i < MAX_PIXELS*MAX_COUT; i++) begin
@@ -254,7 +273,11 @@ module multi_layer_job_controller #(
         end
 
         S_START_LAYER: begin
-          state <= descriptor_valid ? S_WAIT_LAYER : S_DONE;
+          if (!descriptor_valid) begin
+            state <= S_DONE;
+          end else if (current_layer_ready) begin
+            state <= S_WAIT_LAYER;
+          end
         end
 
         S_WAIT_LAYER: begin
@@ -267,10 +290,10 @@ module multi_layer_job_controller #(
           for (int p = 0; p < MAX_PIXELS; p++) begin
             for (int c = 0; c < MAX_CIN; c++) begin
               if (layer_index == 2'd0) begin
-                feature_a[(p * MAX_CIN) + c] <=
+                feature_bank0[(p * MAX_CIN) + c] <=
                   (c < HIDDEN_C) ? scheduler_output[(p * MAX_COUT) + c] : '0;
               end else if (layer_index == 2'd1) begin
-                feature_b[(p * MAX_CIN) + c] <=
+                feature_bank1[(p * MAX_CIN) + c] <=
                   (c < HIDDEN_C) ? scheduler_output[(p * MAX_COUT) + c] : '0;
               end
             end

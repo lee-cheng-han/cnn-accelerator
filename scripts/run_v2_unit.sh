@@ -16,6 +16,7 @@ TESTS=(
   tb_v2_single_layer_scheduler
   tb_v2_multi_layer_job_controller
   tb_v2_stream_loaded_multi_layer_job_controller
+  tb_v2_axi_stream_top
 )
 
 for tb in "${TESTS[@]}"; do

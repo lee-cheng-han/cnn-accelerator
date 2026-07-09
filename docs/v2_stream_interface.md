@@ -158,7 +158,7 @@ pixel == image_width*image_height-1
 channel == 2
 ```
 
-## Future AXI Mapping
+## AXI Mapping
 
 The current RTL exposes separate logical streams. A future AXI-facing wrapper can map them directly to independent AXI-stream channels:
 
@@ -169,7 +169,19 @@ The current RTL exposes separate logical streams. A future AXI-facing wrapper ca
 | `*_stream_data` | `TDATA` |
 | `output_stream_last` | output `TLAST` |
 
-For DMA systems with fewer physical streams, the preferred future packet format is a single input AXI stream with lightweight packet headers:
+`cnn_image2image_axi_stream_top` implements a single 32-bit input AXI stream. Every logical tensor is one packet consisting of a header beat followed by an implied-length payload:
+
+```text
+Header beat: 0xA5TT0000
+             A5 = packet magic
+             TT = packet type
+
+Payload beat:
+  activation/weight = signed INT8 in TDATA[7:0]
+  bias              = signed INT32 in TDATA[31:0]
+```
+
+The header must not assert `TLAST`. The payload must assert `TLAST` exactly on its final beat.
 
 | Packet type | Payload |
 |---:|---|
@@ -181,7 +193,19 @@ For DMA systems with fewer physical streams, the preferred future packet format 
 | `5` | Layer 2 bias tensor |
 | `6` | Layer 2 weight tensor |
 
-Each packet should assert `TLAST` on its final payload word. The AXI wrapper should validate packet type, expected length, and packet order before releasing `start` into the core wrapper. This keeps the current compute controller simple while allowing a software/DMA path to use one memory-backed input stream.
+Payload lengths are implied by `image_width`, `image_height`, and the fixed three-layer network:
+
+| Packet | Words |
+|---:|---:|
+| `0` | `width * height * 3` |
+| `1` | `16` |
+| `2` | `16 * 3 * 9` |
+| `3` | `16` |
+| `4` | `16 * 16 * 9` |
+| `5` | `3` |
+| `6` | `3 * 16 * 9` |
+
+The router backpressures the physical input stream whenever the selected logical loader is not ready. This keeps headers out of tensor memory and preserves the logical stream order used by the simulation-facing controller.
 
 ## Error Handling Expectations
 
@@ -193,7 +217,32 @@ The AXI-facing wrapper should reject or flag:
 - Missing output `TREADY` timeout, if software chooses to enforce one
 - A new `start` while a job is already busy
 
+The implemented packet-router error codes are:
+
+| Code | Meaning |
+|---:|---|
+| `0x01` | Invalid or unsupported dimensions |
+| `0x02` | Start requested while a job is active |
+| `0x03` | Header magic mismatch |
+| `0x04` | Packet type/order mismatch |
+| `0x05` | Reserved header bits nonzero or `TLAST` on header |
+| `0x06` | Early or missing payload `TLAST` |
+| `0x80` | Error reported by the stream-loaded compute controller |
+
+After a malformed packet, assert `clear` before submitting another job. This resets both the packet router and the partially loaded compute job.
+
 The current stream-loaded controller reports loader/store configuration errors through `error`, and reports completion through `done`.
+
+Compute begins as soon as the layer 0 bias and weight payloads are complete. Layer 1 and layer 2 payloads are then consumed while the reusable convolution scheduler is active. `weight_layers_ready[2:0]` records completed layer payloads, and the scheduler waits at a layer boundary until the corresponding bit is set. `prefetch_active` indicates a cycle where later-layer parameters are loading during compute; `prefetch_seen` records that overlap for the current job.
+
+Intermediate activations use two logical banks:
+
+| Producer | Destination bank | Next consumer |
+|---|---:|---|
+| Layer 0 | 0 | Layer 1 |
+| Layer 1 | 1 | Layer 2 |
+
+The final layer writes the output tensor directly. Parameter prefetch does not alter the external stream ordering.
 
 ## Verification Coverage
 
@@ -204,8 +253,10 @@ Current tests that enforce this contract:
 | `tb_v2_tensor_load_controllers` | Activation and weight stream order, backpressure, and config errors |
 | `tb_v2_ping_pong_buffers` | Concurrent load/compute bank use, bank handoff, data isolation, and illegal-request errors |
 | `tb_v2_output_store_controller` | Output stream order, backpressure, `last`, zero-length, and config errors |
-| `tb_v2_stream_loaded_multi_layer_job_controller` | Full stream-load, compute, stream-store identity network |
+| `tb_v2_multi_layer_job_controller` | Per-layer readiness stalls and activation-bank handoff |
+| `tb_v2_stream_loaded_multi_layer_job_controller` | Full stream-load, parameter/compute overlap, readiness completion, and stream-store identity network |
 | `tb_v2_stream_loaded_full_network_golden_flow` | Generated Python tensors streamed through the full v2 wrapper and checked bit-for-bit |
+| `tb_v2_axi_stream_top` | Seven-packet AXI job, backpressure, packet order/length errors, invalid dimensions, and repeated start |
 
 Run:
 
