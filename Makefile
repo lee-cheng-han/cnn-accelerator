@@ -15,7 +15,7 @@ regression:
 xsim-regression:
 	SEED=$(SEED) bash scripts/run_xsim_regression.sh
 
-.PHONY: v2-unit v2-model-test v2-golden-test v2-regression
+.PHONY: v2-unit v2-model-test v2-golden-test v2-regression v2-synth-sweep v2-synth-report
 
 v2-unit:
 	bash scripts/run_v2_unit.sh
@@ -30,6 +30,12 @@ v2-golden-test:
 	bash scripts/run_v2_unit_tb.sh tb_v2_stream_loaded_full_network_golden_flow
 
 v2-regression: v2-model-test v2-golden-test v2-unit
+
+v2-synth-sweep:
+	bash scripts/v2/run_synth_sweep.sh
+
+v2-synth-report:
+	python3 scripts/v2/report_synth_sweep.py --sweep-root build/v2_synth_sweep --markdown docs/v2_synthesis_experiments.md
 
 lint:
 	bash scripts/lint_verilator.sh

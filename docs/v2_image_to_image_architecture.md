@@ -81,6 +81,7 @@ Chunks 4-6 have simulation-focused first milestones:
 | `stream_loaded_multi_layer_job_controller` | Loads layer 0, starts compute, prefetches layer 1/2 parameters while compute is active, and streams final RGB output with backpressure |
 | `v2_tensor_packet_router` | Converts one 32-bit AXI input stream into ordered activation, bias, and weight streams while validating headers, lengths, and `TLAST` |
 | `cnn_image2image_axi_stream_top` | Connects the packet router, multi-layer scheduler stack, and sign-extended 32-bit AXI output stream with job status and protocol errors |
+| `v2_performance_counters` | Captures job, packet, compute, prefetch, layer, transfer, and backpressure cycles for the most recently started job |
 
 Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The AXI-Stream top now proves a concrete packetized data-plane boundary, but it is not yet integrated into the Zynq block design or controlled by a v2 AXI-Lite register bank. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md).
 
@@ -121,6 +122,11 @@ Expected board result:
 
 ## Next V2 Milestones
 
-1. Add v2 performance counters and synthesis experiments for `PC/PK` scaling.
-2. Add a v2 AXI-Lite control/status register block and integrate the AXI-Stream top into a separate Vivado block design.
-3. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
+The first `PC/PK` synthesis sweep is complete. The isolated compute slice meets the
+125 MHz target for `2x8`, `4x4`, and `4x8`; see
+[v2_synthesis_experiments.md](v2_synthesis_experiments.md). The remaining milestones
+are:
+
+1. Add a v2 AXI-Lite control/status register block and integrate the AXI-Stream top into a separate Vivado block design.
+2. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
+3. Confirm the selected `PC=4`, `PK=8` configuration with full-design post-route timing.

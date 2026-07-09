@@ -106,6 +106,8 @@ Current v2 status:
 - Multi-layer job controller that sequences the three denoising layers through one reusable scheduler, alternates intermediate feature-map banks, waits for per-layer parameter readiness, and optionally performs final residual subtraction.
 - Stream-loaded multi-layer job wrapper that starts compute after layer 0 is loaded, prefetches layer 1/2 parameters during compute, and streams final image output with backpressure.
 - AXI-Stream v2 top-level wrapper with a single packetized tensor input, signed 32-bit output words, packet order/length validation, and protocol error reporting.
+- V2 performance counters for total latency, packet ingestion, scheduler activity, prefetch overlap, per-layer cycles, stream transfers, and backpressure.
+- Reproducible out-of-context synthesis sweep for `PC/PK` scaling at 125 MHz; `PC=4`, `PK=8` provides 32 MACs/cycle with positive post-synthesis timing slack.
 - Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
 - Golden tensor flow for single-layer scheduler fixtures, the full 3-layer denoising controller, and the stream-loaded full-network wrapper.
 - Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
@@ -118,9 +120,10 @@ Run:
 make v2-model-test
 make v2-golden-test
 make v2-unit
+make v2-synth-sweep
 ```
 
-See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md) and [docs/v2_stream_interface.md](docs/v2_stream_interface.md).
+See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md), [docs/v2_stream_interface.md](docs/v2_stream_interface.md), [docs/v2_performance_counters.md](docs/v2_performance_counters.md), and [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md).
 
 ## Convolution Modes
 
@@ -341,6 +344,7 @@ Kernel mode = 3x3
 | [docs/assets/arty_z7_dma_architecture.svg](docs/assets/arty_z7_dma_architecture.svg) | Generated architecture visual for portfolio/readme use |
 | [docs/verification_matrix.md](docs/verification_matrix.md) | What has been tested and what remains |
 | [docs/performance_analysis.md](docs/performance_analysis.md) | Throughput, latency, resource, and scaling analysis |
+| [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md) | Reproducible v2 PC/PK synthesis tradeoff results |
 | [docs/pre_board_checklist.md](docs/pre_board_checklist.md) | Work to complete before hardware arrives |
 | [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md) | Board programming and debug checklist |
 | [docs/known_warnings.md](docs/known_warnings.md) | Vivado warning budget and accepted generated-IP warnings |

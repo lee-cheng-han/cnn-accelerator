@@ -48,6 +48,7 @@ module stream_loaded_multi_layer_job_controller #(
   output logic [2:0] weight_layers_ready,
   output logic prefetch_active,
   output logic prefetch_seen,
+  output logic compute_active,
   output logic busy,
   output logic done,
   output logic error
@@ -106,6 +107,7 @@ module stream_loaded_multi_layer_job_controller #(
   logic loaded_error;
 
   assign phase = state;
+  assign compute_active = compute_busy;
   assign busy = (state != S_IDLE) && (state != S_DONE);
   assign act_loader_start = (state == S_START_ACT);
   assign weight_loader_start = (state == S_START_WEIGHT);

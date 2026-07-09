@@ -233,6 +233,8 @@ After a malformed packet, assert `clear` before submitting another job. This res
 
 The current stream-loaded controller reports loader/store configuration errors through `error`, and reports completion through `done`.
 
+The AXI top also exposes the most recent job's performance snapshot. Counter definitions and reset behavior are documented in [v2_performance_counters.md](v2_performance_counters.md).
+
 Compute begins as soon as the layer 0 bias and weight payloads are complete. Layer 1 and layer 2 payloads are then consumed while the reusable convolution scheduler is active. `weight_layers_ready[2:0]` records completed layer payloads, and the scheduler waits at a layer boundary until the corresponding bit is set. `prefetch_active` indicates a cycle where later-layer parameters are loading during compute; `prefetch_seen` records that overlap for the current job.
 
 Intermediate activations use two logical banks:
@@ -257,6 +259,7 @@ Current tests that enforce this contract:
 | `tb_v2_stream_loaded_multi_layer_job_controller` | Full stream-load, parameter/compute overlap, readiness completion, and stream-store identity network |
 | `tb_v2_stream_loaded_full_network_golden_flow` | Generated Python tensors streamed through the full v2 wrapper and checked bit-for-bit |
 | `tb_v2_axi_stream_top` | Seven-packet AXI job, backpressure, packet order/length errors, invalid dimensions, and repeated start |
+| `tb_v2_performance_counters` | Exact cycle classification, transfer/stall counts, completion, and reset behavior |
 
 Run:
 

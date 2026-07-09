@@ -40,6 +40,18 @@ module tb_v2_axi_stream_top;
   logic prefetch_seen;
   logic [2:0] input_packet_type;
   logic [31:0] input_packet_words;
+  logic perf_counting;
+  logic [31:0] perf_job_cycles;
+  logic [31:0] perf_packet_cycles;
+  logic [31:0] perf_compute_cycles;
+  logic [31:0] perf_prefetch_cycles;
+  logic [31:0] perf_layer0_cycles;
+  logic [31:0] perf_layer1_cycles;
+  logic [31:0] perf_layer2_cycles;
+  logic [31:0] perf_input_words;
+  logic [31:0] perf_input_stall_cycles;
+  logic [31:0] perf_output_words;
+  logic [31:0] perf_output_stall_cycles;
 
   int tests;
   int ready_cycle;
@@ -79,7 +91,19 @@ module tb_v2_axi_stream_top;
     .prefetch_active(prefetch_active),
     .prefetch_seen(prefetch_seen),
     .input_packet_type(input_packet_type),
-    .input_packet_words(input_packet_words)
+    .input_packet_words(input_packet_words),
+    .perf_counting(perf_counting),
+    .perf_job_cycles(perf_job_cycles),
+    .perf_packet_cycles(perf_packet_cycles),
+    .perf_compute_cycles(perf_compute_cycles),
+    .perf_prefetch_cycles(perf_prefetch_cycles),
+    .perf_layer0_cycles(perf_layer0_cycles),
+    .perf_layer1_cycles(perf_layer1_cycles),
+    .perf_layer2_cycles(perf_layer2_cycles),
+    .perf_input_words(perf_input_words),
+    .perf_input_stall_cycles(perf_input_stall_cycles),
+    .perf_output_words(perf_output_words),
+    .perf_output_stall_cycles(perf_output_stall_cycles)
   );
 
   initial begin
@@ -312,10 +336,32 @@ module tb_v2_axi_stream_top;
     while (!done) begin
       @(posedge clk);
     end
+    @(posedge clk);
+    #1;
 
     if (error || busy || !prefetch_seen || (weight_layers_ready != 3'b111)) begin
       $display("[FAIL] valid AXI job status: error=%0b busy=%0b prefetch=%0b ready=%b",
                error, busy, prefetch_seen, weight_layers_ready);
+      $finish;
+    end
+    tests++;
+
+    if (perf_counting ||
+        (perf_input_words != 32'd3222) ||
+        (perf_output_words != 32'd12) ||
+        (perf_job_cycles <= perf_packet_cycles) ||
+        (perf_compute_cycles == 0) ||
+        (perf_prefetch_cycles == 0) ||
+        ((perf_layer0_cycles + perf_layer1_cycles + perf_layer2_cycles) !=
+         perf_compute_cycles) ||
+        (perf_output_stall_cycles == 0)) begin
+      $display("[FAIL] performance counters job=%0d packet=%0d compute=%0d prefetch=%0d",
+               perf_job_cycles, perf_packet_cycles, perf_compute_cycles,
+               perf_prefetch_cycles);
+      $display("[FAIL] layer=%0d/%0d/%0d input=%0d output=%0d output_stall=%0d counting=%0b",
+               perf_layer0_cycles, perf_layer1_cycles, perf_layer2_cycles,
+               perf_input_words, perf_output_words, perf_output_stall_cycles,
+               perf_counting);
       $finish;
     end
     tests++;

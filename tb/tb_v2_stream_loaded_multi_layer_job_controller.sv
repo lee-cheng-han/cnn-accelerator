@@ -87,6 +87,7 @@ module tb_v2_stream_loaded_multi_layer_job_controller;
     .weight_layers_ready(weight_layers_ready),
     .prefetch_active(prefetch_active),
     .prefetch_seen(prefetch_seen),
+    .compute_active(),
     .busy(busy),
     .done(done),
     .error(error)

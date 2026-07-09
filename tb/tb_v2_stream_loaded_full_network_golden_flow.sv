@@ -100,6 +100,7 @@ module tb_v2_stream_loaded_full_network_golden_flow;
     .weight_layers_ready(),
     .prefetch_active(),
     .prefetch_seen(),
+    .compute_active(),
     .busy(busy),
     .done(done),
     .error(error)

@@ -47,7 +47,20 @@ module cnn_image2image_axi_stream_top #(
   output logic prefetch_active,
   output logic prefetch_seen,
   output logic [2:0] input_packet_type,
-  output logic [31:0] input_packet_words
+  output logic [31:0] input_packet_words,
+
+  output logic perf_counting,
+  output logic [31:0] perf_job_cycles,
+  output logic [31:0] perf_packet_cycles,
+  output logic [31:0] perf_compute_cycles,
+  output logic [31:0] perf_prefetch_cycles,
+  output logic [31:0] perf_layer0_cycles,
+  output logic [31:0] perf_layer1_cycles,
+  output logic [31:0] perf_layer2_cycles,
+  output logic [31:0] perf_input_words,
+  output logic [31:0] perf_input_stall_cycles,
+  output logic [31:0] perf_output_words,
+  output logic [31:0] perf_output_stall_cycles
 );
 
   logic router_start_accepted;
@@ -69,6 +82,7 @@ module cnn_image2image_axi_stream_top #(
   logic core_done;
   logic core_error;
   logic core_reset_n;
+  logic scheduler_compute_active;
 
   assign core_reset_n = aresetn && !clear && !router_error;
   assign busy =
@@ -161,9 +175,39 @@ module cnn_image2image_axi_stream_top #(
     .weight_layers_ready(weight_layers_ready),
     .prefetch_active(prefetch_active),
     .prefetch_seen(prefetch_seen),
+    .compute_active(scheduler_compute_active),
     .busy(core_busy),
     .done(core_done),
     .error(core_error)
+  );
+
+  v2_performance_counters u_v2_performance_counters (
+    .clk(aclk),
+    .rst_n(aresetn),
+    .job_start(router_start_accepted),
+    .job_done(core_done),
+    .job_abort(router_error || core_error),
+    .clear(clear),
+    .packet_busy(router_busy),
+    .compute_active(scheduler_compute_active),
+    .prefetch_active(prefetch_active),
+    .active_layer(active_layer),
+    .input_valid(s_axis_tvalid),
+    .input_ready(s_axis_tready),
+    .output_valid(m_axis_tvalid),
+    .output_ready(m_axis_tready),
+    .counting(perf_counting),
+    .job_cycles(perf_job_cycles),
+    .packet_cycles(perf_packet_cycles),
+    .compute_cycles(perf_compute_cycles),
+    .prefetch_cycles(perf_prefetch_cycles),
+    .layer0_cycles(perf_layer0_cycles),
+    .layer1_cycles(perf_layer1_cycles),
+    .layer2_cycles(perf_layer2_cycles),
+    .input_words(perf_input_words),
+    .input_stall_cycles(perf_input_stall_cycles),
+    .output_words(perf_output_words),
+    .output_stall_cycles(perf_output_stall_cycles)
   );
 
 endmodule

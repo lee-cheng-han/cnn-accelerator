@@ -52,6 +52,7 @@ xvlog -sv -L work \
   ../../rtl/tensor/output_tensor_store_controller.sv \
   ../../rtl/stream/v2_tensor_packet_router.sv \
   ../../rtl/scheduler/denoise_layer_descriptor_rom.sv \
+  ../../rtl/scheduler/v2_performance_counters.sv \
   ../../rtl/compute_v2/reduction_tree.sv \
   ../../rtl/compute_v2/parallel_mac_array.sv \
   ../../rtl/compute_v2/psum_accumulator.sv \
