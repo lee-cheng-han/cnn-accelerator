@@ -37,14 +37,28 @@ module tiled_conv3x3_engine #(
   input  logic signed [DATA_W-1:0] weights [MAX_COUT][MAX_CIN][9],
   input  logic signed [BIAS_W-1:0] bias [MAX_COUT],
 
+  input  logic use_scratchpad_operands,
+  output logic [ADDR_W-1:0] scratch_activation_read_pixel,
+  output logic [COUNT_W-1:0] scratch_activation_read_c_base,
+  output logic [PC-1:0] scratch_activation_lane_mask,
+  input  logic signed [DATA_W-1:0] scratch_activation_lane_data [PC],
+  output logic [COUNT_W-1:0] scratch_weight_read_k_base,
+  output logic [COUNT_W-1:0] scratch_weight_read_c_base,
+  output logic [3:0] scratch_weight_read_kernel_idx,
+  output logic [PK-1:0] scratch_weight_out_lane_mask,
+  output logic [PC-1:0] scratch_weight_in_lane_mask,
+  input  logic signed [DATA_W-1:0] scratch_weight_mat_data [PK][PC],
+
   output logic signed [OUT_W-1:0] output_data [MAX_COUT],
   output logic busy,
   output logic done
 );
 
-  typedef enum logic [2:0] {
+  typedef enum logic [3:0] {
     S_IDLE,
     S_CLEAR,
+    S_FETCH,
+    S_CAPTURE,
     S_ISSUE,
     S_WAIT_MAC,
     S_NEXT_C,
@@ -68,8 +82,12 @@ module tiled_conv3x3_engine #(
   logic [PC-1:0] cin_lane_mask;
   logic [PK-1:0] cout_lane_mask;
 
-  logic signed [DATA_W-1:0] mac_act_vec [PC];
-  logic signed [DATA_W-1:0] mac_weight_mat [PK][PC];
+  logic signed [DATA_W-1:0] mac_act_vec_comb [PC];
+  logic signed [DATA_W-1:0] mac_weight_mat_comb [PK][PC];
+  logic signed [DATA_W-1:0] operand_act_vec [PC];
+  logic signed [DATA_W-1:0] operand_weight_mat [PK][PC];
+  logic signed [DATA_W-1:0] mac_act_vec_q [PC];
+  logic signed [DATA_W-1:0] mac_weight_mat_q [PK][PC];
   logic mac_valid_in;
   logic mac_valid_out;
 
@@ -78,7 +96,8 @@ module tiled_conv3x3_engine #(
   logic psum_clear;
   logic psum_accumulate;
 
-  logic signed [BIAS_W-1:0] bias_vec [PK];
+  logic signed [BIAS_W-1:0] bias_vec_comb [PK];
+  logic signed [BIAS_W-1:0] bias_vec_q [PK];
   logic signed [ACC_W-1:0] bias_acc_vec [PK];
   logic signed [ACC_W-1:0] relu_acc_vec [PK];
   logic signed [ACC_W-1:0] quant_acc_vec [PK];
@@ -128,26 +147,52 @@ module tiled_conv3x3_engine #(
   always_comb begin
     for (int pc = 0; pc < PC; pc++) begin
       if (addr_valid && cin_lane_mask[pc]) begin
-        mac_act_vec[pc] = activation[activation_base_addr + ADDR_W'(c_base + COUNT_W'(pc))];
+        mac_act_vec_comb[pc] =
+          activation[activation_base_addr + ADDR_W'(c_base + COUNT_W'(pc))];
       end else begin
-        mac_act_vec[pc] = '0;
+        mac_act_vec_comb[pc] = '0;
       end
     end
 
     for (int pk = 0; pk < PK; pk++) begin
       if (cout_lane_mask[pk]) begin
-        bias_vec[pk] = bias[k_base + COUNT_W'(pk)];
+        bias_vec_comb[pk] = bias[k_base + COUNT_W'(pk)];
       end else begin
-        bias_vec[pk] = '0;
+        bias_vec_comb[pk] = '0;
       end
 
       for (int pc = 0; pc < PC; pc++) begin
         if (cout_lane_mask[pk] && cin_lane_mask[pc]) begin
-          mac_weight_mat[pk][pc] =
+          mac_weight_mat_comb[pk][pc] =
             weights[k_base + COUNT_W'(pk)][c_base + COUNT_W'(pc)][kernel_idx];
         end else begin
-          mac_weight_mat[pk][pc] = '0;
+          mac_weight_mat_comb[pk][pc] = '0;
         end
+      end
+    end
+  end
+
+  assign scratch_activation_read_pixel   = addr_valid ? pixel_index : '0;
+  assign scratch_activation_read_c_base  = c_base;
+  assign scratch_activation_lane_mask    = addr_valid ? cin_lane_mask : '0;
+  assign scratch_weight_read_k_base      = k_base;
+  assign scratch_weight_read_c_base      = c_base;
+  assign scratch_weight_read_kernel_idx  = kernel_idx;
+  assign scratch_weight_out_lane_mask    = cout_lane_mask;
+  assign scratch_weight_in_lane_mask     = cin_lane_mask;
+
+  always_comb begin
+    for (int pc = 0; pc < PC; pc++) begin
+      operand_act_vec[pc] = use_scratchpad_operands ?
+                            scratch_activation_lane_data[pc] :
+                            mac_act_vec_comb[pc];
+    end
+
+    for (int pk = 0; pk < PK; pk++) begin
+      for (int pc = 0; pc < PC; pc++) begin
+        operand_weight_mat[pk][pc] = use_scratchpad_operands ?
+                                     scratch_weight_mat_data[pk][pc] :
+                                     mac_weight_mat_comb[pk][pc];
       end
     end
   end
@@ -161,8 +206,8 @@ module tiled_conv3x3_engine #(
   ) u_parallel_mac_array (
     .clk(clk),
     .rst_n(rst_n),
-    .act_vec(mac_act_vec),
-    .weight_mat(mac_weight_mat),
+    .act_vec(mac_act_vec_q),
+    .weight_mat(mac_weight_mat_q),
     .valid_in(mac_valid_in),
     .dot_vec(dot_vec),
     .valid_out(mac_valid_out)
@@ -187,7 +232,7 @@ module tiled_conv3x3_engine #(
     .BIAS_W(BIAS_W)
   ) u_parallel_bias_add (
     .psum_in(psum_vec),
-    .bias_in(bias_vec),
+    .bias_in(bias_vec_q),
     .bias_enable(bias_enable),
     .lane_mask(cout_lane_mask),
     .acc_out(bias_acc_vec)
@@ -240,6 +285,15 @@ module tiled_conv3x3_engine #(
       for (int co = 0; co < MAX_COUT; co++) begin
         output_data[co] <= '0;
       end
+      for (int pc = 0; pc < PC; pc++) begin
+        mac_act_vec_q[pc] <= '0;
+      end
+      for (int pk = 0; pk < PK; pk++) begin
+        bias_vec_q[pk] <= '0;
+        for (int pc = 0; pc < PC; pc++) begin
+          mac_weight_mat_q[pk][pc] <= '0;
+        end
+      end
     end else begin
       done <= 1'b0;
 
@@ -256,7 +310,24 @@ module tiled_conv3x3_engine #(
         S_CLEAR: begin
           c_base     <= '0;
           kernel_idx <= 4'd0;
-          state      <= (cin == '0) ? S_WRITE_TILE : S_ISSUE;
+          state      <= (cin == '0) ? S_WRITE_TILE : S_FETCH;
+        end
+
+        S_FETCH: begin
+          state <= S_CAPTURE;
+        end
+
+        S_CAPTURE: begin
+          for (int pc = 0; pc < PC; pc++) begin
+            mac_act_vec_q[pc] <= operand_act_vec[pc];
+          end
+          for (int pk = 0; pk < PK; pk++) begin
+            bias_vec_q[pk] <= bias_vec_comb[pk];
+            for (int pc = 0; pc < PC; pc++) begin
+              mac_weight_mat_q[pk][pc] <= operand_weight_mat[pk][pc];
+            end
+          end
+          state <= S_ISSUE;
         end
 
         S_ISSUE: begin
@@ -272,7 +343,7 @@ module tiled_conv3x3_engine #(
         S_NEXT_C: begin
           if ((c_base + COUNT_W'(PC)) < cin) begin
             c_base <= c_base + COUNT_W'(PC);
-            state  <= S_ISSUE;
+            state  <= S_FETCH;
           end else begin
             state <= S_NEXT_K;
           end
@@ -282,7 +353,7 @@ module tiled_conv3x3_engine #(
           if (kernel_idx < 4'd8) begin
             kernel_idx <= kernel_idx + 4'd1;
             c_base     <= '0;
-            state      <= S_ISSUE;
+            state      <= S_FETCH;
           end else begin
             state <= S_WRITE_TILE;
           end

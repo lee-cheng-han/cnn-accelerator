@@ -11,6 +11,9 @@
 | Unit RTL | `tb_channel_accumulator` | Covered | channel sum behavior |
 | Unit RTL | `tb_conv_engine` | Covered | convolution/post-processing behavior |
 | Unit RTL | `tb_line_buffer_3x3` | Covered | line-buffer behavior |
+| Unit RTL | `tb_v2_tiled_conv1x1_engine` | Covered | array-backed and banked-scratchpad-backed 1x1 operand paths |
+| Unit RTL | `tb_v2_tiled_conv3x3_engine` | Covered | array-backed and banked-scratchpad-backed 3x3 operand paths |
+| Unit RTL | `tb_v2_single_layer_scheduler` | Covered | full-image array-backed and banked-scratchpad-backed scheduler paths |
 | Unit RTL | `tb_v2_banked_scratchpads` | Covered | one-cycle replicated-bank BRAM-style activation/weight scratchpad reads |
 | Unit RTL | `tb_window_generator_3x3` | Covered | window tap ordering |
 | Unit RTL | `tb_streaming_window_buffer` | Covered | streaming 3x3 window generation |

@@ -79,6 +79,8 @@ module multi_layer_job_controller #(
   logic signed [DATA_W-1:0] scheduler_weights_3x3 [MAX_COUT][MAX_CIN][9];
   logic signed [BIAS_W-1:0] scheduler_bias [MAX_COUT];
   logic signed [OUT_W-1:0] scheduler_output [MAX_PIXELS*MAX_COUT];
+  logic signed [DATA_W-1:0] scratch_activation_lane_data_zero [PC];
+  logic signed [DATA_W-1:0] scratch_weight_mat_data_zero [PK][PC];
 
   assign active_layer = layer_index;
   assign activation_read_bank = (layer_index == 2'd2);
@@ -204,6 +206,16 @@ module multi_layer_job_controller #(
         end
       end
     end
+
+    for (int pc = 0; pc < PC; pc++) begin
+      scratch_activation_lane_data_zero[pc] = '0;
+    end
+
+    for (int pk = 0; pk < PK; pk++) begin
+      for (int pc = 0; pc < PC; pc++) begin
+        scratch_weight_mat_data_zero[pk][pc] = '0;
+      end
+    end
   end
 
   single_layer_scheduler #(
@@ -240,6 +252,17 @@ module multi_layer_job_controller #(
     .weights_1x1(scheduler_weights_1x1),
     .weights_3x3(scheduler_weights_3x3),
     .bias(scheduler_bias),
+    .use_scratchpad_operands(1'b0),
+    .scratch_activation_read_pixel(),
+    .scratch_activation_read_c_base(),
+    .scratch_activation_lane_mask(),
+    .scratch_activation_lane_data(scratch_activation_lane_data_zero),
+    .scratch_weight_read_k_base(),
+    .scratch_weight_read_c_base(),
+    .scratch_weight_read_kernel_idx(),
+    .scratch_weight_out_lane_mask(),
+    .scratch_weight_in_lane_mask(),
+    .scratch_weight_mat_data(scratch_weight_mat_data_zero),
     .output_tensor(scheduler_output),
     .current_x(),
     .current_y(),

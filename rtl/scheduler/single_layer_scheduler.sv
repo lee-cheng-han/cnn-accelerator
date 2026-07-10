@@ -12,7 +12,8 @@ module single_layer_scheduler #(
   parameter int BIAS_W     = 32,
   parameter int OUT_W      = 8,
   parameter int COUNT_W    = 8,
-  parameter int DIM_W      = 16
+  parameter int DIM_W      = 16,
+  parameter int ADDR_W     = 32
 )(
   input  logic clk,
   input  logic rst_n,
@@ -37,6 +38,18 @@ module single_layer_scheduler #(
   input  logic signed [DATA_W-1:0] weights_1x1 [MAX_COUT][MAX_CIN],
   input  logic signed [DATA_W-1:0] weights_3x3 [MAX_COUT][MAX_CIN][9],
   input  logic signed [BIAS_W-1:0] bias [MAX_COUT],
+
+  input  logic use_scratchpad_operands,
+  output logic [ADDR_W-1:0] scratch_activation_read_pixel,
+  output logic [COUNT_W-1:0] scratch_activation_read_c_base,
+  output logic [PC-1:0] scratch_activation_lane_mask,
+  input  logic signed [DATA_W-1:0] scratch_activation_lane_data [PC],
+  output logic [COUNT_W-1:0] scratch_weight_read_k_base,
+  output logic [COUNT_W-1:0] scratch_weight_read_c_base,
+  output logic [3:0] scratch_weight_read_kernel_idx,
+  output logic [PK-1:0] scratch_weight_out_lane_mask,
+  output logic [PC-1:0] scratch_weight_in_lane_mask,
+  input  logic signed [DATA_W-1:0] scratch_weight_mat_data [PK][PC],
 
   output logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT],
   output logic [DIM_W-1:0] current_x,
@@ -71,6 +84,22 @@ module single_layer_scheduler #(
   logic signed [DATA_W-1:0] activation_1x1 [MAX_CIN];
   logic signed [OUT_W-1:0] output_1x1 [MAX_COUT];
   logic signed [OUT_W-1:0] output_3x3 [MAX_COUT];
+  logic [ADDR_W-1:0] scratch_activation_read_pixel_1x1;
+  logic [ADDR_W-1:0] scratch_activation_read_pixel_3x3;
+  logic [COUNT_W-1:0] scratch_activation_read_c_base_1x1;
+  logic [COUNT_W-1:0] scratch_activation_read_c_base_3x3;
+  logic [PC-1:0] scratch_activation_lane_mask_1x1;
+  logic [PC-1:0] scratch_activation_lane_mask_3x3;
+  logic [COUNT_W-1:0] scratch_weight_read_k_base_1x1;
+  logic [COUNT_W-1:0] scratch_weight_read_k_base_3x3;
+  logic [COUNT_W-1:0] scratch_weight_read_c_base_1x1;
+  logic [COUNT_W-1:0] scratch_weight_read_c_base_3x3;
+  logic [3:0] scratch_weight_read_kernel_idx_1x1;
+  logic [3:0] scratch_weight_read_kernel_idx_3x3;
+  logic [PK-1:0] scratch_weight_out_lane_mask_1x1;
+  logic [PK-1:0] scratch_weight_out_lane_mask_3x3;
+  logic [PC-1:0] scratch_weight_in_lane_mask_1x1;
+  logic [PC-1:0] scratch_weight_in_lane_mask_3x3;
 
   assign current_x = out_x;
   assign current_y = out_y;
@@ -80,6 +109,30 @@ module single_layer_scheduler #(
   assign input_pixel_index_1x1 = ((out_y * DIM_W'(stride)) * input_width) +
                                  (out_x * DIM_W'(stride));
   assign output_pixel_index = (out_y * output_width) + out_x;
+  assign scratch_activation_read_pixel =
+    (kernel_size == 2'd1) ? scratch_activation_read_pixel_1x1 :
+    scratch_activation_read_pixel_3x3;
+  assign scratch_activation_read_c_base =
+    (kernel_size == 2'd1) ? scratch_activation_read_c_base_1x1 :
+    scratch_activation_read_c_base_3x3;
+  assign scratch_activation_lane_mask =
+    (kernel_size == 2'd1) ? scratch_activation_lane_mask_1x1 :
+    scratch_activation_lane_mask_3x3;
+  assign scratch_weight_read_k_base =
+    (kernel_size == 2'd1) ? scratch_weight_read_k_base_1x1 :
+    scratch_weight_read_k_base_3x3;
+  assign scratch_weight_read_c_base =
+    (kernel_size == 2'd1) ? scratch_weight_read_c_base_1x1 :
+    scratch_weight_read_c_base_3x3;
+  assign scratch_weight_read_kernel_idx =
+    (kernel_size == 2'd1) ? scratch_weight_read_kernel_idx_1x1 :
+    scratch_weight_read_kernel_idx_3x3;
+  assign scratch_weight_out_lane_mask =
+    (kernel_size == 2'd1) ? scratch_weight_out_lane_mask_1x1 :
+    scratch_weight_out_lane_mask_3x3;
+  assign scratch_weight_in_lane_mask =
+    (kernel_size == 2'd1) ? scratch_weight_in_lane_mask_1x1 :
+    scratch_weight_in_lane_mask_3x3;
 
   always_comb begin
     for (int ci = 0; ci < MAX_CIN; ci++) begin
@@ -115,6 +168,18 @@ module single_layer_scheduler #(
     .activation(activation_1x1),
     .weights(weights_1x1),
     .bias(bias),
+    .use_scratchpad_operands(use_scratchpad_operands),
+    .scratch_activation_pixel(input_pixel_index_1x1),
+    .scratch_activation_read_pixel(scratch_activation_read_pixel_1x1),
+    .scratch_activation_read_c_base(scratch_activation_read_c_base_1x1),
+    .scratch_activation_lane_mask(scratch_activation_lane_mask_1x1),
+    .scratch_activation_lane_data(scratch_activation_lane_data),
+    .scratch_weight_read_k_base(scratch_weight_read_k_base_1x1),
+    .scratch_weight_read_c_base(scratch_weight_read_c_base_1x1),
+    .scratch_weight_read_kernel_idx(scratch_weight_read_kernel_idx_1x1),
+    .scratch_weight_out_lane_mask(scratch_weight_out_lane_mask_1x1),
+    .scratch_weight_in_lane_mask(scratch_weight_in_lane_mask_1x1),
+    .scratch_weight_mat_data(scratch_weight_mat_data),
     .output_data(output_1x1),
     .busy(busy_1x1),
     .done(done_1x1)
@@ -152,6 +217,17 @@ module single_layer_scheduler #(
     .activation(activation),
     .weights(weights_3x3),
     .bias(bias),
+    .use_scratchpad_operands(use_scratchpad_operands),
+    .scratch_activation_read_pixel(scratch_activation_read_pixel_3x3),
+    .scratch_activation_read_c_base(scratch_activation_read_c_base_3x3),
+    .scratch_activation_lane_mask(scratch_activation_lane_mask_3x3),
+    .scratch_activation_lane_data(scratch_activation_lane_data),
+    .scratch_weight_read_k_base(scratch_weight_read_k_base_3x3),
+    .scratch_weight_read_c_base(scratch_weight_read_c_base_3x3),
+    .scratch_weight_read_kernel_idx(scratch_weight_read_kernel_idx_3x3),
+    .scratch_weight_out_lane_mask(scratch_weight_out_lane_mask_3x3),
+    .scratch_weight_in_lane_mask(scratch_weight_in_lane_mask_3x3),
+    .scratch_weight_mat_data(scratch_weight_mat_data),
     .output_data(output_3x3),
     .busy(busy_3x3),
     .done(done_3x3)

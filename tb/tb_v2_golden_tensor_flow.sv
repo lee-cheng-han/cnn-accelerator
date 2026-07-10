@@ -51,6 +51,8 @@ module tb_v2_golden_tensor_flow;
   logic [15:0] current_y;
   logic busy;
   logic done;
+  logic signed [DATA_W-1:0] scratch_activation_lane_data_zero [PC];
+  logic signed [DATA_W-1:0] scratch_weight_mat_data_zero [PK][PC];
 
   logic [31:0] cfg_mem [CFG_WORDS];
   logic signed [DATA_W-1:0] activation_mem [MAX_PIXELS*MAX_CIN];
@@ -92,6 +94,17 @@ module tb_v2_golden_tensor_flow;
     .weights_1x1(weights_1x1),
     .weights_3x3(weights_3x3),
     .bias(bias),
+    .use_scratchpad_operands(1'b0),
+    .scratch_activation_read_pixel(),
+    .scratch_activation_read_c_base(),
+    .scratch_activation_lane_mask(),
+    .scratch_activation_lane_data(scratch_activation_lane_data_zero),
+    .scratch_weight_read_k_base(),
+    .scratch_weight_read_c_base(),
+    .scratch_weight_read_kernel_idx(),
+    .scratch_weight_out_lane_mask(),
+    .scratch_weight_in_lane_mask(),
+    .scratch_weight_mat_data(scratch_weight_mat_data_zero),
     .output_tensor(output_tensor),
     .current_x(current_x),
     .current_y(current_y),
@@ -102,6 +115,18 @@ module tb_v2_golden_tensor_flow;
   initial begin
     clk = 1'b0;
     forever #5 clk = ~clk;
+  end
+
+  always_comb begin
+    for (int pc = 0; pc < PC; pc++) begin
+      scratch_activation_lane_data_zero[pc] = '0;
+    end
+
+    for (int pk = 0; pk < PK; pk++) begin
+      for (int pc = 0; pc < PC; pc++) begin
+        scratch_weight_mat_data_zero[pk][pc] = '0;
+      end
+    end
   end
 
   function automatic string file_in_dir(input string dir, input string name);
