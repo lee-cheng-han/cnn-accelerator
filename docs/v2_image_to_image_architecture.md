@@ -69,6 +69,8 @@ Chunks 4-6 have simulation-focused first milestones:
 |---|---|
 | `activation_scratchpad` | Local activation memory with scalar load/debug access and PC-lane vector reads |
 | `weight_scratchpad` | Local weight memory with scalar load/debug access and PK x PC matrix reads for the MAC array |
+| `banked_activation_scratchpad` | BRAM-style activation memory with replicated read banks and one-cycle registered vector reads |
+| `banked_weight_scratchpad` | BRAM-style weight memory with replicated read banks and one-cycle registered PK x PC reads |
 | `ping_pong_bank_controller` | Tracks two memory banks through load, valid, compute, release, overlap, and illegal-request states |
 | `ping_pong_activation_scratchpad` | Two activation scratchpad banks with independent load-bank and compute-bank selection |
 | `ping_pong_weight_scratchpad` | Two weight scratchpad banks with independent load-bank and compute-bank selection |
@@ -85,7 +87,7 @@ Chunks 4-6 have simulation-focused first milestones:
 | `cnn_v2_axi_lite_slave` | Software-visible v2 configuration, command, status, interrupt, diagnostic, and performance-counter register bank |
 | `cnn_image2image_system_top` | Integrates the v2 AXI-Lite control plane with the packetized AXI-Stream accelerator |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The AXI-Stream data plane and AXI-Lite control plane are integrated in an RTL system wrapper, but that wrapper is not yet integrated into a Zynq Vivado block design. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md), and the software register contract is defined in [v2_register_map.md](v2_register_map.md).
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The first BRAM-facing memory primitives are now present as replicated-bank activation and weight scratchpads with synchronous one-cycle reads; the remaining integration work is to retime the scheduler around those registered reads and replace the full-frame simulation arrays. The AXI-Stream data plane and AXI-Lite control plane are integrated in an RTL system wrapper, but that wrapper is not yet integrated into a Zynq Vivado block design. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md), and the software register contract is defined in [v2_register_map.md](v2_register_map.md).
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -129,6 +131,7 @@ The first `PC/PK` synthesis sweep is complete. The isolated compute slice meets 
 [v2_synthesis_experiments.md](v2_synthesis_experiments.md). The remaining milestones
 are:
 
-1. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
-2. Integrate `cnn_image2image_system_top` into a separate Zynq Vivado block design.
-3. Confirm the selected `PC=4`, `PK=8` configuration with full-design post-route timing.
+1. Retime the scheduler and tensor loaders around the banked BRAM scratchpad one-cycle read latency.
+2. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
+3. Integrate `cnn_image2image_system_top` into a separate Zynq Vivado block design.
+4. Confirm the selected `PC=4`, `PK=8` configuration with full-design post-route timing.
