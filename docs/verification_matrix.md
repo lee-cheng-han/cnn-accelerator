@@ -15,6 +15,8 @@
 | Unit RTL | `tb_v2_tiled_conv3x3_engine` | Covered | array-backed and banked-scratchpad-backed 3x3 operand paths |
 | Unit RTL | `tb_v2_single_layer_scheduler` | Covered | full-image array-backed and banked-scratchpad-backed scheduler paths |
 | Unit RTL | `tb_v2_banked_scratchpads` | Covered | one-cycle replicated-bank BRAM-style activation/weight scratchpad reads |
+| V2 golden RTL | `tb_v2_stream_loaded_full_network_golden_flow` | Covered | packet-loaded full 3-layer network with scratchpad-backed compute operands |
+| V2 golden RTL | `tb_v2_axi_stream_full_network_golden_flow` | Covered | Python golden tensors sent through packetized AXI-stream top and checked bit-for-bit |
 | Unit RTL | `tb_window_generator_3x3` | Covered | window tap ordering |
 | Unit RTL | `tb_streaming_window_buffer` | Covered | streaming 3x3 window generation |
 | Unit RTL | `tb_cnn_config_loader` | Covered | config, weight, and bias loading |

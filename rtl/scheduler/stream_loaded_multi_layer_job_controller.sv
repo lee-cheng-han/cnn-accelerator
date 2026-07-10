@@ -196,7 +196,8 @@ module stream_loaded_multi_layer_job_controller #(
     .BIAS_W(BIAS_W),
     .OUT_W(OUT_W),
     .COUNT_W(COUNT_W),
-    .DIM_W(DIM_W)
+    .DIM_W(DIM_W),
+    .ADDR_W(ADDR_W)
   ) u_multi_layer_job_controller (
     .clk(clk),
     .rst_n(rst_n),
@@ -212,6 +213,17 @@ module stream_loaded_multi_layer_job_controller #(
     .bias_l0(bias_l0),
     .bias_l1(bias_l1),
     .bias_l2(bias_l2),
+    .use_scratchpad_operands(1'b1),
+    .scratch_input_write_enable(act_write_enable),
+    .scratch_input_write_pixel(act_write_pixel),
+    .scratch_input_write_channel(act_write_channel),
+    .scratch_input_write_data(act_write_data),
+    .scratch_weight_write_enable(weight_write_enable),
+    .scratch_weight_write_layer(load_layer),
+    .scratch_weight_write_out_channel(weight_write_out_channel),
+    .scratch_weight_write_in_channel(weight_write_in_channel),
+    .scratch_weight_write_kernel_idx(weight_write_kernel_idx),
+    .scratch_weight_write_data(weight_write_data),
     .output_tensor(output_tensor),
     .active_layer(active_layer),
     .activation_read_bank(),

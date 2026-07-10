@@ -15,7 +15,8 @@ module multi_layer_job_controller #(
   parameter int BIAS_W      = 32,
   parameter int OUT_W       = 8,
   parameter int COUNT_W     = 8,
-  parameter int DIM_W       = 16
+  parameter int DIM_W       = 16,
+  parameter int ADDR_W      = 32
 )(
   input  logic clk,
   input  logic rst_n,
@@ -34,6 +35,18 @@ module multi_layer_job_controller #(
   input  logic signed [BIAS_W-1:0] bias_l1 [HIDDEN_C],
   input  logic signed [BIAS_W-1:0] bias_l2 [OUTPUT_C],
 
+  input  logic use_scratchpad_operands,
+  input  logic scratch_input_write_enable,
+  input  logic [ADDR_W-1:0] scratch_input_write_pixel,
+  input  logic [COUNT_W-1:0] scratch_input_write_channel,
+  input  logic signed [DATA_W-1:0] scratch_input_write_data,
+  input  logic scratch_weight_write_enable,
+  input  logic [1:0] scratch_weight_write_layer,
+  input  logic [COUNT_W-1:0] scratch_weight_write_out_channel,
+  input  logic [COUNT_W-1:0] scratch_weight_write_in_channel,
+  input  logic [3:0] scratch_weight_write_kernel_idx,
+  input  logic signed [DATA_W-1:0] scratch_weight_write_data,
+
   output logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT],
   output logic [1:0] active_layer,
   output logic activation_read_bank,
@@ -48,6 +61,7 @@ module multi_layer_job_controller #(
     S_START_LAYER,
     S_WAIT_LAYER,
     S_STORE_LAYER,
+    S_WRITE_SCRATCH,
     S_NEXT_LAYER,
     S_DONE
   } state_t;
@@ -79,8 +93,30 @@ module multi_layer_job_controller #(
   logic signed [DATA_W-1:0] scheduler_weights_3x3 [MAX_COUT][MAX_CIN][9];
   logic signed [BIAS_W-1:0] scheduler_bias [MAX_COUT];
   logic signed [OUT_W-1:0] scheduler_output [MAX_PIXELS*MAX_COUT];
-  logic signed [DATA_W-1:0] scratch_activation_lane_data_zero [PC];
-  logic signed [DATA_W-1:0] scratch_weight_mat_data_zero [PK][PC];
+  logic [ADDR_W-1:0] scratch_activation_read_pixel;
+  logic [COUNT_W-1:0] scratch_activation_read_c_base;
+  logic [PC-1:0] scratch_activation_lane_mask;
+  logic signed [DATA_W-1:0] scratch_activation_input_lane_data [PC];
+  logic signed [DATA_W-1:0] scratch_activation_feature0_lane_data [PC];
+  logic signed [DATA_W-1:0] scratch_activation_feature1_lane_data [PC];
+  logic signed [DATA_W-1:0] scheduler_scratch_activation_lane_data [PC];
+  logic [COUNT_W-1:0] scratch_weight_read_k_base;
+  logic [COUNT_W-1:0] scratch_weight_read_c_base;
+  logic [3:0] scratch_weight_read_kernel_idx;
+  logic [PK-1:0] scratch_weight_out_lane_mask;
+  logic [PC-1:0] scratch_weight_in_lane_mask;
+  logic signed [DATA_W-1:0] scratch_weight_l0_mat_data [PK][PC];
+  logic signed [DATA_W-1:0] scratch_weight_l1_mat_data [PK][PC];
+  logic signed [DATA_W-1:0] scratch_weight_l2_mat_data [PK][PC];
+  logic signed [DATA_W-1:0] scheduler_scratch_weight_mat_data [PK][PC];
+  logic [ADDR_W-1:0] scratch_store_pixel;
+  logic [COUNT_W-1:0] scratch_store_channel;
+  logic [ADDR_W-1:0] scratch_store_pixel_count;
+  logic scratch_store_valid;
+  logic scratch_store_last;
+  logic scratch_feature0_write_enable;
+  logic scratch_feature1_write_enable;
+  logic signed [DATA_W-1:0] scratch_feature_write_data;
 
   assign active_layer = layer_index;
   assign activation_read_bank = (layer_index == 2'd2);
@@ -90,6 +126,25 @@ module multi_layer_job_controller #(
   assign busy = (state != S_IDLE) && (state != S_DONE);
   assign scheduler_start =
     (state == S_START_LAYER) && descriptor_valid && current_layer_ready;
+  assign scratch_store_pixel_count =
+    ADDR_W'(image_width) * ADDR_W'(image_height);
+  assign scratch_store_valid =
+    use_scratchpad_operands &&
+    (state == S_WRITE_SCRATCH) &&
+    (layer_index != 2'd2) &&
+    (scratch_store_pixel < scratch_store_pixel_count) &&
+    (scratch_store_channel < desc_output_channels);
+  assign scratch_store_last =
+    scratch_store_valid &&
+    (scratch_store_pixel == (scratch_store_pixel_count - ADDR_W'(1))) &&
+    (scratch_store_channel == (desc_output_channels - COUNT_W'(1)));
+  assign scratch_feature0_write_enable = scratch_store_valid && (layer_index == 2'd0);
+  assign scratch_feature1_write_enable = scratch_store_valid && (layer_index == 2'd1);
+  assign scratch_feature_write_data =
+    scratch_store_valid ?
+    DATA_W'(scheduler_output[(scratch_store_pixel * ADDR_W'(MAX_COUT)) +
+                             ADDR_W'(scratch_store_channel)]) :
+    '0;
 
   always_comb begin
     unique case (layer_index)
@@ -208,15 +263,181 @@ module multi_layer_job_controller #(
     end
 
     for (int pc = 0; pc < PC; pc++) begin
-      scratch_activation_lane_data_zero[pc] = '0;
+      unique case (layer_index)
+        2'd0: scheduler_scratch_activation_lane_data[pc] =
+          scratch_activation_input_lane_data[pc];
+        2'd1: scheduler_scratch_activation_lane_data[pc] =
+          scratch_activation_feature0_lane_data[pc];
+        2'd2: scheduler_scratch_activation_lane_data[pc] =
+          scratch_activation_feature1_lane_data[pc];
+        default: scheduler_scratch_activation_lane_data[pc] = '0;
+      endcase
     end
 
     for (int pk = 0; pk < PK; pk++) begin
       for (int pc = 0; pc < PC; pc++) begin
-        scratch_weight_mat_data_zero[pk][pc] = '0;
+        unique case (layer_index)
+          2'd0: scheduler_scratch_weight_mat_data[pk][pc] =
+            scratch_weight_l0_mat_data[pk][pc];
+          2'd1: scheduler_scratch_weight_mat_data[pk][pc] =
+            scratch_weight_l1_mat_data[pk][pc];
+          2'd2: scheduler_scratch_weight_mat_data[pk][pc] =
+            scratch_weight_l2_mat_data[pk][pc];
+          default: scheduler_scratch_weight_mat_data[pk][pc] = '0;
+        endcase
       end
     end
   end
+
+  banked_activation_scratchpad #(
+    .PC(PC),
+    .MAX_PIXELS(MAX_PIXELS),
+    .MAX_C(MAX_CIN),
+    .DATA_W(DATA_W),
+    .DIM_W(DIM_W),
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
+  ) u_input_activation_scratchpad (
+    .clk(clk),
+    .write_enable(scratch_input_write_enable),
+    .write_pixel(scratch_input_write_pixel),
+    .write_channel(scratch_input_write_channel),
+    .write_data(scratch_input_write_data),
+    .read_pixel(scratch_activation_read_pixel),
+    .read_c_base(scratch_activation_read_c_base),
+    .lane_mask(scratch_activation_lane_mask),
+    .lane_data(scratch_activation_input_lane_data),
+    .debug_read_pixel('0),
+    .debug_read_channel('0),
+    .debug_read_data()
+  );
+
+  banked_activation_scratchpad #(
+    .PC(PC),
+    .MAX_PIXELS(MAX_PIXELS),
+    .MAX_C(MAX_CIN),
+    .DATA_W(DATA_W),
+    .DIM_W(DIM_W),
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
+  ) u_feature0_activation_scratchpad (
+    .clk(clk),
+    .write_enable(scratch_feature0_write_enable),
+    .write_pixel(scratch_store_pixel),
+    .write_channel(scratch_store_channel),
+    .write_data(scratch_feature_write_data),
+    .read_pixel(scratch_activation_read_pixel),
+    .read_c_base(scratch_activation_read_c_base),
+    .lane_mask(scratch_activation_lane_mask),
+    .lane_data(scratch_activation_feature0_lane_data),
+    .debug_read_pixel('0),
+    .debug_read_channel('0),
+    .debug_read_data()
+  );
+
+  banked_activation_scratchpad #(
+    .PC(PC),
+    .MAX_PIXELS(MAX_PIXELS),
+    .MAX_C(MAX_CIN),
+    .DATA_W(DATA_W),
+    .DIM_W(DIM_W),
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
+  ) u_feature1_activation_scratchpad (
+    .clk(clk),
+    .write_enable(scratch_feature1_write_enable),
+    .write_pixel(scratch_store_pixel),
+    .write_channel(scratch_store_channel),
+    .write_data(scratch_feature_write_data),
+    .read_pixel(scratch_activation_read_pixel),
+    .read_c_base(scratch_activation_read_c_base),
+    .lane_mask(scratch_activation_lane_mask),
+    .lane_data(scratch_activation_feature1_lane_data),
+    .debug_read_pixel('0),
+    .debug_read_channel('0),
+    .debug_read_data()
+  );
+
+  banked_weight_scratchpad #(
+    .PC(PC),
+    .PK(PK),
+    .MAX_CIN(MAX_CIN),
+    .MAX_COUT(MAX_COUT),
+    .DATA_W(DATA_W),
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
+  ) u_weight_l0_scratchpad (
+    .clk(clk),
+    .write_enable(scratch_weight_write_enable && (scratch_weight_write_layer == 2'd0)),
+    .write_out_channel(scratch_weight_write_out_channel),
+    .write_in_channel(scratch_weight_write_in_channel),
+    .write_kernel_idx(scratch_weight_write_kernel_idx),
+    .write_data(scratch_weight_write_data),
+    .read_k_base(scratch_weight_read_k_base),
+    .read_c_base(scratch_weight_read_c_base),
+    .read_kernel_idx(scratch_weight_read_kernel_idx),
+    .out_lane_mask(scratch_weight_out_lane_mask),
+    .in_lane_mask(scratch_weight_in_lane_mask),
+    .weight_mat(scratch_weight_l0_mat_data),
+    .debug_out_channel('0),
+    .debug_in_channel('0),
+    .debug_kernel_idx('0),
+    .debug_read_data()
+  );
+
+  banked_weight_scratchpad #(
+    .PC(PC),
+    .PK(PK),
+    .MAX_CIN(MAX_CIN),
+    .MAX_COUT(MAX_COUT),
+    .DATA_W(DATA_W),
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
+  ) u_weight_l1_scratchpad (
+    .clk(clk),
+    .write_enable(scratch_weight_write_enable && (scratch_weight_write_layer == 2'd1)),
+    .write_out_channel(scratch_weight_write_out_channel),
+    .write_in_channel(scratch_weight_write_in_channel),
+    .write_kernel_idx(scratch_weight_write_kernel_idx),
+    .write_data(scratch_weight_write_data),
+    .read_k_base(scratch_weight_read_k_base),
+    .read_c_base(scratch_weight_read_c_base),
+    .read_kernel_idx(scratch_weight_read_kernel_idx),
+    .out_lane_mask(scratch_weight_out_lane_mask),
+    .in_lane_mask(scratch_weight_in_lane_mask),
+    .weight_mat(scratch_weight_l1_mat_data),
+    .debug_out_channel('0),
+    .debug_in_channel('0),
+    .debug_kernel_idx('0),
+    .debug_read_data()
+  );
+
+  banked_weight_scratchpad #(
+    .PC(PC),
+    .PK(PK),
+    .MAX_CIN(MAX_CIN),
+    .MAX_COUT(MAX_COUT),
+    .DATA_W(DATA_W),
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
+  ) u_weight_l2_scratchpad (
+    .clk(clk),
+    .write_enable(scratch_weight_write_enable && (scratch_weight_write_layer == 2'd2)),
+    .write_out_channel(scratch_weight_write_out_channel),
+    .write_in_channel(scratch_weight_write_in_channel),
+    .write_kernel_idx(scratch_weight_write_kernel_idx),
+    .write_data(scratch_weight_write_data),
+    .read_k_base(scratch_weight_read_k_base),
+    .read_c_base(scratch_weight_read_c_base),
+    .read_kernel_idx(scratch_weight_read_kernel_idx),
+    .out_lane_mask(scratch_weight_out_lane_mask),
+    .in_lane_mask(scratch_weight_in_lane_mask),
+    .weight_mat(scratch_weight_l2_mat_data),
+    .debug_out_channel('0),
+    .debug_in_channel('0),
+    .debug_kernel_idx('0),
+    .debug_read_data()
+  );
 
   single_layer_scheduler #(
     .PC(PC),
@@ -230,7 +451,8 @@ module multi_layer_job_controller #(
     .BIAS_W(BIAS_W),
     .OUT_W(OUT_W),
     .COUNT_W(COUNT_W),
-    .DIM_W(DIM_W)
+    .DIM_W(DIM_W),
+    .ADDR_W(ADDR_W)
   ) u_single_layer_scheduler (
     .clk(clk),
     .rst_n(rst_n),
@@ -252,17 +474,17 @@ module multi_layer_job_controller #(
     .weights_1x1(scheduler_weights_1x1),
     .weights_3x3(scheduler_weights_3x3),
     .bias(scheduler_bias),
-    .use_scratchpad_operands(1'b0),
-    .scratch_activation_read_pixel(),
-    .scratch_activation_read_c_base(),
-    .scratch_activation_lane_mask(),
-    .scratch_activation_lane_data(scratch_activation_lane_data_zero),
-    .scratch_weight_read_k_base(),
-    .scratch_weight_read_c_base(),
-    .scratch_weight_read_kernel_idx(),
-    .scratch_weight_out_lane_mask(),
-    .scratch_weight_in_lane_mask(),
-    .scratch_weight_mat_data(scratch_weight_mat_data_zero),
+    .use_scratchpad_operands(use_scratchpad_operands),
+    .scratch_activation_read_pixel(scratch_activation_read_pixel),
+    .scratch_activation_read_c_base(scratch_activation_read_c_base),
+    .scratch_activation_lane_mask(scratch_activation_lane_mask),
+    .scratch_activation_lane_data(scheduler_scratch_activation_lane_data),
+    .scratch_weight_read_k_base(scratch_weight_read_k_base),
+    .scratch_weight_read_c_base(scratch_weight_read_c_base),
+    .scratch_weight_read_kernel_idx(scratch_weight_read_kernel_idx),
+    .scratch_weight_out_lane_mask(scratch_weight_out_lane_mask),
+    .scratch_weight_in_lane_mask(scratch_weight_in_lane_mask),
+    .scratch_weight_mat_data(scheduler_scratch_weight_mat_data),
     .output_tensor(scheduler_output),
     .current_x(),
     .current_y(),
@@ -274,6 +496,8 @@ module multi_layer_job_controller #(
     if (!rst_n) begin
       state <= S_IDLE;
       layer_index <= '0;
+      scratch_store_pixel <= '0;
+      scratch_store_channel <= '0;
       done <= 1'b0;
 
       for (int i = 0; i < MAX_PIXELS*MAX_CIN; i++) begin
@@ -338,7 +562,33 @@ module multi_layer_job_controller #(
             end
           end
 
-          state <= S_NEXT_LAYER;
+          scratch_store_pixel <= '0;
+          scratch_store_channel <= '0;
+          if (use_scratchpad_operands &&
+              (layer_index != 2'd2) &&
+              (scratch_store_pixel_count != '0) &&
+              (desc_output_channels != '0)) begin
+            state <= S_WRITE_SCRATCH;
+          end else begin
+            state <= S_NEXT_LAYER;
+          end
+        end
+
+        S_WRITE_SCRATCH: begin
+          if (scratch_store_last) begin
+            scratch_store_pixel <= '0;
+            scratch_store_channel <= '0;
+            state <= S_NEXT_LAYER;
+          end else if (scratch_store_valid) begin
+            if (scratch_store_channel == (desc_output_channels - COUNT_W'(1))) begin
+              scratch_store_channel <= '0;
+              scratch_store_pixel <= scratch_store_pixel + ADDR_W'(1);
+            end else begin
+              scratch_store_channel <= scratch_store_channel + COUNT_W'(1);
+            end
+          end else begin
+            state <= S_NEXT_LAYER;
+          end
         end
 
         S_NEXT_LAYER: begin

@@ -257,8 +257,9 @@ Current tests that enforce this contract:
 | `tb_v2_output_store_controller` | Output stream order, backpressure, `last`, zero-length, and config errors |
 | `tb_v2_multi_layer_job_controller` | Per-layer readiness stalls and activation-bank handoff |
 | `tb_v2_stream_loaded_multi_layer_job_controller` | Full stream-load, parameter/compute overlap, readiness completion, and stream-store identity network |
-| `tb_v2_stream_loaded_full_network_golden_flow` | Generated Python tensors streamed through the full v2 wrapper and checked bit-for-bit |
+| `tb_v2_stream_loaded_full_network_golden_flow` | Generated Python tensors streamed through the logical stream-loaded controller and checked bit-for-bit |
 | `tb_v2_axi_stream_top` | Seven-packet AXI job, backpressure, packet order/length errors, invalid dimensions, and repeated start |
+| `tb_v2_axi_stream_full_network_golden_flow` | Generated Python tensors sent as seven AXI packets through the packet router/top-level stream wrapper and checked bit-for-bit |
 | `tb_v2_performance_counters` | Exact cycle classification, transfer/stall counts, completion, and reset behavior |
 | `tb_v2_axi_lite_slave` | Register access, byte strobes, split write channels, command pulses, read-only errors, interrupts, and counter snapshots |
 | `tb_v2_image2image_system_top` | AXI-Lite configuration/start/clear integrated with AXI-Stream protocol-error and interrupt propagation |
