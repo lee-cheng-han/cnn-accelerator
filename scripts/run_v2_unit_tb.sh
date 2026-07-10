@@ -61,7 +61,9 @@ xvlog -sv -L work \
   ../../rtl/scheduler/single_layer_scheduler.sv \
   ../../rtl/scheduler/multi_layer_job_controller.sv \
   ../../rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
+  ../../rtl/zynq/cnn_v2_axi_lite_slave.sv \
   ../../rtl/zynq/cnn_image2image_axi_stream_top.sv \
+  ../../rtl/zynq/cnn_image2image_system_top.sv \
   ../../${TB_FILE}
 
 echo "[XSim] Elaborating $TB_NAME"

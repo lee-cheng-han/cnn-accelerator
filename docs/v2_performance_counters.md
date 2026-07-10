@@ -41,4 +41,6 @@ For the fixed default network, a complete input contains:
 + 3  + (3 * 16 * 9) layer 2 parameter words
 ```
 
-The counters are direct top-level outputs today. The planned v2 AXI-Lite control block will expose the same snapshot through read-only registers.
+The counters are exposed directly by the stream top and through read-only
+AXI-Lite registers in `cnn_v2_axi_lite_slave`. See
+[v2_register_map.md](v2_register_map.md) for offsets.

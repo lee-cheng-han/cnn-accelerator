@@ -1,6 +1,6 @@
 # V2 Stream Interface Contract
 
-This document defines the stream contract for the experimental v2 image-to-image CNN path. It describes the current simulation-facing interface on `stream_loaded_multi_layer_job_controller` and the intended mapping to a future AXI-facing wrapper.
+This document defines the stream contract for the experimental v2 image-to-image CNN path. It covers the logical streams on `stream_loaded_multi_layer_job_controller` and their packetized AXI mapping in `cnn_image2image_axi_stream_top`.
 
 The current v2 wrapper uses four logical ready/valid streams:
 
@@ -260,6 +260,8 @@ Current tests that enforce this contract:
 | `tb_v2_stream_loaded_full_network_golden_flow` | Generated Python tensors streamed through the full v2 wrapper and checked bit-for-bit |
 | `tb_v2_axi_stream_top` | Seven-packet AXI job, backpressure, packet order/length errors, invalid dimensions, and repeated start |
 | `tb_v2_performance_counters` | Exact cycle classification, transfer/stall counts, completion, and reset behavior |
+| `tb_v2_axi_lite_slave` | Register access, byte strobes, split write channels, command pulses, read-only errors, interrupts, and counter snapshots |
+| `tb_v2_image2image_system_top` | AXI-Lite configuration/start/clear integrated with AXI-Stream protocol-error and interrupt propagation |
 
 Run:
 

@@ -106,6 +106,8 @@ Current v2 status:
 - Multi-layer job controller that sequences the three denoising layers through one reusable scheduler, alternates intermediate feature-map banks, waits for per-layer parameter readiness, and optionally performs final residual subtraction.
 - Stream-loaded multi-layer job wrapper that starts compute after layer 0 is loaded, prefetches layer 1/2 parameters during compute, and streams final image output with backpressure.
 - AXI-Stream v2 top-level wrapper with a single packetized tensor input, signed 32-bit output words, packet order/length validation, and protocol error reporting.
+- AXI-Lite v2 control/status bank with image configuration, command pulses, sticky interrupts, diagnostics, and software-readable performance counters.
+- Integrated v2 RTL system wrapper combining the AXI-Lite control plane and packetized AXI-Stream data plane.
 - V2 performance counters for total latency, packet ingestion, scheduler activity, prefetch overlap, per-layer cycles, stream transfers, and backpressure.
 - Reproducible out-of-context synthesis sweep for `PC/PK` scaling at 125 MHz; `PC=4`, `PK=8` provides 32 MACs/cycle with positive post-synthesis timing slack.
 - Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
@@ -123,7 +125,7 @@ make v2-unit
 make v2-synth-sweep
 ```
 
-See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md), [docs/v2_stream_interface.md](docs/v2_stream_interface.md), [docs/v2_performance_counters.md](docs/v2_performance_counters.md), and [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md).
+See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md), [docs/v2_stream_interface.md](docs/v2_stream_interface.md), [docs/v2_register_map.md](docs/v2_register_map.md), [docs/v2_performance_counters.md](docs/v2_performance_counters.md), and [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md).
 
 ## Convolution Modes
 
@@ -344,6 +346,7 @@ Kernel mode = 3x3
 | [docs/assets/arty_z7_dma_architecture.svg](docs/assets/arty_z7_dma_architecture.svg) | Generated architecture visual for portfolio/readme use |
 | [docs/verification_matrix.md](docs/verification_matrix.md) | What has been tested and what remains |
 | [docs/performance_analysis.md](docs/performance_analysis.md) | Throughput, latency, resource, and scaling analysis |
+| [docs/v2_register_map.md](docs/v2_register_map.md) | V2 AXI-Lite software register and interrupt contract |
 | [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md) | Reproducible v2 PC/PK synthesis tradeoff results |
 | [docs/pre_board_checklist.md](docs/pre_board_checklist.md) | Work to complete before hardware arrives |
 | [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md) | Board programming and debug checklist |

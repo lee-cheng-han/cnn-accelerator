@@ -82,8 +82,10 @@ Chunks 4-6 have simulation-focused first milestones:
 | `v2_tensor_packet_router` | Converts one 32-bit AXI input stream into ordered activation, bias, and weight streams while validating headers, lengths, and `TLAST` |
 | `cnn_image2image_axi_stream_top` | Connects the packet router, multi-layer scheduler stack, and sign-extended 32-bit AXI output stream with job status and protocol errors |
 | `v2_performance_counters` | Captures job, packet, compute, prefetch, layer, transfer, and backpressure cycles for the most recently started job |
+| `cnn_v2_axi_lite_slave` | Software-visible v2 configuration, command, status, interrupt, diagnostic, and performance-counter register bank |
+| `cnn_image2image_system_top` | Integrates the v2 AXI-Lite control plane with the packetized AXI-Stream accelerator |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The AXI-Stream top now proves a concrete packetized data-plane boundary, but it is not yet integrated into the Zynq block design or controlled by a v2 AXI-Lite register bank. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md).
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The AXI-Stream data plane and AXI-Lite control plane are integrated in an RTL system wrapper, but that wrapper is not yet integrated into a Zynq Vivado block design. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md), and the software register contract is defined in [v2_register_map.md](v2_register_map.md).
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -127,6 +129,6 @@ The first `PC/PK` synthesis sweep is complete. The isolated compute slice meets 
 [v2_synthesis_experiments.md](v2_synthesis_experiments.md). The remaining milestones
 are:
 
-1. Add a v2 AXI-Lite control/status register block and integrate the AXI-Stream top into a separate Vivado block design.
-2. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
+1. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
+2. Integrate `cnn_image2image_system_top` into a separate Zynq Vivado block design.
 3. Confirm the selected `PC=4`, `PK=8` configuration with full-design post-route timing.

@@ -17,7 +17,9 @@ TESTS=(
   tb_v2_multi_layer_job_controller
   tb_v2_stream_loaded_multi_layer_job_controller
   tb_v2_performance_counters
+  tb_v2_axi_lite_slave
   tb_v2_axi_stream_top
+  tb_v2_image2image_system_top
 )
 
 for tb in "${TESTS[@]}"; do
