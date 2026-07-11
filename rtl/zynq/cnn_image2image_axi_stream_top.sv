@@ -149,7 +149,10 @@ module cnn_image2image_axi_stream_top #(
     .OUT_W(OUT_W),
     .COUNT_W(COUNT_W),
     .DIM_W(DIM_W),
-    .ADDR_W(ADDR_W)
+    .ADDR_W(ADDR_W),
+    .MIRROR_LOADED_WEIGHTS(0),
+    .STREAM_INTERMEDIATE_OUTPUTS(1),
+    .DIRECT_STREAM_FINAL_OUTPUTS(1)
   ) u_stream_loaded_multi_layer_job_controller (
     .clk(aclk),
     .rst_n(core_reset_n),

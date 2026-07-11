@@ -51,6 +51,7 @@ module tiled_conv1x1_engine #(
     S_IDLE,
     S_CLEAR,
     S_FETCH,
+    S_READ,
     S_CAPTURE,
     S_ISSUE,
     S_WAIT_MAC,
@@ -66,6 +67,14 @@ module tiled_conv1x1_engine #(
 
   logic [PC-1:0] cin_lane_mask;
   logic [PK-1:0] cout_lane_mask;
+  logic [ADDR_W-1:0] scratch_activation_read_pixel_q;
+  logic [COUNT_W-1:0] scratch_activation_read_c_base_q;
+  logic [PC-1:0] scratch_activation_lane_mask_q;
+  logic [COUNT_W-1:0] scratch_weight_read_k_base_q;
+  logic [COUNT_W-1:0] scratch_weight_read_c_base_q;
+  logic [3:0] scratch_weight_read_kernel_idx_q;
+  logic [PK-1:0] scratch_weight_out_lane_mask_q;
+  logic [PC-1:0] scratch_weight_in_lane_mask_q;
 
   logic signed [DATA_W-1:0] mac_act_vec_comb [PC];
   logic signed [DATA_W-1:0] mac_weight_mat_comb [PK][PC];
@@ -133,14 +142,14 @@ module tiled_conv1x1_engine #(
     end
   end
 
-  assign scratch_activation_read_pixel   = scratch_activation_pixel;
-  assign scratch_activation_read_c_base  = c_base;
-  assign scratch_activation_lane_mask    = cin_lane_mask;
-  assign scratch_weight_read_k_base      = k_base;
-  assign scratch_weight_read_c_base      = c_base;
-  assign scratch_weight_read_kernel_idx  = 4'd0;
-  assign scratch_weight_out_lane_mask    = cout_lane_mask;
-  assign scratch_weight_in_lane_mask     = cin_lane_mask;
+  assign scratch_activation_read_pixel   = scratch_activation_read_pixel_q;
+  assign scratch_activation_read_c_base  = scratch_activation_read_c_base_q;
+  assign scratch_activation_lane_mask    = scratch_activation_lane_mask_q;
+  assign scratch_weight_read_k_base      = scratch_weight_read_k_base_q;
+  assign scratch_weight_read_c_base      = scratch_weight_read_c_base_q;
+  assign scratch_weight_read_kernel_idx  = scratch_weight_read_kernel_idx_q;
+  assign scratch_weight_out_lane_mask    = scratch_weight_out_lane_mask_q;
+  assign scratch_weight_in_lane_mask     = scratch_weight_in_lane_mask_q;
 
   always_comb begin
     for (int pc = 0; pc < PC; pc++) begin
@@ -241,6 +250,14 @@ module tiled_conv1x1_engine #(
       c_base <= '0;
       k_base <= '0;
       done   <= 1'b0;
+      scratch_activation_read_pixel_q <= '0;
+      scratch_activation_read_c_base_q <= '0;
+      scratch_activation_lane_mask_q <= '0;
+      scratch_weight_read_k_base_q <= '0;
+      scratch_weight_read_c_base_q <= '0;
+      scratch_weight_read_kernel_idx_q <= '0;
+      scratch_weight_out_lane_mask_q <= '0;
+      scratch_weight_in_lane_mask_q <= '0;
 
       for (int co = 0; co < MAX_COUT; co++) begin
         output_data[co] <= '0;
@@ -272,6 +289,18 @@ module tiled_conv1x1_engine #(
         end
 
         S_FETCH: begin
+          scratch_activation_read_pixel_q <= scratch_activation_pixel;
+          scratch_activation_read_c_base_q <= c_base;
+          scratch_activation_lane_mask_q <= cin_lane_mask;
+          scratch_weight_read_k_base_q <= k_base;
+          scratch_weight_read_c_base_q <= c_base;
+          scratch_weight_read_kernel_idx_q <= 4'd0;
+          scratch_weight_out_lane_mask_q <= cout_lane_mask;
+          scratch_weight_in_lane_mask_q <= cin_lane_mask;
+          state <= S_READ;
+        end
+
+        S_READ: begin
           state <= S_CAPTURE;
         end
 

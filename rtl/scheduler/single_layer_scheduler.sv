@@ -13,7 +13,8 @@ module single_layer_scheduler #(
   parameter int OUT_W      = 8,
   parameter int COUNT_W    = 8,
   parameter int DIM_W      = 16,
-  parameter int ADDR_W     = 32
+  parameter int ADDR_W     = 32,
+  parameter int MIRROR_OUTPUT_TENSOR = 1
 )(
   input  logic clk,
   input  logic rst_n,
@@ -52,6 +53,12 @@ module single_layer_scheduler #(
   input  logic signed [DATA_W-1:0] scratch_weight_mat_data [PK][PC],
 
   output logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT],
+  output logic output_pixel_valid,
+  input  logic output_pixel_ready,
+  output logic [ADDR_W-1:0] output_pixel_index,
+  output logic [COUNT_W-1:0] output_pixel_channels,
+  output logic signed [OUT_W-1:0] output_pixel_data [MAX_COUT],
+  output logic output_pixel_last,
   output logic [DIM_W-1:0] current_x,
   output logic [DIM_W-1:0] current_y,
   output logic busy,
@@ -72,7 +79,7 @@ module single_layer_scheduler #(
   logic [DIM_W-1:0] out_x;
   logic [DIM_W-1:0] out_y;
   logic [31:0] input_pixel_index_1x1;
-  logic [31:0] output_pixel_index;
+  logic [31:0] output_pixel_index_calc;
 
   logic start_1x1;
   logic start_3x3;
@@ -108,7 +115,7 @@ module single_layer_scheduler #(
   assign start_3x3 = (state == S_START_PIXEL) && (kernel_size == 2'd3);
   assign input_pixel_index_1x1 = ((out_y * DIM_W'(stride)) * input_width) +
                                  (out_x * DIM_W'(stride));
-  assign output_pixel_index = (out_y * output_width) + out_x;
+  assign output_pixel_index_calc = (out_y * output_width) + out_x;
   assign scratch_activation_read_pixel =
     (kernel_size == 2'd1) ? scratch_activation_read_pixel_1x1 :
     scratch_activation_read_pixel_3x3;
@@ -133,6 +140,19 @@ module single_layer_scheduler #(
   assign scratch_weight_in_lane_mask =
     (kernel_size == 2'd1) ? scratch_weight_in_lane_mask_1x1 :
     scratch_weight_in_lane_mask_3x3;
+  assign output_pixel_valid = (state == S_WRITE_PIXEL);
+  assign output_pixel_index = ADDR_W'(output_pixel_index_calc);
+  assign output_pixel_channels = cout;
+  assign output_pixel_last =
+    (state == S_WRITE_PIXEL) &&
+    ((out_x + DIM_W'(1)) >= output_width) &&
+    ((out_y + DIM_W'(1)) >= output_height);
+
+  always_comb begin
+    for (int co = 0; co < MAX_COUT; co++) begin
+      output_pixel_data[co] = (kernel_size == 2'd1) ? output_1x1[co] : output_3x3[co];
+    end
+  end
 
   always_comb begin
     for (int ci = 0; ci < MAX_CIN; ci++) begin
@@ -240,8 +260,10 @@ module single_layer_scheduler #(
       out_y <= '0;
       done  <= 1'b0;
 
-      for (int i = 0; i < MAX_PIXELS*MAX_COUT; i++) begin
-        output_tensor[i] <= '0;
+      if (MIRROR_OUTPUT_TENSOR) begin
+        for (int i = 0; i < MAX_PIXELS*MAX_COUT; i++) begin
+          output_tensor[i] <= '0;
+        end
       end
     end else begin
       done <= 1'b0;
@@ -269,16 +291,20 @@ module single_layer_scheduler #(
         end
 
         S_WRITE_PIXEL: begin
-          for (int co = 0; co < MAX_COUT; co++) begin
-            if ((co < cout) &&
-                (output_pixel_index < 32'(MAX_PIXELS)) &&
-                (((output_pixel_index * 32'(MAX_COUT)) + 32'(co)) <
-                 32'(MAX_PIXELS*MAX_COUT))) begin
-              output_tensor[(output_pixel_index * 32'(MAX_COUT)) + 32'(co)] <=
-                (kernel_size == 2'd1) ? output_1x1[co] : output_3x3[co];
+          if (output_pixel_ready) begin
+            if (MIRROR_OUTPUT_TENSOR) begin
+              for (int co = 0; co < MAX_COUT; co++) begin
+                if ((co < cout) &&
+                    (output_pixel_index_calc < 32'(MAX_PIXELS)) &&
+                    (((output_pixel_index_calc * 32'(MAX_COUT)) + 32'(co)) <
+                     32'(MAX_PIXELS*MAX_COUT))) begin
+                  output_tensor[(output_pixel_index_calc * 32'(MAX_COUT)) + 32'(co)] <=
+                    (kernel_size == 2'd1) ? output_1x1[co] : output_3x3[co];
+                end
+              end
             end
+            state <= S_NEXT_PIXEL;
           end
-          state <= S_NEXT_PIXEL;
         end
 
         S_NEXT_PIXEL: begin

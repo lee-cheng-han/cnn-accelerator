@@ -16,7 +16,10 @@ module stream_loaded_multi_layer_job_controller #(
   parameter int OUT_W       = 8,
   parameter int COUNT_W     = 8,
   parameter int DIM_W       = 16,
-  parameter int ADDR_W      = 32
+  parameter int ADDR_W      = 32,
+  parameter int MIRROR_LOADED_WEIGHTS = 1,
+  parameter int STREAM_INTERMEDIATE_OUTPUTS = 0,
+  parameter int DIRECT_STREAM_FINAL_OUTPUTS = 0
 )(
   input  logic clk,
   input  logic rst_n,
@@ -100,6 +103,20 @@ module stream_loaded_multi_layer_job_controller #(
   logic signed [BIAS_W-1:0] bias_l1 [HIDDEN_C];
   logic signed [BIAS_W-1:0] bias_l2 [OUTPUT_C];
   logic signed [OUT_W-1:0] output_tensor [MAX_PIXELS*MAX_COUT];
+  logic store_output_stream_valid;
+  logic signed [OUT_W-1:0] store_output_stream_data;
+  logic store_output_stream_last;
+  logic direct_output_pixel_valid;
+  logic direct_output_pixel_ready;
+  logic [ADDR_W-1:0] direct_output_pixel_index;
+  logic [COUNT_W-1:0] direct_output_pixel_channels;
+  logic signed [OUT_W-1:0] direct_output_pixel_data [MAX_COUT];
+  logic direct_output_pixel_last;
+  logic direct_output_pending;
+  logic direct_output_last;
+  logic direct_compute_complete;
+  logic [COUNT_W-1:0] direct_output_channel;
+  logic signed [OUT_W-1:0] direct_output_data [MAX_COUT];
   logic [COUNT_W-1:0] bias_index;
   logic [COUNT_W-1:0] bias_count;
   logic bias_transfer;
@@ -116,6 +133,22 @@ module stream_loaded_multi_layer_job_controller #(
   assign bias_stream_ready = (state == S_LOAD_BIAS);
   assign bias_transfer = bias_stream_valid && bias_stream_ready;
   assign last_bias = bias_index == (bias_count - COUNT_W'(1));
+  assign direct_output_pixel_ready =
+    (DIRECT_STREAM_FINAL_OUTPUTS != 0) &&
+    (state == S_WAIT_COMPUTE) &&
+    !direct_output_pending;
+  assign output_stream_valid =
+    (DIRECT_STREAM_FINAL_OUTPUTS != 0) ? direct_output_pending : store_output_stream_valid;
+  assign output_stream_data =
+    (DIRECT_STREAM_FINAL_OUTPUTS != 0) ?
+      direct_output_data[direct_output_channel] :
+      store_output_stream_data;
+  assign output_stream_last =
+    (DIRECT_STREAM_FINAL_OUTPUTS != 0) ?
+      (direct_output_pending &&
+       direct_output_last &&
+       (direct_output_channel == (COUNT_W'(OUTPUT_C) - COUNT_W'(1)))) :
+      store_output_stream_last;
   assign prefetch_active =
     compute_busy && (load_layer != 2'd0) &&
     ((state == S_START_BIAS) || (state == S_LOAD_BIAS) ||
@@ -197,7 +230,11 @@ module stream_loaded_multi_layer_job_controller #(
     .OUT_W(OUT_W),
     .COUNT_W(COUNT_W),
     .DIM_W(DIM_W),
-    .ADDR_W(ADDR_W)
+    .ADDR_W(ADDR_W),
+    .DIRECT_ARRAY_OPERANDS(0),
+    .MIRROR_SCHEDULER_OUTPUT(DIRECT_STREAM_FINAL_OUTPUTS == 0),
+    .STREAM_INTERMEDIATE_OUTPUTS(STREAM_INTERMEDIATE_OUTPUTS),
+    .STREAM_FINAL_OUTPUTS(DIRECT_STREAM_FINAL_OUTPUTS)
   ) u_multi_layer_job_controller (
     .clk(clk),
     .rst_n(rst_n),
@@ -225,6 +262,12 @@ module stream_loaded_multi_layer_job_controller #(
     .scratch_weight_write_kernel_idx(weight_write_kernel_idx),
     .scratch_weight_write_data(weight_write_data),
     .output_tensor(output_tensor),
+    .output_pixel_valid(direct_output_pixel_valid),
+    .output_pixel_ready(direct_output_pixel_ready),
+    .output_pixel_index(direct_output_pixel_index),
+    .output_pixel_channels(direct_output_pixel_channels),
+    .output_pixel_data(direct_output_pixel_data),
+    .output_pixel_last(direct_output_pixel_last),
     .active_layer(active_layer),
     .activation_read_bank(),
     .activation_write_bank(),
@@ -248,10 +291,10 @@ module stream_loaded_multi_layer_job_controller #(
     .height(image_height),
     .channels(COUNT_W'(OUTPUT_C)),
     .output_tensor(output_tensor),
-    .stream_valid(output_stream_valid),
+    .stream_valid(store_output_stream_valid),
     .stream_ready(output_stream_ready),
-    .stream_data(output_stream_data),
-    .stream_last(output_stream_last),
+    .stream_data(store_output_stream_data),
+    .stream_last(store_output_stream_last),
     .stream_pixel(),
     .stream_channel(),
     .busy(),
@@ -269,6 +312,14 @@ module stream_loaded_multi_layer_job_controller #(
       loaded_error <= 1'b0;
       weight_layers_ready <= 3'b000;
       prefetch_seen <= 1'b0;
+      direct_output_pending <= 1'b0;
+      direct_output_last <= 1'b0;
+      direct_compute_complete <= 1'b0;
+      direct_output_channel <= '0;
+
+      for (int c = 0; c < MAX_COUT; c++) begin
+        direct_output_data[c] <= '0;
+      end
 
       for (int i = 0; i < MAX_PIXELS*MAX_CIN; i++) begin
         input_tensor[i] <= '0;
@@ -278,15 +329,17 @@ module stream_loaded_multi_layer_job_controller #(
         bias_l0[co] <= '0;
         bias_l1[co] <= '0;
 
-        for (int ci = 0; ci < INPUT_C; ci++) begin
-          for (int k = 0; k < 9; k++) begin
-            weights_l0[co][ci][k] <= '0;
+        if (MIRROR_LOADED_WEIGHTS != 0) begin
+          for (int ci = 0; ci < INPUT_C; ci++) begin
+            for (int k = 0; k < 9; k++) begin
+              weights_l0[co][ci][k] <= '0;
+            end
           end
-        end
 
-        for (int ci = 0; ci < HIDDEN_C; ci++) begin
-          for (int k = 0; k < 9; k++) begin
-            weights_l1[co][ci][k] <= '0;
+          for (int ci = 0; ci < HIDDEN_C; ci++) begin
+            for (int k = 0; k < 9; k++) begin
+              weights_l1[co][ci][k] <= '0;
+            end
           end
         end
       end
@@ -294,9 +347,11 @@ module stream_loaded_multi_layer_job_controller #(
       for (int co = 0; co < OUTPUT_C; co++) begin
         bias_l2[co] <= '0;
 
-        for (int ci = 0; ci < HIDDEN_C; ci++) begin
-          for (int k = 0; k < 9; k++) begin
-            weights_l2[co][ci][k] <= '0;
+        if (MIRROR_LOADED_WEIGHTS != 0) begin
+          for (int ci = 0; ci < HIDDEN_C; ci++) begin
+            for (int k = 0; k < 9; k++) begin
+              weights_l2[co][ci][k] <= '0;
+            end
           end
         end
       end
@@ -304,6 +359,34 @@ module stream_loaded_multi_layer_job_controller #(
       done <= 1'b0;
       if (prefetch_active) begin
         prefetch_seen <= 1'b1;
+      end
+
+      if ((DIRECT_STREAM_FINAL_OUTPUTS != 0) && compute_done) begin
+        direct_compute_complete <= 1'b1;
+      end
+
+      if ((DIRECT_STREAM_FINAL_OUTPUTS != 0) &&
+          direct_output_pending &&
+          output_stream_ready) begin
+        if (direct_output_channel == (COUNT_W'(OUTPUT_C) - COUNT_W'(1))) begin
+          direct_output_pending <= 1'b0;
+          direct_output_channel <= '0;
+          direct_output_last <= 1'b0;
+        end else begin
+          direct_output_channel <= direct_output_channel + COUNT_W'(1);
+        end
+      end
+
+      if ((DIRECT_STREAM_FINAL_OUTPUTS != 0) &&
+          direct_output_pixel_valid &&
+          direct_output_pixel_ready) begin
+        direct_output_pending <= 1'b1;
+        direct_output_last <= direct_output_pixel_last;
+        direct_output_channel <= '0;
+
+        for (int c = 0; c < MAX_COUT; c++) begin
+          direct_output_data[c] <= direct_output_pixel_data[c];
+        end
       end
 
       if (act_write_enable) begin
@@ -320,33 +403,35 @@ module stream_loaded_multi_layer_job_controller #(
       end
 
       if (weight_write_enable) begin
-        unique case (load_layer)
-          2'd0: begin
-            if ((weight_write_out_channel < COUNT_W'(HIDDEN_C)) &&
-                (weight_write_in_channel < COUNT_W'(INPUT_C))) begin
-              weights_l0[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
-                weight_write_data;
+        if (MIRROR_LOADED_WEIGHTS != 0) begin
+          unique case (load_layer)
+            2'd0: begin
+              if ((weight_write_out_channel < COUNT_W'(HIDDEN_C)) &&
+                  (weight_write_in_channel < COUNT_W'(INPUT_C))) begin
+                weights_l0[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
+                  weight_write_data;
+              end
             end
-          end
 
-          2'd1: begin
-            if ((weight_write_out_channel < COUNT_W'(HIDDEN_C)) &&
-                (weight_write_in_channel < COUNT_W'(HIDDEN_C))) begin
-              weights_l1[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
-                weight_write_data;
+            2'd1: begin
+              if ((weight_write_out_channel < COUNT_W'(HIDDEN_C)) &&
+                  (weight_write_in_channel < COUNT_W'(HIDDEN_C))) begin
+                weights_l1[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
+                  weight_write_data;
+              end
             end
-          end
 
-          2'd2: begin
-            if ((weight_write_out_channel < COUNT_W'(OUTPUT_C)) &&
-                (weight_write_in_channel < COUNT_W'(HIDDEN_C))) begin
-              weights_l2[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
-                weight_write_data;
+            2'd2: begin
+              if ((weight_write_out_channel < COUNT_W'(OUTPUT_C)) &&
+                  (weight_write_in_channel < COUNT_W'(HIDDEN_C))) begin
+                weights_l2[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
+                  weight_write_data;
+              end
             end
-          end
 
-          default: begin end
-        endcase
+            default: begin end
+          endcase
+        end
       end
 
       case (state)
@@ -358,6 +443,10 @@ module stream_loaded_multi_layer_job_controller #(
             loaded_error <= 1'b0;
             weight_layers_ready <= 3'b000;
             prefetch_seen <= 1'b0;
+            direct_output_pending <= 1'b0;
+            direct_output_last <= 1'b0;
+            direct_compute_complete <= 1'b0;
+            direct_output_channel <= '0;
             state <= S_START_ACT;
           end
         end
@@ -422,8 +511,18 @@ module stream_loaded_multi_layer_job_controller #(
         end
 
         S_WAIT_COMPUTE: begin
-          if (compute_done) begin
-            state <= S_START_STORE;
+          if ((DIRECT_STREAM_FINAL_OUTPUTS != 0) &&
+              (compute_done || direct_compute_complete)) begin
+            if (!direct_output_pending) begin
+              direct_compute_complete <= 1'b0;
+              state <= S_DONE;
+            end
+          end else if (compute_done) begin
+            if (DIRECT_STREAM_FINAL_OUTPUTS != 0) begin
+              state <= direct_output_pending ? S_WAIT_COMPUTE : S_DONE;
+            end else begin
+              state <= S_START_STORE;
+            end
           end
         end
 

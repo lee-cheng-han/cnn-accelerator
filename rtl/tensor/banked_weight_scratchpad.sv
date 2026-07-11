@@ -32,12 +32,32 @@ module banked_weight_scratchpad #(
 
   localparam int DEPTH = MAX_COUT * MAX_CIN * 9;
 
-  logic signed [DATA_W-1:0] lane_mem [PK][PC][0:DEPTH-1];
+  logic [ADDR_W-1:0] lane_read_addr [PK][PC];
+  logic lane_read_enable [PK][PC];
+  logic [ADDR_W-1:0] write_addr;
+  logic write_valid;
+  logic [ADDR_W-1:0] debug_addr;
+  logic debug_valid;
   logic signed [DATA_W-1:0] weight_mat_q [PK][PC];
+  (* ram_style = "block" *) logic signed [DATA_W-1:0] debug_mem [0:DEPTH-1];
   logic signed [DATA_W-1:0] debug_read_data_q;
 
   assign weight_mat = weight_mat_q;
   assign debug_read_data = debug_read_data_q;
+  assign write_addr = packed_addr(write_out_channel, write_in_channel, write_kernel_idx);
+  assign write_valid =
+    write_enable &&
+    (write_out_channel < COUNT_W'(MAX_COUT)) &&
+    (write_in_channel < COUNT_W'(MAX_CIN)) &&
+    (write_kernel_idx < 4'd9) &&
+    (write_addr < ADDR_W'(DEPTH));
+  assign debug_addr =
+    packed_addr(debug_out_channel, debug_in_channel, debug_kernel_idx);
+  assign debug_valid =
+    (debug_out_channel < COUNT_W'(MAX_COUT)) &&
+    (debug_in_channel < COUNT_W'(MAX_CIN)) &&
+    (debug_kernel_idx < 4'd9) &&
+    (debug_addr < ADDR_W'(DEPTH));
 
   function automatic logic [ADDR_W-1:0] packed_addr(
     input logic [COUNT_W-1:0] out_channel,
@@ -51,54 +71,85 @@ module banked_weight_scratchpad #(
     end
   endfunction
 
-  always_ff @(posedge clk) begin
-    logic [ADDR_W-1:0] write_addr;
-    logic [ADDR_W-1:0] debug_addr;
-
-    write_addr = packed_addr(write_out_channel, write_in_channel, write_kernel_idx);
-    if (write_enable &&
-        (write_out_channel < COUNT_W'(MAX_COUT)) &&
-        (write_in_channel < COUNT_W'(MAX_CIN)) &&
-        (write_kernel_idx < 4'd9) &&
-        (write_addr < ADDR_W'(DEPTH))) begin
-      for (int pk = 0; pk < PK; pk++) begin
-        for (int pc = 0; pc < PC; pc++) begin
-          lane_mem[pk][pc][write_addr] <= write_data;
-        end
-      end
-    end
-
+  always_comb begin
     for (int pk = 0; pk < PK; pk++) begin
       for (int pc = 0; pc < PC; pc++) begin
         logic [COUNT_W-1:0] out_channel;
         logic [COUNT_W-1:0] in_channel;
-        logic [ADDR_W-1:0] read_addr;
 
         out_channel = read_k_base + COUNT_W'(pk);
         in_channel = read_c_base + COUNT_W'(pc);
-        read_addr = packed_addr(out_channel, in_channel, read_kernel_idx);
-        if (out_lane_mask[pk] &&
-            in_lane_mask[pc] &&
-            (out_channel < COUNT_W'(MAX_COUT)) &&
-            (in_channel < COUNT_W'(MAX_CIN)) &&
-            (read_kernel_idx < 4'd9) &&
-            (read_addr < ADDR_W'(DEPTH))) begin
-          weight_mat_q[pk][pc] <= lane_mem[pk][pc][read_addr];
-        end else begin
-          weight_mat_q[pk][pc] <= '0;
-        end
+        lane_read_addr[pk][pc] = packed_addr(out_channel, in_channel, read_kernel_idx);
+        lane_read_enable[pk][pc] =
+          out_lane_mask[pk] &&
+          in_lane_mask[pc] &&
+          (out_channel < COUNT_W'(MAX_COUT)) &&
+          (in_channel < COUNT_W'(MAX_CIN)) &&
+          (read_kernel_idx < 4'd9) &&
+          (lane_read_addr[pk][pc] < ADDR_W'(DEPTH));
       end
     end
+  end
 
-    debug_addr =
-      packed_addr(debug_out_channel, debug_in_channel, debug_kernel_idx);
-    if ((debug_out_channel < COUNT_W'(MAX_COUT)) &&
-        (debug_in_channel < COUNT_W'(MAX_CIN)) &&
-        (debug_kernel_idx < 4'd9) &&
-        (debug_addr < ADDR_W'(DEPTH))) begin
-      debug_read_data_q <= lane_mem[0][0][debug_addr];
+  generate
+    for (genvar pk = 0; pk < PK; pk++) begin : gen_pk_lane_ram
+      for (genvar pc = 0; pc < PC; pc++) begin : gen_pc_lane_ram
+        banked_weight_lane_ram #(
+          .DEPTH(DEPTH),
+          .DATA_W(DATA_W),
+          .ADDR_W(ADDR_W)
+        ) u_banked_weight_lane_ram (
+          .clk(clk),
+          .write_enable(write_valid),
+          .write_addr(write_addr),
+          .write_data(write_data),
+          .read_enable(lane_read_enable[pk][pc]),
+          .read_addr(lane_read_addr[pk][pc]),
+          .read_data(weight_mat_q[pk][pc])
+        );
+      end
+    end
+  endgenerate
+
+  always_ff @(posedge clk) begin
+    if (write_valid) begin
+      debug_mem[write_addr] <= write_data;
+    end
+
+    if (debug_valid) begin
+      debug_read_data_q <= debug_mem[debug_addr];
     end else begin
       debug_read_data_q <= '0;
+    end
+  end
+
+endmodule
+
+module banked_weight_lane_ram #(
+  parameter int DEPTH  = 2304,
+  parameter int DATA_W = 8,
+  parameter int ADDR_W = 32
+)(
+  input  logic clk,
+  input  logic write_enable,
+  input  logic [ADDR_W-1:0] write_addr,
+  input  logic signed [DATA_W-1:0] write_data,
+  input  logic read_enable,
+  input  logic [ADDR_W-1:0] read_addr,
+  output logic signed [DATA_W-1:0] read_data
+);
+
+  (* ram_style = "block" *) logic signed [DATA_W-1:0] mem [0:DEPTH-1];
+
+  always_ff @(posedge clk) begin
+    if (write_enable) begin
+      mem[write_addr] <= write_data;
+    end
+
+    if (read_enable) begin
+      read_data <= mem[read_addr];
+    end else begin
+      read_data <= '0;
     end
   end
 

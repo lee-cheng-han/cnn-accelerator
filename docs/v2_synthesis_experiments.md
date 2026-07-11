@@ -2,7 +2,7 @@
 
 Target: Digilent Arty Z7-20 (`xc7z020clg400-1`) at 125 MHz.
 
-These are out-of-context post-synthesis estimates for the v2 parallel compute slice: MAC array, partial-sum accumulator, and parallel post-processing. They are not full-accelerator or post-route measurements.
+These are out-of-context post-synthesis estimates for the v2 parallel compute slice: MAC array, partial-sum accumulator, and parallel post-processing. They are not full-accelerator or implementation measurements; see [v2_top_implementation.md](v2_top_implementation.md) for the current full-top experiment.
 
 | PC | PK | MACs/cycle | Peak GMAC/s at 125 MHz | WNS (ns) | Est. Fmax (MHz) | LUTs | Registers | BRAM tiles | DSPs | Timing |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
@@ -14,7 +14,7 @@ These are out-of-context post-synthesis estimates for the v2 parallel compute sl
 
 `PC=4, PK=8` is the recommended baseline among timing-clean configurations because it provides 32 MACs/cycle at an estimated 260.3 MHz post-synthesis Fmax.
 
-The full v2 AXI top still keeps array copies for scoreboarding, residual reconstruction, and existing directed tests, so these results intentionally isolate the hardware that `PC/PK` changes. Replicated-bank BRAM-style activation and weight scratchpad primitives are now present, and the tiled compute engines include fetch/capture/issue staging plus scratchpad request/data ports for registered operands. The stream-loaded multi-layer path now writes packetized input activations and per-layer weights into banked scratchpads, mirrors intermediate layer outputs into feature scratchpads, and runs compute with scratchpad operands enabled. Vivado maps the current signed INT8 multipliers into LUT fabric in this isolated design, which explains the zero DSP count. Before carrying this baseline into the board-facing design, run the full v2 regression and confirm post-route timing in the dedicated v2 block design.
+These results intentionally isolate the hardware that `PC/PK` changes. Replicated-bank BRAM-style activation and weight scratchpad primitives are now present, and the tiled compute engines include fetch/capture/issue staging plus scratchpad request/data ports for registered operands. The stream-loaded multi-layer path writes packetized input activations and per-layer weights into banked scratchpads, can stream intermediate layer outputs into feature scratchpads, and can stream final RGB pixels directly to the AXI output with backpressure. Full-frame mirrors remain available for scoreboarding and existing directed tests, but the board-facing top disables the large scheduler/output mirrors. Vivado maps the current signed INT8 multipliers into LUT fabric in this isolated design, which explains the zero DSP count. The current full-top smoke experiment now fits and routes after the banked weight scratchpads were moved into explicit BRAM templates; it reaches an estimated 85.1 MHz post-route in the smoke configuration and still misses the 125 MHz target because the output-pixel index/direct-output path and remaining scratchpad address/control paths are timing-critical.
 
 Regenerate:
 

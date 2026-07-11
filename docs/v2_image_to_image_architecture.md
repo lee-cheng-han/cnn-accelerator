@@ -87,7 +87,7 @@ Chunks 4-6 have simulation-focused first milestones:
 | `cnn_v2_axi_lite_slave` | Software-visible v2 configuration, command, status, interrupt, diagnostic, and performance-counter register bank |
 | `cnn_image2image_system_top` | Integrates the v2 AXI-Lite control plane with the packetized AXI-Stream accelerator |
 
-Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output-store path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The first BRAM-facing memory primitives are now present as replicated-bank activation and weight scratchpads with synchronous one-cycle reads. The tiled 1x1 and 3x3 compute engines now include explicit fetch/capture/issue staging and scratchpad request/data ports, and `single_layer_scheduler` now promotes the active engine's scratchpad request/data interface so full-image 1x1 and 3x3 scheduler tests can source operands from registered banked memories. The stream-loaded multi-layer path now writes packetized input activations and per-layer weights into real banked scratchpads, mirrors layer 0/1 outputs into feature scratchpads, and runs compute with scratchpad operands enabled. Full-frame arrays remain in the controller as scoreboarding/reference storage for residual reconstruction and existing directed tests. The AXI-Stream data plane and AXI-Lite control plane are integrated in an RTL system wrapper, but that wrapper is not yet integrated into a Zynq Vivado block design. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md), and the software register contract is defined in [v2_register_map.md](v2_register_map.md).
+Current v2 scope remains intentionally pre-board and simulation-first. The schedulers prove full-image and multi-layer loop control, while the stream-loaded wrapper proves the first end-to-end activation/weight/bias load, overlapped parameter prefetch, compute, and output path around local memories. Intermediate layer results alternate between feature bank 0 and feature bank 1. The scheduler will not launch a layer until its parameter-ready bit is set, so arbitrary input-stream stalls cannot expose partially loaded weights. The standalone ping-pong scratchpads and bank controller separately prove that a physical bank cannot be overwritten while compute owns it. The first BRAM-facing memory primitives are now present as replicated-bank activation and weight scratchpads with synchronous one-cycle reads. The tiled 1x1 and 3x3 compute engines now include explicit fetch/capture/issue staging and scratchpad request/data ports, and `single_layer_scheduler` now promotes the active engine's scratchpad request/data interface so full-image 1x1 and 3x3 scheduler tests can source operands from registered banked memories. The stream-loaded multi-layer path now writes packetized input activations and per-layer weights into real banked scratchpads, can stream layer 0/1 scheduler pixels directly into feature scratchpads, and can serialize final layer pixels directly to the AXI output stream with backpressure. Full-frame mirrors remain available for scoreboarding/reference storage in existing directed tests, but the board-facing AXI top disables the large scheduler/output mirrors. The AXI-Stream data plane and AXI-Lite control plane are integrated in an RTL system wrapper, but that wrapper is not yet integrated into a Zynq Vivado block design. The packet format is defined in [v2_stream_interface.md](v2_stream_interface.md), and the software register contract is defined in [v2_register_map.md](v2_register_map.md).
 
 The v2 Python reference model is present in `models/image2image_int8.py`. It is dependency-free and models the exact integer arithmetic used by the RTL path:
 
@@ -128,10 +128,17 @@ Expected board result:
 
 The first `PC/PK` synthesis sweep is complete. The isolated compute slice meets the
 125 MHz target for `2x8`, `4x4`, and `4x8`; see
-[v2_synthesis_experiments.md](v2_synthesis_experiments.md). The remaining milestones
-are:
+[v2_synthesis_experiments.md](v2_synthesis_experiments.md). The first full-top
+out-of-context implementation experiment is also present; see
+[v2_top_implementation.md](v2_top_implementation.md). The current full-top
+smoke experiment now fits and routes on the Arty Z7-20 after the board-facing
+path moved scheduler outputs onto ready/valid streams and the banked weight
+scratchpads were rewritten as explicit BRAM templates. It does not yet meet the
+125 MHz target; the current smoke route estimates 85.1 MHz, with the worst path
+through output-pixel index/direct-output selection and remaining scratchpad
+address/control fanout. The remaining milestones are:
 
-1. Connect the multi-layer/top-level stream-loaded memory path to the banked scratchpad request/data interfaces.
-2. Replace full-frame simulation memories with bounded tile/line buffers before targeting large images.
-3. Integrate `cnn_image2image_system_top` into a separate Zynq Vivado block design.
-4. Confirm the selected `PC=4`, `PK=8` configuration with full-design post-route timing.
+1. Pipeline or narrow the output-pixel index/direct-output path and remaining scratchpad address/control paths until `make v2-top-impl` meets 125 MHz at `PC=2`, `PK=4`, `MAX_PIXELS=16`.
+2. Replace the remaining compatibility/reference mirrors with bounded scoreboarding hooks where they are no longer needed.
+3. Integrate `cnn_image2image_system_top` into a separate Zynq Vivado block design after the OOC timing path is clean.
+4. Scale back toward the selected `PC=4`, `PK=8` configuration and confirm full-design post-route timing.
