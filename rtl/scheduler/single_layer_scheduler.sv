@@ -174,7 +174,8 @@ module single_layer_scheduler #(
     .ACC_W(ACC_W),
     .BIAS_W(BIAS_W),
     .OUT_W(OUT_W),
-    .COUNT_W(COUNT_W)
+    .COUNT_W(COUNT_W),
+    .ADDR_W(ADDR_W)
   ) u_tiled_conv1x1_engine (
     .clk(clk),
     .rst_n(rst_n),
@@ -217,7 +218,8 @@ module single_layer_scheduler #(
     .BIAS_W(BIAS_W),
     .OUT_W(OUT_W),
     .COUNT_W(COUNT_W),
-    .DIM_W(DIM_W)
+    .DIM_W(DIM_W),
+    .ADDR_W(ADDR_W)
   ) u_tiled_conv3x3_engine (
     .clk(clk),
     .rst_n(rst_n),

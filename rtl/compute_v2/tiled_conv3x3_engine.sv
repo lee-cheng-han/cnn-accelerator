@@ -57,6 +57,8 @@ module tiled_conv3x3_engine #(
   typedef enum logic [3:0] {
     S_IDLE,
     S_CLEAR,
+    S_ADDR_PREP,
+    S_ADDR_INDEX,
     S_FETCH,
     S_READ,
     S_CAPTURE,
@@ -64,6 +66,8 @@ module tiled_conv3x3_engine #(
     S_WAIT_MAC,
     S_NEXT_C,
     S_NEXT_K,
+    S_POST_BIAS,
+    S_POSTPROCESS,
     S_WRITE_TILE,
     S_DONE
   } state_t;
@@ -73,12 +77,26 @@ module tiled_conv3x3_engine #(
   logic [COUNT_W-1:0] c_base;
   logic [COUNT_W-1:0] k_base;
   logic [3:0] kernel_idx;
+  logic [DIM_W-1:0] input_width_q;
+  logic [DIM_W-1:0] input_height_q;
+  logic [1:0] stride_q;
+  logic [1:0] padding_q;
+  logic [COUNT_W-1:0] cin_q;
+  logic [COUNT_W-1:0] cout_q;
+  logic bias_enable_q;
+  logic relu_enable_q;
+  logic quant_enable_q;
+  logic [4:0] quant_shift_q;
 
   logic [1:0] kernel_x;
   logic [1:0] kernel_y;
 
-  logic addr_valid;
-  logic [ADDR_W-1:0] pixel_index;
+  logic signed [DIM_W:0] addr_in_x_calc;
+  logic signed [DIM_W:0] addr_in_y_calc;
+  logic signed [DIM_W:0] addr_in_x_q;
+  logic signed [DIM_W:0] addr_in_y_q;
+  logic addr_valid_q;
+  logic [ADDR_W-1:0] pixel_index_q;
   logic [ADDR_W-1:0] activation_base_addr;
   logic [PC-1:0] cin_lane_mask;
   logic [PK-1:0] cout_lane_mask;
@@ -108,37 +126,32 @@ module tiled_conv3x3_engine #(
   logic signed [BIAS_W-1:0] bias_vec_comb [PK];
   logic signed [BIAS_W-1:0] bias_vec_q [PK];
   logic signed [ACC_W-1:0] bias_acc_vec [PK];
+  logic signed [ACC_W-1:0] bias_acc_vec_q [PK];
   logic signed [ACC_W-1:0] relu_acc_vec [PK];
   logic signed [ACC_W-1:0] quant_acc_vec [PK];
   logic signed [OUT_W-1:0] post_out_vec [PK];
+  logic signed [OUT_W-1:0] post_out_vec_q [PK];
 
   always_comb begin
     kernel_y = kernel_idx / 4'd3;
     kernel_x = kernel_idx - (kernel_y * 2'd3);
   end
 
-  tensor_address_gen #(
-    .DIM_W(DIM_W),
-    .ADDR_W(ADDR_W)
-  ) u_tensor_address_gen (
-    .input_width(input_width),
-    .input_height(input_height),
-    .out_x(out_x),
-    .out_y(out_y),
-    .kernel_x(kernel_x),
-    .kernel_y(kernel_y),
-    .stride(stride),
-    .padding(padding),
-    .valid(addr_valid),
-    .pixel_index(pixel_index)
-  );
+  assign addr_in_x_calc =
+    $signed({1'b0, out_x}) * $signed({1'b0, stride_q}) +
+    $signed({{(DIM_W-1){1'b0}}, kernel_x}) -
+    $signed({{(DIM_W-1){1'b0}}, padding_q});
+  assign addr_in_y_calc =
+    $signed({1'b0, out_y}) * $signed({1'b0, stride_q}) +
+    $signed({{(DIM_W-1){1'b0}}, kernel_y}) -
+    $signed({{(DIM_W-1){1'b0}}, padding_q});
 
   tail_mask_generator #(
     .LANES(PC),
     .COUNT_W(COUNT_W)
   ) u_cin_tail_mask (
     .base(c_base),
-    .count(cin),
+    .count(cin_q),
     .lane_mask(cin_lane_mask)
   );
 
@@ -147,15 +160,15 @@ module tiled_conv3x3_engine #(
     .COUNT_W(COUNT_W)
   ) u_cout_tail_mask (
     .base(k_base),
-    .count(cout),
+    .count(cout_q),
     .lane_mask(cout_lane_mask)
   );
 
-  assign activation_base_addr = pixel_index * ADDR_W'(MAX_CIN);
+  assign activation_base_addr = pixel_index_q * ADDR_W'(MAX_CIN);
 
   always_comb begin
     for (int pc = 0; pc < PC; pc++) begin
-      if (addr_valid && cin_lane_mask[pc]) begin
+      if (addr_valid_q && cin_lane_mask[pc]) begin
         mac_act_vec_comb[pc] =
           activation[activation_base_addr + ADDR_W'(c_base + COUNT_W'(pc))];
       end else begin
@@ -242,7 +255,7 @@ module tiled_conv3x3_engine #(
   ) u_parallel_bias_add (
     .psum_in(psum_vec),
     .bias_in(bias_vec_q),
-    .bias_enable(bias_enable),
+    .bias_enable(bias_enable_q),
     .lane_mask(cout_lane_mask),
     .acc_out(bias_acc_vec)
   );
@@ -251,8 +264,8 @@ module tiled_conv3x3_engine #(
     .PK(PK),
     .ACC_W(ACC_W)
   ) u_parallel_relu (
-    .acc_in(bias_acc_vec),
-    .relu_enable(relu_enable),
+    .acc_in(bias_acc_vec_q),
+    .relu_enable(relu_enable_q),
     .lane_mask(cout_lane_mask),
     .acc_out(relu_acc_vec)
   );
@@ -262,8 +275,8 @@ module tiled_conv3x3_engine #(
     .ACC_W(ACC_W)
   ) u_parallel_quantizer (
     .acc_in(relu_acc_vec),
-    .quant_enable(quant_enable),
-    .quant_shift(quant_shift),
+    .quant_enable(quant_enable_q),
+    .quant_shift(quant_shift_q),
     .lane_mask(cout_lane_mask),
     .acc_out(quant_acc_vec)
   );
@@ -289,6 +302,16 @@ module tiled_conv3x3_engine #(
       c_base     <= '0;
       k_base     <= '0;
       kernel_idx <= 4'd0;
+      input_width_q <= '0;
+      input_height_q <= '0;
+      stride_q <= '0;
+      padding_q <= '0;
+      cin_q <= '0;
+      cout_q <= '0;
+      bias_enable_q <= 1'b0;
+      relu_enable_q <= 1'b0;
+      quant_enable_q <= 1'b0;
+      quant_shift_q <= '0;
       done       <= 1'b0;
       scratch_activation_read_pixel_q <= '0;
       scratch_activation_read_c_base_q <= '0;
@@ -298,6 +321,10 @@ module tiled_conv3x3_engine #(
       scratch_weight_read_kernel_idx_q <= '0;
       scratch_weight_out_lane_mask_q <= '0;
       scratch_weight_in_lane_mask_q <= '0;
+      addr_in_x_q <= '0;
+      addr_in_y_q <= '0;
+      addr_valid_q <= 1'b0;
+      pixel_index_q <= '0;
 
       for (int co = 0; co < MAX_COUT; co++) begin
         output_data[co] <= '0;
@@ -307,6 +334,8 @@ module tiled_conv3x3_engine #(
       end
       for (int pk = 0; pk < PK; pk++) begin
         bias_vec_q[pk] <= '0;
+        bias_acc_vec_q[pk] <= '0;
+        post_out_vec_q[pk] <= '0;
         for (int pc = 0; pc < PC; pc++) begin
           mac_weight_mat_q[pk][pc] <= '0;
         end
@@ -320,6 +349,16 @@ module tiled_conv3x3_engine #(
             c_base     <= '0;
             k_base     <= '0;
             kernel_idx <= 4'd0;
+            input_width_q <= input_width;
+            input_height_q <= input_height;
+            stride_q <= stride;
+            padding_q <= padding;
+            cin_q <= cin;
+            cout_q <= cout;
+            bias_enable_q <= bias_enable;
+            relu_enable_q <= relu_enable;
+            quant_enable_q <= quant_enable;
+            quant_shift_q <= quant_shift;
             state      <= (cout == '0) ? S_DONE : S_CLEAR;
           end
         end
@@ -327,13 +366,38 @@ module tiled_conv3x3_engine #(
         S_CLEAR: begin
           c_base     <= '0;
           kernel_idx <= 4'd0;
-          state      <= (cin == '0) ? S_WRITE_TILE : S_FETCH;
+          state      <= (cin_q == '0) ? S_POST_BIAS : S_ADDR_PREP;
+        end
+
+        S_ADDR_PREP: begin
+          addr_in_x_q <= addr_in_x_calc;
+          addr_in_y_q <= addr_in_y_calc;
+          state <= S_ADDR_INDEX;
+        end
+
+        S_ADDR_INDEX: begin
+          addr_valid_q <= (addr_in_x_q >= 0) &&
+                          (addr_in_y_q >= 0) &&
+                          (addr_in_x_q < $signed({1'b0, input_width_q})) &&
+                          (addr_in_y_q < $signed({1'b0, input_height_q}));
+
+          if ((addr_in_x_q >= 0) &&
+              (addr_in_y_q >= 0) &&
+              (addr_in_x_q < $signed({1'b0, input_width_q})) &&
+              (addr_in_y_q < $signed({1'b0, input_height_q}))) begin
+            pixel_index_q <= ADDR_W'(addr_in_y_q[DIM_W-1:0]) * ADDR_W'(input_width_q) +
+                             ADDR_W'(addr_in_x_q[DIM_W-1:0]);
+          end else begin
+            pixel_index_q <= '0;
+          end
+
+          state <= S_FETCH;
         end
 
         S_FETCH: begin
-          scratch_activation_read_pixel_q <= addr_valid ? pixel_index : '0;
+          scratch_activation_read_pixel_q <= addr_valid_q ? pixel_index_q : '0;
           scratch_activation_read_c_base_q <= c_base;
-          scratch_activation_lane_mask_q <= addr_valid ? cin_lane_mask : '0;
+          scratch_activation_lane_mask_q <= addr_valid_q ? cin_lane_mask : '0;
           scratch_weight_read_k_base_q <= k_base;
           scratch_weight_read_c_base_q <= c_base;
           scratch_weight_read_kernel_idx_q <= kernel_idx;
@@ -370,9 +434,9 @@ module tiled_conv3x3_engine #(
         end
 
         S_NEXT_C: begin
-          if ((c_base + COUNT_W'(PC)) < cin) begin
+          if ((c_base + COUNT_W'(PC)) < cin_q) begin
             c_base <= c_base + COUNT_W'(PC);
-            state  <= S_FETCH;
+            state  <= S_ADDR_PREP;
           end else begin
             state <= S_NEXT_K;
           end
@@ -382,20 +446,34 @@ module tiled_conv3x3_engine #(
           if (kernel_idx < 4'd8) begin
             kernel_idx <= kernel_idx + 4'd1;
             c_base     <= '0;
-            state      <= S_FETCH;
+            state      <= S_ADDR_PREP;
           end else begin
-            state <= S_WRITE_TILE;
+            state <= S_POST_BIAS;
           end
+        end
+
+        S_POST_BIAS: begin
+          for (int pk = 0; pk < PK; pk++) begin
+            bias_acc_vec_q[pk] <= bias_acc_vec[pk];
+          end
+          state <= S_POSTPROCESS;
+        end
+
+        S_POSTPROCESS: begin
+          for (int pk = 0; pk < PK; pk++) begin
+            post_out_vec_q[pk] <= post_out_vec[pk];
+          end
+          state <= S_WRITE_TILE;
         end
 
         S_WRITE_TILE: begin
           for (int pk = 0; pk < PK; pk++) begin
             if (cout_lane_mask[pk]) begin
-              output_data[k_base + COUNT_W'(pk)] <= post_out_vec[pk];
+              output_data[k_base + COUNT_W'(pk)] <= post_out_vec_q[pk];
             end
           end
 
-          if ((k_base + COUNT_W'(PK)) < cout) begin
+          if ((k_base + COUNT_W'(PK)) < cout_q) begin
             k_base     <= k_base + COUNT_W'(PK);
             c_base     <= '0;
             kernel_idx <= 4'd0;

@@ -219,12 +219,22 @@ def render_markdown(result: TopImplResult, build_dir: Path) -> str:
             "logic around the stream-loaded controller and remaining full-frame/reference storage."
         )
 
-    lines.extend(
-        [
+    if routed and result.timing_met:
+        lines.append(
+            "The next board-facing step is integrating `cnn_image2image_system_top` into a "
+            "Zynq block design with PS, AXI DMA, resets, clocking, physical constraints, "
+            "and board-level timing evidence."
+        )
+    else:
+        lines.append(
             "The next board-facing step is reducing the timing-critical scratchpad address/control "
             "paths, then rerunning this OOC implementation experiment before integrating "
             "`cnn_image2image_system_top` into a Zynq block design with PS, AXI DMA, resets, "
-            "clocking, and physical constraints.",
+            "clocking, and physical constraints."
+        )
+
+    lines.extend(
+        [
             "",
             "Regenerate:",
             "",

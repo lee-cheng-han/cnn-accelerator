@@ -47,8 +47,8 @@ module v2_performance_counters (
       input_stall_cycles <= '0;
       output_words <= '0;
       output_stall_cycles <= '0;
-    end else if (clear || job_start) begin
-      counting <= job_start && !clear;
+    end else if (clear) begin
+      counting <= 1'b0;
       job_cycles <= '0;
       packet_cycles <= '0;
       compute_cycles <= '0;
@@ -60,6 +60,19 @@ module v2_performance_counters (
       input_stall_cycles <= '0;
       output_words <= '0;
       output_stall_cycles <= '0;
+    end else if (job_start) begin
+      counting <= 1'b1;
+      job_cycles <= '0;
+      packet_cycles <= packet_busy ? 32'd1 : 32'd0;
+      compute_cycles <= '0;
+      prefetch_cycles <= prefetch_active ? 32'd1 : 32'd0;
+      layer0_cycles <= '0;
+      layer1_cycles <= '0;
+      layer2_cycles <= '0;
+      input_words <= (input_valid && input_ready) ? 32'd1 : 32'd0;
+      input_stall_cycles <= (input_valid && !input_ready) ? 32'd1 : 32'd0;
+      output_words <= (output_valid && output_ready) ? 32'd1 : 32'd0;
+      output_stall_cycles <= (output_valid && !output_ready) ? 32'd1 : 32'd0;
     end else if (counting) begin
       job_cycles <= job_cycles + 32'd1;
 

@@ -15,24 +15,24 @@ This is an out-of-context implementation experiment for the v2 image-to-image RT
 | MAX_PIXELS | 16 |
 | Clock target | 125.000 MHz (8.000 ns) |
 | Result stage | `post_route` |
-| Implementation status | `routed_timing_failed` |
+| Implementation status | `passed` |
 
 ## Timing
 
 | Metric | Value |
 |---|---:|
-| WNS | -3.749 ns |
-| WHS | 0.154 ns |
-| Estimated setup Fmax | 85.1 MHz |
-| Timing met | False |
+| WNS | 0.020 ns |
+| WHS | 0.094 ns |
+| Estimated setup Fmax | 125.3 MHz |
+| Timing met | True |
 
 ## Utilization
 
 | Resource | Used |
 |---|---:|
-| Slice LUTs | 4,549 |
-| Slice Registers | 3,382 |
-| F7 Muxes | 27 |
+| Slice LUTs | 4,415 |
+| Slice Registers | 4,059 |
+| F7 Muxes | 25 |
 | F8 Muxes | 8 |
 | Block RAM Tile | 27 |
 | DSPs | 5 |
@@ -47,8 +47,8 @@ This is an out-of-context implementation experiment for the v2 image-to-image RT
 
 ## Interpretation
 
-The current v2 top now fits and routes in this out-of-context smoke configuration, but it does not yet meet the 125 MHz internal clock target. The largest no-fit issue was fixed by mapping the banked weight scratchpads into explicit BRAM lane memories. The current worst setup path runs from the AXI-Lite image-width register through the scheduler output-pixel index calculation into direct streamed output-data selection.
-The next board-facing step is reducing the timing-critical output index/direct-output and remaining scratchpad address/control paths, then rerunning this OOC implementation experiment before integrating `cnn_image2image_system_top` into a Zynq block design with PS, AXI DMA, resets, clocking, and physical constraints.
+The current v2 top fits, routes, and meets the 125 MHz internal clock target in this out-of-context smoke configuration.
+The next board-facing step is integrating `cnn_image2image_system_top` into a Zynq block design with PS, AXI DMA, resets, clocking, physical constraints, and board-level timing evidence.
 
 Regenerate:
 

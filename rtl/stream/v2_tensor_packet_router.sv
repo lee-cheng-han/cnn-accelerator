@@ -56,6 +56,7 @@ module v2_tensor_packet_router #(
 
   typedef enum logic [2:0] {
     S_IDLE,
+    S_CONFIG,
     S_HEADER,
     S_PAYLOAD,
     S_COMPLETE,
@@ -67,10 +68,10 @@ module v2_tensor_packet_router #(
   logic [31:0] expected_words_q;
   logic [31:0] pixel_count_calc;
   logic [31:0] pixel_count_q;
+  logic config_dims_valid_q;
   logic payload_ready;
   logic payload_transfer;
   logic expected_last;
-  logic config_valid;
 
   function automatic logic [31:0] words_for_type(
     input logic [2:0] type_id,
@@ -89,10 +90,6 @@ module v2_tensor_packet_router #(
   endfunction
 
   assign pixel_count_calc = image_width * image_height;
-  assign config_valid =
-    (image_width != '0) &&
-    (image_height != '0) &&
-    (pixel_count_calc <= MAX_PIXELS);
 
   always_comb begin
     unique case (expected_type)
@@ -137,6 +134,7 @@ module v2_tensor_packet_router #(
       expected_type <= '0;
       expected_words_q <= '0;
       pixel_count_q <= '0;
+      config_dims_valid_q <= 1'b0;
       words_received <= '0;
       start_accepted <= 1'b0;
       error <= 1'b0;
@@ -149,6 +147,7 @@ module v2_tensor_packet_router #(
         expected_type <= '0;
         expected_words_q <= '0;
         pixel_count_q <= '0;
+        config_dims_valid_q <= 1'b0;
         words_received <= '0;
         error <= 1'b0;
         error_code <= ERR_NONE;
@@ -162,18 +161,24 @@ module v2_tensor_packet_router #(
             S_IDLE: begin
               if (start) begin
                 expected_type <= 3'd0;
-                expected_words_q <= words_for_type(3'd0, pixel_count_calc);
                 pixel_count_q <= pixel_count_calc;
+                config_dims_valid_q <= (image_width != '0) &&
+                                       (image_height != '0);
                 words_received <= '0;
+                state <= S_CONFIG;
+              end
+            end
 
-                if (config_valid) begin
-                  start_accepted <= 1'b1;
-                  state <= S_HEADER;
-                end else begin
-                  error <= 1'b1;
-                  error_code <= ERR_CONFIG;
-                  state <= S_ERROR;
-                end
+            S_CONFIG: begin
+              expected_words_q <= words_for_type(3'd0, pixel_count_q);
+
+              if (config_dims_valid_q && (pixel_count_q <= MAX_PIXELS)) begin
+                start_accepted <= 1'b1;
+                state <= S_HEADER;
+              end else begin
+                error <= 1'b1;
+                error_code <= ERR_CONFIG;
+                state <= S_ERROR;
               end
             end
 

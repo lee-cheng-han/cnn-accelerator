@@ -66,8 +66,9 @@ module multi_layer_job_controller #(
   output logic done
 );
 
-  typedef enum logic [2:0] {
+  typedef enum logic [3:0] {
     S_IDLE,
+    S_LATCH_LAYER,
     S_START_LAYER,
     S_WAIT_LAYER,
     S_STORE_LAYER,
@@ -95,6 +96,19 @@ module multi_layer_job_controller #(
   logic desc_quant_enable;
   logic [4:0] desc_quant_shift;
   logic desc_residual_enable;
+  logic active_descriptor_valid;
+  logic [DIM_W-1:0] active_input_width;
+  logic [DIM_W-1:0] active_input_height;
+  logic [COUNT_W-1:0] active_input_channels;
+  logic [COUNT_W-1:0] active_output_channels;
+  logic [1:0] active_kernel_size;
+  logic [1:0] active_stride;
+  logic [1:0] active_padding;
+  logic active_bias_enable;
+  logic active_relu_enable;
+  logic active_quant_enable;
+  logic [4:0] active_quant_shift;
+  logic active_residual_enable;
 
   logic signed [DATA_W-1:0] feature_bank0 [MAX_PIXELS*MAX_CIN];
   logic signed [DATA_W-1:0] feature_bank1 [MAX_PIXELS*MAX_CIN];
@@ -143,15 +157,24 @@ module multi_layer_job_controller #(
   logic stream_intermediate_mode;
   logic stream_final_mode;
   logic scheduler_done_seen;
+  logic final_output_stage0_valid;
+  logic [ADDR_W-1:0] final_output_stage0_index;
+  logic final_output_stage0_last;
+  logic signed [OUT_W-1:0] final_output_stage0_data [MAX_COUT];
+  logic final_output_stage1_valid;
+  logic [ADDR_W-1:0] final_output_stage1_index;
+  logic final_output_stage1_last;
+  logic signed [OUT_W-1:0] final_output_stage1_data [MAX_COUT];
+  logic final_output_drained;
 
   assign active_layer = layer_index;
   assign activation_read_bank = (layer_index == 2'd2);
   assign activation_write_bank = (layer_index == 2'd1);
   assign waiting_for_layer =
-    (state == S_START_LAYER) && descriptor_valid && !current_layer_ready;
+    (state == S_START_LAYER) && active_descriptor_valid && !current_layer_ready;
   assign busy = (state != S_IDLE) && (state != S_DONE);
   assign scheduler_start =
-    (state == S_START_LAYER) && descriptor_valid && current_layer_ready;
+    (state == S_START_LAYER) && active_descriptor_valid && current_layer_ready;
   assign stream_intermediate_mode =
     (STREAM_INTERMEDIATE_OUTPUTS != 0) && use_scratchpad_operands;
   assign stream_final_mode =
@@ -162,7 +185,7 @@ module multi_layer_job_controller #(
     use_scratchpad_operands &&
     (layer_index != 2'd2) &&
     (scratch_store_pixel < scratch_store_pixel_count) &&
-    (scratch_store_channel < desc_output_channels) &&
+    (scratch_store_channel < active_output_channels) &&
     (!stream_intermediate_mode) &&
     (state == S_WRITE_SCRATCH);
   assign stream_store_valid =
@@ -173,10 +196,12 @@ module multi_layer_job_controller #(
   assign scratch_store_last =
     scratch_store_valid &&
     (scratch_store_pixel == (scratch_store_pixel_count - ADDR_W'(1))) &&
-    (scratch_store_channel == (desc_output_channels - COUNT_W'(1)));
+    (scratch_store_channel == (active_output_channels - COUNT_W'(1)));
   assign stream_store_last_channel =
     stream_store_valid &&
     (stream_store_channel == (stream_store_channels - COUNT_W'(1)));
+  assign final_output_drained =
+    !final_output_stage0_valid && !final_output_stage1_valid;
   assign scratch_feature0_write_enable =
     (scratch_store_valid || stream_store_valid) && (layer_index == 2'd0);
   assign scratch_feature1_write_enable =
@@ -190,31 +215,20 @@ module multi_layer_job_controller #(
   assign output_pixel_valid =
     stream_final_mode &&
     (layer_index == 2'd2) &&
-    scheduler_output_pixel_valid;
-  assign output_pixel_index = scheduler_output_pixel_index;
+    final_output_stage1_valid;
+  assign output_pixel_index = final_output_stage1_index;
   assign output_pixel_channels = COUNT_W'(OUTPUT_C);
-  assign output_pixel_last = scheduler_output_pixel_last;
+  assign output_pixel_last = final_output_stage1_last;
   assign scheduler_output_pixel_ready =
     (stream_intermediate_mode && (layer_index != 2'd2)) ?
       ((state == S_WAIT_LAYER) && !stream_store_pending) :
     (stream_final_mode && (layer_index == 2'd2)) ?
-      output_pixel_ready :
+      ((state == S_WAIT_LAYER) && !final_output_stage0_valid) :
       1'b1;
 
   always_comb begin
     for (int co = 0; co < MAX_COUT; co++) begin
-      if (stream_final_mode &&
-          (layer_index == 2'd2) &&
-          (co < OUTPUT_C) &&
-          desc_residual_enable &&
-          final_residual_enable) begin
-        output_pixel_data[co] =
-          residual_sub(input_tensor[(scheduler_output_pixel_index * ADDR_W'(MAX_CIN)) +
-                                    ADDR_W'(co)],
-                       scheduler_output_pixel_data[co]);
-      end else begin
-        output_pixel_data[co] = scheduler_output_pixel_data[co];
-      end
+      output_pixel_data[co] = final_output_stage1_data[co];
     end
   end
 
@@ -536,19 +550,19 @@ module multi_layer_job_controller #(
     .clk(clk),
     .rst_n(rst_n),
     .start(scheduler_start),
-    .input_width(desc_input_width),
-    .input_height(desc_input_height),
+    .input_width(active_input_width),
+    .input_height(active_input_height),
     .output_width(image_width),
     .output_height(image_height),
-    .kernel_size(desc_kernel_size),
-    .stride(desc_stride),
-    .padding(desc_padding),
-    .cin(desc_input_channels),
-    .cout(desc_output_channels),
-    .bias_enable(desc_bias_enable),
-    .relu_enable(desc_relu_enable),
-    .quant_enable(desc_quant_enable),
-    .quant_shift(desc_quant_shift),
+    .kernel_size(active_kernel_size),
+    .stride(active_stride),
+    .padding(active_padding),
+    .cin(active_input_channels),
+    .cout(active_output_channels),
+    .bias_enable(active_bias_enable),
+    .relu_enable(active_relu_enable),
+    .quant_enable(active_quant_enable),
+    .quant_shift(active_quant_shift),
     .activation(scheduler_activation),
     .weights_1x1(scheduler_weights_1x1),
     .weights_3x3(scheduler_weights_3x3),
@@ -588,6 +602,25 @@ module multi_layer_job_controller #(
       stream_store_channel <= '0;
       stream_store_channels <= '0;
       scheduler_done_seen <= 1'b0;
+      final_output_stage0_valid <= 1'b0;
+      final_output_stage0_index <= '0;
+      final_output_stage0_last <= 1'b0;
+      final_output_stage1_valid <= 1'b0;
+      final_output_stage1_index <= '0;
+      final_output_stage1_last <= 1'b0;
+      active_descriptor_valid <= 1'b0;
+      active_input_width <= '0;
+      active_input_height <= '0;
+      active_input_channels <= '0;
+      active_output_channels <= '0;
+      active_kernel_size <= '0;
+      active_stride <= '0;
+      active_padding <= '0;
+      active_bias_enable <= 1'b0;
+      active_relu_enable <= 1'b0;
+      active_quant_enable <= 1'b0;
+      active_quant_shift <= '0;
+      active_residual_enable <= 1'b0;
       done <= 1'b0;
 
       if (DIRECT_ARRAY_OPERANDS) begin
@@ -599,6 +632,8 @@ module multi_layer_job_controller #(
 
       for (int c = 0; c < MAX_COUT; c++) begin
         stream_store_data[c] <= '0;
+        final_output_stage0_data[c] <= '0;
+        final_output_stage1_data[c] <= '0;
       end
 
       if (!stream_final_mode) begin
@@ -633,6 +668,47 @@ module multi_layer_job_controller #(
         end
       end
 
+      if (stream_final_mode && (layer_index == 2'd2)) begin
+        if (final_output_stage1_valid && output_pixel_ready) begin
+          final_output_stage1_valid <= 1'b0;
+        end
+
+        if (final_output_stage0_valid && !final_output_stage1_valid) begin
+          final_output_stage1_valid <= 1'b1;
+          final_output_stage1_index <= final_output_stage0_index;
+          final_output_stage1_last <= final_output_stage0_last;
+          final_output_stage0_valid <= 1'b0;
+
+          for (int c = 0; c < MAX_COUT; c++) begin
+            if ((c < OUTPUT_C) &&
+                active_residual_enable &&
+                final_residual_enable) begin
+              final_output_stage1_data[c] <=
+                residual_sub(input_tensor[(final_output_stage0_index * ADDR_W'(MAX_CIN)) +
+                                          ADDR_W'(c)],
+                             final_output_stage0_data[c]);
+            end else begin
+              final_output_stage1_data[c] <= final_output_stage0_data[c];
+            end
+          end
+        end
+
+        if (!final_output_stage0_valid &&
+            scheduler_output_pixel_valid &&
+            scheduler_output_pixel_ready) begin
+          final_output_stage0_valid <= 1'b1;
+          final_output_stage0_index <= scheduler_output_pixel_index;
+          final_output_stage0_last <= scheduler_output_pixel_last;
+
+          for (int c = 0; c < MAX_COUT; c++) begin
+            final_output_stage0_data[c] <= scheduler_output_pixel_data[c];
+          end
+        end
+      end else begin
+        final_output_stage0_valid <= 1'b0;
+        final_output_stage1_valid <= 1'b0;
+      end
+
       if (scheduler_done) begin
         scheduler_done_seen <= 1'b1;
       end
@@ -646,13 +722,39 @@ module multi_layer_job_controller #(
             stream_store_channel <= '0;
             stream_store_channels <= '0;
             scheduler_done_seen <= 1'b0;
-            state <= ((image_width == '0) || (image_height == '0)) ? S_DONE : S_START_LAYER;
+            final_output_stage0_valid <= 1'b0;
+            final_output_stage1_valid <= 1'b0;
+            active_descriptor_valid <= 1'b0;
+            state <= ((image_width == '0) || (image_height == '0)) ? S_DONE : S_LATCH_LAYER;
+          end
+        end
+
+        S_LATCH_LAYER: begin
+          scheduler_done_seen <= 1'b0;
+          if (!descriptor_valid) begin
+            active_descriptor_valid <= 1'b0;
+            state <= S_DONE;
+          end else begin
+            active_descriptor_valid <= 1'b1;
+            active_input_width <= desc_input_width;
+            active_input_height <= desc_input_height;
+            active_input_channels <= desc_input_channels;
+            active_output_channels <= desc_output_channels;
+            active_kernel_size <= desc_kernel_size;
+            active_stride <= desc_stride;
+            active_padding <= desc_padding;
+            active_bias_enable <= desc_bias_enable;
+            active_relu_enable <= desc_relu_enable;
+            active_quant_enable <= desc_quant_enable;
+            active_quant_shift <= desc_quant_shift;
+            active_residual_enable <= desc_residual_enable;
+            state <= S_START_LAYER;
           end
         end
 
         S_START_LAYER: begin
           scheduler_done_seen <= 1'b0;
-          if (!descriptor_valid) begin
+          if (!active_descriptor_valid) begin
             state <= S_DONE;
           end else if (current_layer_ready) begin
             state <= S_WAIT_LAYER;
@@ -660,7 +762,10 @@ module multi_layer_job_controller #(
         end
 
         S_WAIT_LAYER: begin
-          if ((scheduler_done || scheduler_done_seen) && !stream_store_pending) begin
+          if ((scheduler_done || scheduler_done_seen) &&
+              !stream_store_pending &&
+              (!(stream_final_mode && (layer_index == 2'd2)) ||
+               final_output_drained)) begin
             scheduler_done_seen <= 1'b0;
             state <= S_STORE_LAYER;
           end
@@ -684,7 +789,7 @@ module multi_layer_job_controller #(
               for (int c = 0; c < MAX_COUT; c++) begin
                 if (layer_index == 2'd2) begin
                   if (c < OUTPUT_C) begin
-                    if (desc_residual_enable && final_residual_enable) begin
+                    if (active_residual_enable && final_residual_enable) begin
                       output_tensor[(p * MAX_COUT) + c] <=
                         residual_sub(input_tensor[(p * MAX_CIN) + c],
                                      scheduler_output[(p * MAX_COUT) + c]);
@@ -705,7 +810,7 @@ module multi_layer_job_controller #(
               !stream_intermediate_mode &&
               (layer_index != 2'd2) &&
               (scratch_store_pixel_count != '0) &&
-              (desc_output_channels != '0)) begin
+              (active_output_channels != '0)) begin
             state <= S_WRITE_SCRATCH;
           end else begin
             state <= S_NEXT_LAYER;
@@ -718,7 +823,7 @@ module multi_layer_job_controller #(
             scratch_store_channel <= '0;
             state <= S_NEXT_LAYER;
           end else if (scratch_store_valid) begin
-            if (scratch_store_channel == (desc_output_channels - COUNT_W'(1))) begin
+            if (scratch_store_channel == (active_output_channels - COUNT_W'(1))) begin
               scratch_store_channel <= '0;
               scratch_store_pixel <= scratch_store_pixel + ADDR_W'(1);
             end else begin
@@ -732,7 +837,8 @@ module multi_layer_job_controller #(
         S_NEXT_LAYER: begin
           if (layer_index < 2'd2) begin
             layer_index <= layer_index + 2'd1;
-            state <= S_START_LAYER;
+            active_descriptor_valid <= 1'b0;
+            state <= S_LATCH_LAYER;
           end else begin
             state <= S_DONE;
           end

@@ -117,6 +117,8 @@ module stream_loaded_multi_layer_job_controller #(
   logic direct_compute_complete;
   logic [COUNT_W-1:0] direct_output_channel;
   logic signed [OUT_W-1:0] direct_output_data [MAX_COUT];
+  logic [DIM_W-1:0] job_image_width;
+  logic [DIM_W-1:0] job_image_height;
   logic [COUNT_W-1:0] bias_index;
   logic [COUNT_W-1:0] bias_count;
   logic bias_transfer;
@@ -174,8 +176,8 @@ module stream_loaded_multi_layer_job_controller #(
     .clk(clk),
     .rst_n(rst_n),
     .start(act_loader_start),
-    .width(image_width),
-    .height(image_height),
+    .width(job_image_width),
+    .height(job_image_height),
     .channels(COUNT_W'(INPUT_C)),
     .stream_valid(activation_stream_valid),
     .stream_ready(activation_stream_ready),
@@ -240,8 +242,8 @@ module stream_loaded_multi_layer_job_controller #(
     .rst_n(rst_n),
     .start(compute_start),
     .final_residual_enable(final_residual_enable),
-    .image_width(image_width),
-    .image_height(image_height),
+    .image_width(job_image_width),
+    .image_height(job_image_height),
     .layer_ready(weight_layers_ready),
     .input_tensor(input_tensor),
     .weights_l0(weights_l0),
@@ -287,8 +289,8 @@ module stream_loaded_multi_layer_job_controller #(
     .clk(clk),
     .rst_n(rst_n),
     .start(store_start),
-    .width(image_width),
-    .height(image_height),
+    .width(job_image_width),
+    .height(job_image_height),
     .channels(COUNT_W'(OUTPUT_C)),
     .output_tensor(output_tensor),
     .stream_valid(store_output_stream_valid),
@@ -316,6 +318,8 @@ module stream_loaded_multi_layer_job_controller #(
       direct_output_last <= 1'b0;
       direct_compute_complete <= 1'b0;
       direct_output_channel <= '0;
+      job_image_width <= '0;
+      job_image_height <= '0;
 
       for (int c = 0; c < MAX_COUT; c++) begin
         direct_output_data[c] <= '0;
@@ -447,6 +451,8 @@ module stream_loaded_multi_layer_job_controller #(
             direct_output_last <= 1'b0;
             direct_compute_complete <= 1'b0;
             direct_output_channel <= '0;
+            job_image_width <= image_width;
+            job_image_height <= image_height;
             state <= S_START_ACT;
           end
         end

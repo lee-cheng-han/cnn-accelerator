@@ -31,6 +31,9 @@ module banked_activation_scratchpad #(
   logic signed [DATA_W-1:0] lane_mem [PC][0:DEPTH-1];
   logic signed [DATA_W-1:0] lane_data_q [PC];
   logic signed [DATA_W-1:0] debug_read_data_q;
+  logic write_valid_q = 1'b0;
+  logic [ADDR_W-1:0] write_addr_q = '0;
+  logic signed [DATA_W-1:0] write_data_q = '0;
 
   assign lane_data = lane_data_q;
   assign debug_read_data = debug_read_data_q;
@@ -40,14 +43,19 @@ module banked_activation_scratchpad #(
     logic [ADDR_W-1:0] debug_addr;
 
     write_addr = (write_pixel * ADDR_W'(MAX_C)) + ADDR_W'(write_channel);
-    if (write_enable &&
-        (write_pixel < ADDR_W'(MAX_PIXELS)) &&
-        (write_channel < COUNT_W'(MAX_C)) &&
-        (write_addr < ADDR_W'(DEPTH))) begin
+    if (write_valid_q) begin
       for (int lane = 0; lane < PC; lane++) begin
-        lane_mem[lane][write_addr] <= write_data;
+        lane_mem[lane][write_addr_q] <= write_data_q;
       end
     end
+
+    write_valid_q <=
+      write_enable &&
+      (write_pixel < ADDR_W'(MAX_PIXELS)) &&
+      (write_channel < COUNT_W'(MAX_C)) &&
+      (write_addr < ADDR_W'(DEPTH));
+    write_addr_q <= write_addr;
+    write_data_q <= write_data;
 
     for (int lane = 0; lane < PC; lane++) begin
       logic [COUNT_W-1:0] channel;

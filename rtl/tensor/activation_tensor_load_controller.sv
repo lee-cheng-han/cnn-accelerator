@@ -40,7 +40,9 @@ module activation_tensor_load_controller #(
 
   logic [ADDR_W-1:0] pixel_count;
   logic [ADDR_W-1:0] pixel_index;
+  logic [ADDR_W-1:0] last_pixel_index_q;
   logic [COUNT_W-1:0] channel_index;
+  logic [COUNT_W-1:0] last_channel_index_q;
   logic config_error;
   logic zero_length;
   logic transfer;
@@ -52,8 +54,8 @@ module activation_tensor_load_controller #(
                         (pixel_count > ADDR_W'(MAX_PIXELS));
   assign zero_length = (pixel_count == '0) || (channels == '0);
   assign transfer = (state == S_LOAD) && stream_valid;
-  assign last_channel = channel_index == (channels - COUNT_W'(1));
-  assign last_pixel = pixel_index == (pixel_count - ADDR_W'(1));
+  assign last_channel = channel_index == last_channel_index_q;
+  assign last_pixel = pixel_index == last_pixel_index_q;
 
   assign stream_ready = (state == S_LOAD);
   assign write_enable = transfer;
@@ -66,7 +68,9 @@ module activation_tensor_load_controller #(
     if (!rst_n) begin
       state <= S_IDLE;
       pixel_index <= '0;
+      last_pixel_index_q <= '0;
       channel_index <= '0;
+      last_channel_index_q <= '0;
       done <= 1'b0;
       error <= 1'b0;
     end else begin
@@ -77,6 +81,8 @@ module activation_tensor_load_controller #(
           if (start) begin
             pixel_index <= '0;
             channel_index <= '0;
+            last_pixel_index_q <= zero_length ? '0 : (pixel_count - ADDR_W'(1));
+            last_channel_index_q <= (channels == '0) ? '0 : (channels - COUNT_W'(1));
             error <= config_error;
             state <= (config_error || zero_length) ? S_DONE : S_LOAD;
           end

@@ -36,13 +36,16 @@ module banked_weight_scratchpad #(
   logic lane_read_enable [PK][PC];
   logic [ADDR_W-1:0] write_addr;
   logic write_valid;
+  logic write_valid_q = 1'b0;
+  logic [ADDR_W-1:0] write_addr_q = '0;
+  logic signed [DATA_W-1:0] write_data_q = '0;
   logic [ADDR_W-1:0] debug_addr;
   logic debug_valid;
-  logic signed [DATA_W-1:0] weight_mat_q [PK][PC];
+  logic lane_read_enable_q [PK][PC];
+  logic signed [DATA_W-1:0] lane_read_data_q [PK][PC];
   (* ram_style = "block" *) logic signed [DATA_W-1:0] debug_mem [0:DEPTH-1];
   logic signed [DATA_W-1:0] debug_read_data_q;
 
-  assign weight_mat = weight_mat_q;
   assign debug_read_data = debug_read_data_q;
   assign write_addr = packed_addr(write_out_channel, write_in_channel, write_kernel_idx);
   assign write_valid =
@@ -91,6 +94,16 @@ module banked_weight_scratchpad #(
     end
   end
 
+  always_comb begin
+    for (int pk = 0; pk < PK; pk++) begin
+      for (int pc = 0; pc < PC; pc++) begin
+        weight_mat[pk][pc] = lane_read_enable_q[pk][pc] ?
+                             lane_read_data_q[pk][pc] :
+                             '0;
+      end
+    end
+  end
+
   generate
     for (genvar pk = 0; pk < PK; pk++) begin : gen_pk_lane_ram
       for (genvar pc = 0; pc < PC; pc++) begin : gen_pc_lane_ram
@@ -100,20 +113,29 @@ module banked_weight_scratchpad #(
           .ADDR_W(ADDR_W)
         ) u_banked_weight_lane_ram (
           .clk(clk),
-          .write_enable(write_valid),
-          .write_addr(write_addr),
-          .write_data(write_data),
-          .read_enable(lane_read_enable[pk][pc]),
+          .write_enable(write_valid_q),
+          .write_addr(write_addr_q),
+          .write_data(write_data_q),
           .read_addr(lane_read_addr[pk][pc]),
-          .read_data(weight_mat_q[pk][pc])
+          .read_data(lane_read_data_q[pk][pc])
         );
       end
     end
   endgenerate
 
   always_ff @(posedge clk) begin
-    if (write_valid) begin
-      debug_mem[write_addr] <= write_data;
+    if (write_valid_q) begin
+      debug_mem[write_addr_q] <= write_data_q;
+    end
+
+    write_valid_q <= write_valid;
+    write_addr_q <= write_addr;
+    write_data_q <= write_data;
+
+    for (int pk = 0; pk < PK; pk++) begin
+      for (int pc = 0; pc < PC; pc++) begin
+        lane_read_enable_q[pk][pc] <= lane_read_enable[pk][pc];
+      end
     end
 
     if (debug_valid) begin
@@ -134,7 +156,6 @@ module banked_weight_lane_ram #(
   input  logic write_enable,
   input  logic [ADDR_W-1:0] write_addr,
   input  logic signed [DATA_W-1:0] write_data,
-  input  logic read_enable,
   input  logic [ADDR_W-1:0] read_addr,
   output logic signed [DATA_W-1:0] read_data
 );
@@ -146,11 +167,7 @@ module banked_weight_lane_ram #(
       mem[write_addr] <= write_data;
     end
 
-    if (read_enable) begin
-      read_data <= mem[read_addr];
-    end else begin
-      read_data <= '0;
-    end
+    read_data <= mem[read_addr];
   end
 
 endmodule
