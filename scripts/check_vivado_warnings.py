@@ -9,10 +9,12 @@ from collections import Counter
 from pathlib import Path
 
 
-LOGS = [
-    Path("vivado.log"),
+REQUIRED_LOGS = [
     Path("build/arty_z7_20_cnn/arty_z7_20_cnn.runs/synth_1/runme.log"),
     Path("build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/runme.log"),
+]
+OPTIONAL_LOGS = [
+    Path("vivado.log"),
 ]
 
 KNOWN_WARNINGS = [
@@ -39,7 +41,7 @@ def classify_warning(line: str) -> str | None:
 
 
 def main() -> int:
-    missing = [path for path in LOGS if not path.exists()]
+    missing = [path for path in REQUIRED_LOGS if not path.exists()]
     if missing:
         print("Missing log files:")
         for path in missing:
@@ -47,13 +49,15 @@ def main() -> int:
         print("Run `make arty-z7-bitstream` first, then rerun this check.")
         return 2
 
+    logs = REQUIRED_LOGS + [path for path in OPTIONAL_LOGS if path.exists()]
+
     errors: list[tuple[Path, int, str]] = []
     criticals: list[tuple[Path, int, str]] = []
     unknown: list[tuple[Path, int, str]] = []
     known_counts: Counter[str] = Counter()
     warning_count = 0
 
-    for path in LOGS:
+    for path in logs:
         for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if line.startswith("ERROR:"):
                 errors.append((path, lineno, line))
@@ -69,7 +73,7 @@ def main() -> int:
 
     print("Vivado warning budget")
     print("=====================")
-    print(f"Logs checked: {len(LOGS)}")
+    print(f"Logs checked: {len(logs)}")
     print(f"Warnings: {warning_count}")
     print(f"Known warnings: {sum(known_counts.values())}")
     print(f"Unknown warnings: {len(unknown)}")

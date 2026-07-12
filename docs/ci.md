@@ -40,17 +40,16 @@ Runner requirements:
 - Linux self-hosted GitHub Actions runner
 - labels: `self-hosted`, `linux`, `vivado`
 - Vivado 2025.2 available in `PATH`, or one of:
-  - `VIVADO_SETTINGS=/path/to/Vivado/settings64.sh`
-  - `$HOME/Xilinx/2025.2/Vivado/settings64.sh`
-  - `/tools/Xilinx/2025.2/Vivado/settings64.sh`
+ - `VIVADO_SETTINGS=/path/to/Vivado/settings64.sh`
+ - `$HOME/Xilinx/2025.2/Vivado/settings64.sh`
+ - `/tools/Xilinx/2025.2/Vivado/settings64.sh`
 
 Default checks:
 
 ```bash
-make regression SEED=<seed>
-make dma-sim
-make axi-lite
-make axi-system
+make regression
+make golden-test
+make unit
 ```
 
 The workflow uploads simulation logs as artifacts even on failure.
@@ -60,13 +59,12 @@ The workflow uploads simulation logs as artifacts even on failure.
 The Vivado workflow has a manual `run_bitstream` option. When enabled, it runs:
 
 ```bash
-make clean-generated
-make full-arty-z7-dma-flow
+make clean
+make full-preboard-proof
 ```
 
-This generates test headers, runs the DMA simulation, creates the Arty Z7 Vivado
-project, builds the bitstream, exports the XSA, and builds the Vitis bare-metal
-application.
+This generates golden tensors and bare-metal headers, runs the model/golden/RTL
+regression, creates the Arty Z7 Vivado project, builds the bitstream, exports the
+XSA, builds the Vitis bare-metal application, and packages `build/BOOT.BIN`.
 
 Use this full flow intentionally because it is much slower than RTL simulation.
-

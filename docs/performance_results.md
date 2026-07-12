@@ -8,37 +8,48 @@
 | SoC | Xilinx Zynq-7000 |
 | Part | `xc7z020clg400-1` |
 | Toolchain | Vivado / Vitis 2025.2 |
-| Build Type | Implemented bitstream |
+| Build Type | implemented Zynq block-design bitstream |
 
 ## Build Status
 
 | Item | Result |
 |---|---|
 | Vivado project generation | Passing |
-| Bitstream generation | Passing |
-| Timing | Met |
+| bitstream generation | Passing |
+| Timing | Met at 125 MHz |
 | XSA export | Passing |
-| Vitis bare-metal app build | Passing |
+| bare-metal app build | Passing |
+| BOOT.BIN packaging | Available through `make boot-image` |
 
 ## FPGA Utilization
 
-Latest implemented design:
+Latest board implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 6,692 | 53,200 | 12.58% |
-| Slice Registers | 8,058 | 106,400 | 7.57% |
-| Block RAM Tile | 2 | 140 | 1.43% |
-| DSPs | 1 | 220 | 0.45% |
+| Slice LUTs | 6,346 | 53,200 | 11.93% |
+| Slice Registers | 7,568 | 106,400 | 7.11% |
+| Block RAM Tile | 29 | 140 | 20.71% |
+| DSPs | 5 | 220 | 2.27% |
 
 ## Timing Result
 
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.265 ns
-WHS = 0.018 ns
+WNS = 0.051 ns
+WHS = 0.013 ns
 ```
+
+## Compute Snapshot
+
+The implemented board smoke configuration is `PC=2`, `PK=4`, `MAX_PIXELS=16`.
+
+The compute sweep also documents the scaling target:
+
+| PC | PK | MACs/cycle | Peak GMAC/s at 125 MHz | Timing |
+|---:|---:|---:|---:|---|
+| 4 | 8 | 32 | 4.000 | Met out-of-context |
 
 ## Generated Outputs
 
@@ -54,4 +65,4 @@ WHS = 0.018 ns
 
 ## Notes
 
-The current implementation fits comfortably on the Arty Z7-20 and leaves room for larger buffers, DMA support, additional output channels, and more compute parallelism.
+The current implementation fits comfortably on the Arty Z7-20 in the board smoke configuration and leaves room for an ILA/debug variant and future scaling toward the `PC=4`, `PK=8` compute target.

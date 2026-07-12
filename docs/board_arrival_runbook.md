@@ -28,13 +28,13 @@ build/flow_report.md
 4. Run:
 
 ```bash
-make program-arty-z7-dma
+make program-arty-z7
 ```
 
 Expected final line:
 
 ```text
-[PASS] CNN DMA accelerator test passed
+[PASS] image-to-image DMA golden test passed
 ```
 
 Save the UART transcript to:
@@ -46,8 +46,10 @@ docs/logs/board_dma_pass.log
 Also record these timing lines from the same run:
 
 ```text
-DMA+CNN transfer cycles = <measured>
-DMA+CNN transfer usec   = <measured>
+DMA+ transfer cycles = <measured>
+DMA+ transfer usec = <measured>
+ perf job cycles = <measured>
+ perf compute cycles = <measured>
 ```
 
 ## Optional SD Boot Check
@@ -61,13 +63,7 @@ After JTAG passes:
 
 ## Optional ILA Debug Build
 
-If UART shows a DMA timeout, TLAST mismatch, or unexpected output count, build:
-
-```bash
-make arty-z7-ila-bitstream
-```
-
-Open the generated ILA project in Vivado hardware manager and trigger on:
+If UART shows a DMA timeout, TLAST mismatch, or unexpected output count, add an ILA/debug block-design variant and trigger on:
 
 ```text
 SLOT_0_AXIS TVALID && TREADY: DMA MM2S pixel accepted by CNN
@@ -77,7 +73,7 @@ SLOT_1_AXIS TLAST: final output word
 SLOT_2_AXI AW/W/B channels: CNN register writes
 ```
 
-Use the ILA bitstream for debug only, then switch back to the clean bitstream for final timing/performance evidence.
+Use any ILA bitstream for debug only, then switch back to the clean bitstream for final timing/performance evidence.
 
 ## Evidence To Add To The Repo
 
@@ -106,11 +102,13 @@ DMA MM2S final status
 DMA MM2S final status decode
 DMA S2MM final status
 DMA S2MM final status decode
-CNN status
-CNN result stat
-CNN status decode
-CNN result decode
+ status
+ irq_status
+ error_code
+ stream_state
+ packet_words
+ perf counters
 [FAIL] lines
 ```
 
-Most likely first issues are UART device selection, boot jumper mode, stale bitstream/ELF pair, cache maintenance around DMA buffers, or a DMA byte-count/TLAST mismatch.
+Most likely first issues are UART device selection, boot jumper mode, stale bitstream/ELF pair, cache maintenance around DMA buffers, packet length/order errors, or a DMA byte-count/TLAST mismatch.

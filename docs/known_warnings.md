@@ -13,7 +13,7 @@ The check fails on any `ERROR`, any `CRITICAL WARNING`, or any warning outside t
 | Warning | Source | Why it is accepted |
 |---|---|---|
 | `Board 49-26` | Vivado board store scan | Local Vivado installation contains board files for parts not installed in this tool setup. This is environment noise before project creation. |
-| `Boardtcl 53-1` | Optional ILA block-design generation | Board automation is queried while the project is targeting the Zynq part directly rather than an installed board preset. |
+| `Boardtcl 53-1` | Vivado board metadata query | Board automation is queried while the project is targeting the Zynq part directly rather than an installed board preset. |
 | `Project 1-5713` | Vivado project metadata | The design targets the Zynq part directly when board-part metadata is unavailable. |
 | `BD 5-1069` | Optional System ILA monitor insertion | Vivado defaults monitor interface direction to input for the debug-only System ILA slots. The monitored AXI-Stream and AXI-Lite interfaces are passive taps. |
 | `BD 41-2384` | Vivado block design | Generated AXI interconnect adapts one-bit DMA transaction IDs to the six-bit Zynq HP port ID field. Lower ID bits are sufficient for this single-master DMA design. |

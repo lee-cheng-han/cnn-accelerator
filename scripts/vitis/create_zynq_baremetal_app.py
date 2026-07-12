@@ -11,7 +11,6 @@ platform_name = "arty_z7_20_cnn_platform"
 app_name = "cnn_baremetal"
 domain_name = "standalone_domain"
 
-platform_dir = workspace / platform_name
 app_dir = workspace / app_name
 
 print("Workspace:", workspace)
@@ -20,9 +19,6 @@ print("XSA:", xsa_file)
 if not xsa_file.exists():
     raise FileNotFoundError(f"Missing XSA: {xsa_file}")
 
-# Clean the entire generated Vitis workspace.
-# Vitis can leave stale workspace metadata after failed runs, which causes:
-# "Invalid project location ... arty_z7_20_cnn_platform"
 if workspace.exists():
     print(f"Removing old Vitis workspace: {workspace}")
     shutil.rmtree(workspace)
@@ -52,7 +48,7 @@ app = client.create_app_component(
     template="hello_world",
 )
 
-app_src_dir = workspace / app_name / "src"
+app_src_dir = app_dir / "src"
 src_main = root / "software" / "zynq_baremetal" / "main.c"
 dst_main = app_src_dir / "main.c"
 dst_hello = app_src_dir / "helloworld.c"
@@ -66,7 +62,7 @@ if not src_main.exists():
 shutil.copyfile(src_main, dst_main)
 
 src_generated = root / "software" / "zynq_baremetal" / "generated"
-dst_generated = dst_main.parent / "generated"
+dst_generated = app_src_dir / "generated"
 
 if dst_generated.exists():
     shutil.rmtree(dst_generated)
@@ -77,8 +73,6 @@ if src_generated.exists():
 else:
     raise FileNotFoundError(f"Missing generated headers directory: {src_generated}")
 
-# Vitis hello_world template uses UserConfig.cmake to choose app sources.
-# Replace helloworld.c with our real main.c.
 if user_config.exists():
     text = user_config.read_text()
     text = text.replace('"helloworld.c"', '"main.c"')
@@ -86,7 +80,6 @@ if user_config.exists():
 else:
     raise FileNotFoundError(f"Missing Vitis source config: {user_config}")
 
-# Remove generated Hello World source and helper after metadata is patched.
 if dst_hello.exists():
     dst_hello.unlink()
 

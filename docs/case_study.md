@@ -1,10 +1,10 @@
-# Case Study: Zynq CNN Accelerator
+# Case Study: Zynq Image-to-Image CNN Accelerator
 
 ## Problem
 
-Build a small but complete FPGA CNN accelerator that can be controlled by software, receive image data from DDR, process it in programmable logic, and write results back to DDR for software validation.
+Build a complete FPGA CNN accelerator subsystem that can be controlled by software, receive tensor data from DDR, process a multi-layer image-to-image network in programmable logic, and write results back to DDR for software validation.
 
-The project goal is not to compete with a production neural-network accelerator. The goal is to demonstrate end-to-end ownership of an accelerator subsystem: RTL design, protocol integration, testbenches, synthesis, software, and board bring-up preparation.
+The goal is to demonstrate end-to-end ownership of an accelerator subsystem: RTL microarchitecture, protocol integration, testbenches, synthesis, software, and board bring-up preparation.
 
 ## Constraints
 
@@ -15,111 +15,92 @@ The project goal is not to compete with a production neural-network accelerator.
 | Clock target | 125 MHz PL clock |
 | Software control | ARM Cortex-A9 through AXI-Lite |
 | Bulk data movement | AXI DMA |
-| Bring-up data format | packed RGB, `0x00BBGGRR` |
+| Data format | seven-packet tensor stream |
+| Network | RGB image-to-image, `3 -> 16 -> 16 -> 3` |
 | Arithmetic | signed int8 data and weights, signed int32 accumulation |
-| Output format | signed int8 results sign-extended to 32-bit DMA words |
+| Output format | signed int8 RGB pixels sign-extended to 32-bit DMA words |
 
 ## Architecture
 
-The current design has two independent software-visible paths:
+The current design has two software-visible paths:
 
-- AXI-Lite configuration path for width, height, mode flags, weights, biases, start, clear, and status.
-- AXI DMA data path for streaming packed RGB pixels into the accelerator and streaming 32-bit result words back to DDR.
+- AXI-Lite configuration/status path for image dimensions, residual mode, start/clear, errors, and performance counters.
+- AXI DMA data path for packetized activations, biases, weights, and output pixels.
 
 The hardware path is:
 
 ```text
 AXI DMA MM2S
-  -> axis_rgb_to_channels
-  -> streaming_cnn_core
-  -> axis_output_widen
-  -> AXI DMA S2MM
+ -> tensor_packet_router
+ -> stream_loaded_multi_layer_job_controller
+ -> scratchpad-backed tiled convolution engines
+ -> AXI DMA S2MM
 ```
 
-The CNN core supports:
+The core supports:
 
-- True 1x1 convolution using tap 0.
-- Valid 3x3 convolution using a streaming window buffer.
-- Four output channels.
-- Bias add.
-- ReLU.
-- Quantization right shift.
-- Saturation to signed int8.
+- Three fixed 3x3 convolution layers for RGB denoising-style reconstruction.
+- Stream-loaded activation, bias, and weight tensors.
+- Banked activation and weight scratchpads.
+- Parameter prefetch overlap while compute is active.
+- Optional final residual subtraction.
+- Software-readable performance counters.
 
 ## RTL Implementation
 
-The DMA top level is `rtl/zynq/cnn_dma_system_top.sv`. It instantiates:
+The board-facing top level is `rtl/zynq/cnn_image2image_system_top.sv`. It instantiates:
 
-- `cnn_axi_lite_slave` for software-visible registers.
-- `cnn_config_loader` for latching runtime configuration and loading weights/biases.
-- `axis_rgb_to_channels` for converting one 32-bit packed RGB beat into three channel samples.
-- `streaming_cnn_core` for CNN execution.
-- `axis_output_widen` for turning signed int8 outputs into 32-bit AXI-Stream beats.
-
-The compute datapath uses a pipelined `conv_engine`:
-
-1. Multiply input samples by weights.
-2. Sum kernel taps per input channel.
-3. Accumulate input channels.
-4. Apply optional bias, ReLU, quantization, and saturation.
+- `cnn_axi_lite_slave` for software-visible registers and counters.
+- `cnn_image2image_axi_stream_top` for packetized AXI-stream ingress/egress.
+- `tensor_packet_router` for seven-packet validation and routing.
+- `stream_loaded_multi_layer_job_controller` for tensor loading, compute, prefetch, and output streaming.
+- `single_layer_scheduler` and tiled 1x1/3x3 engines for reusable image traversal and compute.
 
 ## Verification
 
 Verification is layered:
 
-- Unit tests for MACs, channel accumulation, line/window buffers, RGB stream conversion, output widening, config loading, and output buffering.
-- Directed and randomized tests for `conv_engine` and `streaming_cnn_core`.
-- AXI-Lite register tests.
-- Full DMA-style top-level test for both 3x3 and 1x1 modes.
-- Python-generated C headers for repeatable bare-metal golden comparisons.
-
-The DMA top simulation checks:
-
-- AXI-Lite configuration writes.
-- Packed RGB AXI-Stream input.
-- 3x3 valid convolution.
-- 1x1 convolution.
-- Output ordering.
-- Sign-extended 32-bit output words.
-- Final TLAST behavior.
+- Unit tests for MAC arrays, accumulators, tail masks, post-processing, address generation, scratchpads, tensor loaders, and schedulers.
+- Full-network RTL tests against generated Python golden tensors.
+- Packetized AXI-stream tests for complete seven-packet jobs and malformed packet errors.
+- AXI-Lite tests for register access, byte strobes, command pulses, interrupts, and performance snapshots.
+- A Vitis bare-metal app that sends generated golden tensors through AXI DMA and checks returned pixels.
 
 ## Implementation Results
 
-Latest documented implementation:
+Latest board implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 6,692 | 53,200 | 12.58% |
-| Slice registers | 8,058 | 106,400 | 7.57% |
-| Block RAM tile | 2 | 140 | 1.43% |
-| DSPs | 1 | 220 | 0.45% |
+| Slice LUTs | 6,346 | 53,200 | 11.93% |
+| Slice registers | 7,568 | 106,400 | 7.11% |
+| Block RAM tile | 29 | 140 | 20.71% |
+| DSPs | 5 | 220 | 2.27% |
 
 Timing result:
 
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.265 ns
-WHS = 0.018 ns
+WNS = 0.051 ns
+WHS = 0.013 ns
 ```
 
 ## Software
 
 The bare-metal application:
 
-1. Copies generated packed RGB pixels into a DDR input buffer.
+1. Generates and embeds a deterministic golden tensor job.
 2. Clears and configures the accelerator.
-3. Loads identity-style weights and zero biases.
-4. Starts the accelerator.
-5. Starts AXI DMA transfers.
-6. Waits for MM2S and S2MM completion.
-7. Invalidates the output cache range.
-8. Compares the DDR output buffer against generated golden results.
+3. Sends activation, bias, and weight packets through AXI DMA.
+4. Receives output RGB pixels through AXI DMA.
+5. Prints accelerator status and performance counters.
+6. Compares both residual and non-residual output modes against Python golden tensors.
 
 Expected final board output:
 
 ```text
-[PASS] CNN DMA accelerator test passed
+[PASS] image-to-image DMA golden test passed
 ```
 
 ## Current Status
@@ -127,24 +108,24 @@ Expected final board output:
 Pre-board work is complete enough for hardware validation:
 
 - RTL simulation passing.
-- DMA block design generated.
-- Bitstream built.
+- Zynq block design generated.
+- bitstream built and timing-clean at 125 MHz.
 - XSA exported.
 - Vitis bare-metal ELF built.
+- BOOT.BIN packaging available.
 - Board validation pending physical Arty Z7-20 hardware.
 
 ## Lessons Learned
 
-- A small accelerator becomes much more realistic once it uses a real data-movement path instead of only register writes.
-- TLAST alignment matters because the compute pipeline has latency and can stall behind output backpressure.
-- Separating configuration loading from stream processing keeps the DMA top easier to reason about.
-- Simple generated images and identity-like weights are powerful for first board bring-up because failures are easy to inspect.
-- The same RTL can look much stronger when the repo clearly separates current production-like paths from older prototype paths.
+- A packetized tensor stream makes the accelerator feel like a real subsystem instead of a fixed demo datapath.
+- Golden Python tensors are valuable because the same artifacts drive RTL and bare-metal checks.
+- Streaming output directly, rather than mirroring whole frames for board use, substantially improves fit and timing.
+- Keeping performance counters in the control plane makes board bring-up evidence much stronger.
 
 ## Next Steps
 
 - Run the bare-metal DMA test on physical hardware.
 - Capture UART PASS log and setup photo.
-- Archive measured hardware latency/throughput and any useful ILA captures.
-- Expose performance counters to software.
-- Add one architectural scaling feature, such as a second layer, stride/padding, or DMA-based weight loading.
+- Archive measured hardware latency/throughput and performance counters.
+- Add an ILA/debug variant.
+- Scale the board implementation toward `PC=4`, `PK=8`.

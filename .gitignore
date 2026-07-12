@@ -21,6 +21,7 @@ out/
 *.xsa
 *.hwdef
 *.pb
+clockInfo.txt
 
 *.runs/
 *.cache/
@@ -37,6 +38,7 @@ out/
 # ==============================
 # Simulation generated files
 # ==============================
+sim/
 xsim.dir/
 *.vcd
 *.fst
@@ -58,6 +60,7 @@ xsim.dir/
 # Editor/OS files
 # ==============================
 .vscode/
+.venv/
 .DS_Store
 Thumbs.db
 __pycache__/
@@ -70,4 +73,4 @@ __pycache__/
 !docs/logs/
 !docs/logs/*.log
 !docs/logs/*.txt
-!docs/logs/*.md.venv/
+!docs/logs/*.md

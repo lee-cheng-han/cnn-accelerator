@@ -13,11 +13,13 @@ UTIL_RPT = Path("build/arty_z7_20_bitstream_util.rpt")
 FLOW_RPT = Path("build/flow_report.md")
 BITSTREAM = Path("build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit")
 XSA = Path("build/arty_z7_20_cnn/arty_z7_20_cnn.xsa")
-PLATFORM_XSA = Path("build/vitis_ws/arty_z7_20_cnn_platform/hw/arty_z7_20_cnn.xsa")
+PLATFORM_XSA = Path(
+    "build/vitis_ws/arty_z7_20_cnn_platform/export/arty_z7_20_cnn_platform/arty_z7_20_cnn_platform.xpfm"
+)
 ELF = Path("build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf")
 FSBL = Path("build/vitis_ws/arty_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf")
 BOOT_BIN = Path("build/BOOT.BIN")
-DMA_LOG = Path("docs/logs/dma_top_sim_pass.log")
+GOLDEN_HEADER = Path("software/zynq_baremetal/generated/golden_dma_job.h")
 
 
 def parse_timing() -> dict[str, str]:
@@ -94,11 +96,11 @@ def render() -> str:
         "|---|---|---|",
         f"| Bitstream | {status(BITSTREAM)} | `{BITSTREAM}` |",
         f"| Vivado-exported XSA | {status(XSA)} | `{XSA}` |",
-        f"| Vitis platform XSA copy | {status(PLATFORM_XSA)} | `{PLATFORM_XSA}` |",
+        f"| Vitis platform | {status(PLATFORM_XSA)} | `{PLATFORM_XSA}` |",
         f"| Bare-metal ELF | {status(ELF)} | `{ELF}` |",
         f"| FSBL | {status(FSBL)} | `{FSBL}` |",
         f"| BOOT.BIN | {status(BOOT_BIN)} | `{BOOT_BIN}` |",
-        f"| DMA simulation proof log | {status(DMA_LOG)} | `{DMA_LOG}` |",
+        f"| Golden DMA header | {status(GOLDEN_HEADER)} | `{GOLDEN_HEADER}` |",
         "",
         "## Timing",
         "",
@@ -138,9 +140,9 @@ def render() -> str:
             "",
             "## Next Hardware Evidence",
             "",
-            "- UART log with `[PASS] CNN DMA accelerator test passed`.",
+            "- UART log with `[PASS] image-to-image DMA golden test passed`.",
             "- Photo or screenshot of programmed Arty Z7-20 setup.",
-            "- Measured board latency/throughput for the generated 8x8 3x3 test.",
+            "- Measured board latency/throughput and printed performance counters.",
             "- Any ILA or debug capture used during first bring-up.",
             "",
         ]

@@ -14,7 +14,7 @@ Known warning categories:
     18  Optional generated IP port left unconnected
      6  Generated interconnect port-width adaptation
      5  Generated wrapper omits optional IP ports
-     1  Project created by part when board metadata is absent
      1  Vectorless power estimate reset activity warning
+     1  Project created by part when board metadata is absent
 
 PASS: no errors, no critical warnings, and no warnings outside docs/known_warnings.md.

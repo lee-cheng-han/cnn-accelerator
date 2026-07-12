@@ -4,18 +4,18 @@ set elf_file "build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf"
 set ps7_init_files [glob -nocomplain build/vitis_ws/*/export/*/hw/sdt/ps7_init.tcl]
 
 if {[llength $ps7_init_files] < 1} {
-  puts "ERROR: Could not find ps7_init.tcl"
-  exit 1
+ puts "ERROR: Could not find ps7_init.tcl"
+ exit 1
 }
 
 set ps7_init_file [lindex $ps7_init_files 0]
 
 puts "Using bitstream:"
-puts "  $bit_file"
+puts " $bit_file"
 puts "Using ELF:"
-puts "  $elf_file"
+puts " $elf_file"
 puts "Using PS init:"
-puts "  $ps7_init_file"
+puts " $ps7_init_file"
 
 connect
 
@@ -39,4 +39,4 @@ dow $elf_file
 puts "Running ELF..."
 con
 
-puts "Program started. Check UART output."
+puts " program started. Check UART output."

@@ -7,36 +7,38 @@
 | Board | Digilent Arty Z7-20 |
 | FPGA Part | `xc7z020clg400-1` |
 | Top-Level Wrapper | `system_wrapper` |
+| RTL Top | `cnn_image2image_system_top` |
 | Vivado Version | 2025.2 |
-| Design Flow | Script-generated Vivado project and block design |
+| Design Flow | Script-generated Vivado project and Zynq block design |
 
 ## Implementation Status
 
 | Stage | Result |
 |---|---|
 | Vivado project creation | Passing |
-| Block design validation | Passing |
+| block design validation | Passing |
 | Synthesis | Passing |
 | Implementation | Passing |
 | Bitstream generation | Passing |
-| Timing | Met |
+| Timing | Met at 125 MHz |
 | XSA export | Passing |
 
 ## Resource Utilization
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 5,678 | 53,200 | 10.67% |
-| Slice Registers | 7,749 | 106,400 | 7.28% |
-| Block RAM Tile | 4.5 | 140 | 3.21% |
-| RAMB36/FIFO | 4 | 140 | 2.86% |
-| RAMB18 | 1 | 280 | 0.36% |
-| DSPs | 3 | 220 | 1.36% |
+| Slice LUTs | 6,346 | 53,200 | 11.93% |
+| Slice Registers | 7,568 | 106,400 | 7.11% |
+| Block RAM Tile | 29 | 140 | 20.71% |
+| DSPs | 5 | 220 | 2.27% |
 
 ## Timing Summary
 
 ```text
 All user specified timing constraints are met.
+Clock = 125.000 MHz
+WNS = 0.051 ns
+WHS = 0.013 ns
 ```
 
 ## Important Generated Files
@@ -45,13 +47,13 @@ All user specified timing constraints are met.
 |---|---|
 | `build/arty_z7_20_cnn/arty_z7_20_cnn.xpr` | Generated Vivado project |
 | `build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit` | Generated bitstream |
-| `build/arty_z7_20_bitstream_util.rpt` | Utilization report |
-| `build/arty_z7_20_bitstream_timing.rpt` | Timing report |
+| `build/arty_z7_20_bitstream_util.rpt` | utilization report |
+| `build/arty_z7_20_bitstream_timing.rpt` | timing report |
 | `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa` | Exported hardware platform |
 
 ## Warning Notes
 
-Vivado may print board-store warnings related to unrelated board parts. These are not design failures. The project targets the raw Zynq part:
+Vivado may print board-store warnings related to unrelated board parts and generated interconnect adaptation. These are tracked as generated-tool warnings, not handwritten RTL failures. The board project targets the raw Zynq part:
 
 ```text
 xc7z020clg400-1
@@ -59,6 +61,7 @@ xc7z020clg400-1
 
 Relevant passing checks:
 
+- block design validates
 - synthesis completes
 - implementation completes
 - bitstream is generated

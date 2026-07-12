@@ -2,15 +2,14 @@
 
 ## Overview
 
-The accelerator is implemented in the Zynq-7000 programmable logic and controlled by the ARM Cortex-A9 processing system.
+The current board-facing accelerator is the image-to-image CNN system. It runs in the Zynq-7000 programmable logic and is controlled by the ARM Cortex-A9 processing system.
 
-The current board-facing design uses:
+The design uses:
 
-- AXI-Lite for control and configuration.
-- AXI DMA for bulk image input and result output.
-- AXI-Stream between the DMA engine and the CNN datapath.
-
-The target board is the Digilent Arty Z7-20.
+- AXI-Lite for configuration, command, status, diagnostics, and performance counters.
+- AXI DMA for tensor input and output movement through DDR.
+- AXI-Stream between AXI DMA and the packetized CNN datapath.
+- Local activation and weight scratchpads for stream-loaded multi-layer execution.
 
 ## Target Platform
 
@@ -22,133 +21,107 @@ The target board is the Digilent Arty Z7-20.
 | Processor | Dual-core ARM Cortex-A9 |
 | PL clock | 125 MHz |
 | Toolchain | Vivado / Vitis 2025.2 |
-| CNN AXI-Lite base | `0x43C00000` |
+| AXI-Lite base | `0x43C00000` |
 | AXI DMA base | `0x40400000` |
 
 ## System-Level Architecture
 
 ```text
 ARM Cortex-A9
-    |
-    | AXI-Lite through M_AXI_GP0
-    v
+ |
+ | AXI-Lite through M_AXI_GP0
+ v
 AXI-Lite interconnect
-    |
-    +--> CNN configuration/status registers
-    |
-    +--> AXI DMA control registers
+ |
+ +--> CNN control/status/performance registers
+ |
+ +--> AXI DMA control registers
 
 
-DDR input buffer
-    |
-    | AXI DMA MM2S
-    v
-CNN AXI-Stream input
-    |
-    v
-CNN streaming datapath
-    |
-    v
-CNN AXI-Stream output
-    |
-    | AXI DMA S2MM
-    v
+DDR tensor packet buffer
+ |
+ | AXI DMA MM2S
+ v
+tensor_packet_router
+ |
+ | activation, bias, weight streams
+ v
+stream_loaded_multi_layer_job_controller
+ |
+ | scratchpad-backed 3-layer CNN
+ v
+signed 8-bit RGB output stream
+ |
+ | sign-extended 32-bit AXI-Stream
+ v
+AXI DMA S2MM
+ |
+ v
 DDR output buffer
 ```
 
-## Datapath
+## Target Network
 
 ```text
-AXI DMA MM2S
-    |
-    | 32-bit packed RGB pixels, 0x00BBGGRR
-    v
-axis_rgb_to_channels
-    |
-    | R, G, B channel-serial samples
-    v
-streaming_cnn_core
-    |
-    +--> 1x1 mode: collect one RGB pixel and use tap 0
-    |
-    +--> 3x3 mode: generate valid windows with streaming_window_buffer
-    |
-    v
-conv_engine
-    |
-    | MAC, optional bias, optional ReLU, optional quantization, saturation
-    v
-axis_output_widen
-    |
-    | signed int8 result sign-extended to 32-bit AXI-Stream word
-    v
-AXI DMA S2MM
+Input RGB tensor
+ -> Conv 3x3, 3 -> 16, padding 1, ReLU
+ -> Conv 3x3, 16 -> 16, padding 1, ReLU
+ -> Conv 3x3, 16 -> 3, padding 1
+ -> optional residual reconstruction
+ -> Output RGB tensor
 ```
 
 ## Main Hardware Blocks
 
 | Block | Purpose |
 |---|---|
-| `cnn_dma_system_top` | Current DMA-capable top-level accelerator |
-| `cnn_axi_lite_slave` | Software-visible control/status/config register file |
-| `cnn_config_loader` | Latches width, height, mode flags, weights, and biases |
-| `axis_rgb_to_channels` | Converts packed RGB DMA input into channel samples |
-| `streaming_window_buffer` | Generates valid 3x3 windows for channel-serial input |
-| `streaming_cnn_core` | Sequences windows/pixels through the convolution engine |
-| `conv_engine` | Pipelined convolution and post-processing datapath |
-| `axis_output_widen` | Converts signed int8 outputs into 32-bit DMA words |
-| AXI DMA | Moves image input and CNN output between DDR and PL streams |
+| `cnn_image2image_system_top` | AXI-Lite plus packetized AXI-Stream system top |
+| `cnn_image2image_system_bd_wrapper` | Vivado block-design wrapper for Zynq integration |
+| `cnn_axi_lite_slave` | Software-visible registers, status, interrupts, diagnostics, and counters |
+| `tensor_packet_router` | Validates and routes the seven-packet tensor input stream |
+| `stream_loaded_multi_layer_job_controller` | Loads tensors, overlaps parameter prefetch, and runs the 3-layer job |
+| `single_layer_scheduler` | Reuses 1x1/3x3 tiled engines across image positions |
+| `banked_activation_scratchpad` | BRAM-style activation storage with registered vector reads |
+| `banked_weight_scratchpad` | BRAM-style weight storage with registered PK x PC reads |
+| `performance_counters` | Counts job, packet, compute, layer, transfer, and stall cycles |
+| AXI DMA | Moves tensor packets and output pixels between DDR and PL streams |
 
 ## Register Map
 
+The accelerator uses AXI-Lite for control and observability. Tensor payloads are not register-loaded; they move through AXI DMA.
+
 | Offset | Register | Description |
 |---:|---|---|
-| `0x000` | Control | Start / clear control register |
-| `0x004` | Status | Accelerator status |
-| `0x008` | Width | Input image width |
-| `0x00C` | Height | Input image height |
-| `0x010` | Mode Flags | Kernel, ReLU, bias, and quantization configuration |
-| `0x020` | Pixel Input | Legacy AXI-Lite input path |
-| `0x024` | Pixel Index | Legacy/debug register |
-| `0x030` | Result Data | Legacy AXI-Lite output path |
-| `0x034` | Result Status | Result status |
-| `0x100` | Weight Base | Weight register base |
-| `0x400` | Bias Base | Bias register base |
-
-The active board flow uses DMA for pixel input and result output. The AXI-Lite pixel/result registers remain for compatibility with earlier prototype paths.
-
-## Mode Flags
-
-| Bit | Name | Description |
-|---:|---|---|
-| `0` | Kernel Mode | `0` = 1x1 convolution, `1` = 3x3 convolution |
-| `1` | ReLU Enable | Enables ReLU post-processing |
-| `2` | Bias Enable | Enables bias addition |
-| `3` | Quant Enable | Enables output quantization shift |
-| `12:8` | Quant Shift | Arithmetic right-shift amount |
+| `0x000` | `CONTROL` | Start and clear pulses |
+| `0x004` | `STATUS` | Busy, done, error, performance-counting |
+| `0x008` | `IRQ_STATUS` | Done/error sticky status |
+| `0x00C` | `IRQ_ENABLE` | Done/error interrupt enables |
+| `0x010` | `IMAGE_WIDTH` | Input/output image width |
+| `0x014` | `IMAGE_HEIGHT` | Input/output image height |
+| `0x018` | `MODE_FLAGS` | Bit 0 enables final residual subtraction |
+| `0x01C` | `ERROR_CODE` | Packet-router or compute error code |
+| `0x020` | `STREAM_STATE` | Packet type and ready-layer state |
+| `0x024` | `PACKET_WORDS` | Current packet payload words accepted |
+| `0x080`-`0x0A8` | `PERF_*` | Latency, layer, transfer, and stall counters |
+| `0x0FC` | `VERSION` | Register-map version, `0x00020000` |
 
 ## Software Interaction
 
-The bare-metal program accesses the accelerator and DMA through memory-mapped I/O:
+The bare-metal app:
 
-```c
-#define CNN_BASE 0x43C00000U
-#define DMA_BASE 0x40400000U
+1. Resets AXI DMA.
+2. Clears the accelerator.
+3. Programs image dimensions and residual mode.
+4. Starts S2MM and MM2S DMA channels.
+5. Pulses `CONTROL.start`.
+6. Sends seven tensor packets through MM2S.
+7. Receives output pixels through S2MM.
+8. Polls DMA and status completion.
+9. Prints diagnostics and performance counters.
+10. Compares DDR output against generated Python golden tensors.
+
+Expected board result:
+
+```text
+[PASS] image-to-image DMA golden test passed
 ```
-
-Software sequence:
-
-1. Clear the accelerator.
-2. Configure image width and height.
-3. Configure mode flags.
-4. Load weights and biases.
-5. Start the accelerator.
-6. Start AXI DMA S2MM output transfer.
-7. Start AXI DMA MM2S input transfer.
-8. Wait for DMA completion.
-9. Read status registers.
-10. Compare DDR output buffer against generated golden output.
-
-## Legacy Prototype Path
-
-The repository also includes earlier non-DMA RTL and tests centered around `cnn_accel_top` and `cnn_axi_system_top`. Those modules are useful for regression history and simpler AXI-Lite experiments, but the current board validation target is the DMA system.

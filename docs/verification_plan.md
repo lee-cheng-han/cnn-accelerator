@@ -4,98 +4,89 @@
 
 The design is verified at multiple levels:
 
-1. Individual RTL module testing
-2. AXI-Lite register interface testing
-3. Integrated AXI system testing
-4. Vivado synthesis and implementation checks
-5. Bare-metal ARM software build validation
-6. Planned board-level hardware test on Arty Z7-20
+1. Python bit-accurate model tests
+2. RTL unit tests
+3. Full-network golden tensor RTL tests
+4. Packetized AXI-stream system tests
+5. AXI-Lite register and performance-counter tests
+6. Vivado synthesis and implementation checks
+7. Vitis bare-metal app build validation
+8. Planned board-level hardware test on Arty Z7-20
 
 ## Verification Goals
 
 | Area | Goal |
 |---|---|
-| RTL correctness | Validate datapath and control behavior |
-| AXI-Lite protocol | Verify register reads/writes and response behavior |
-| Configuration loading | Verify weights, biases, image size, and mode flags |
-| Streaming input | Verify pixel input path |
-| Result readback | Verify result buffer read behavior |
-| Zynq integration | Verify PS to PL AXI connectivity |
-| Build reproducibility | Verify complete flow from scripts |
-| Timing | Ensure implemented design meets timing |
+| Model correctness | Validate signed INT8/INT32 image-to-image arithmetic |
+| RTL correctness | Validate compute, scratchpad, scheduler, and stream behavior |
+| Packet protocol | Verify packet order, length, headers, TLAST, and error reporting |
+| AXI-Lite protocol | Verify register reads/writes, command pulses, status, and counters |
+| Zynq integration | Verify PS, AXI DMA, AXI-Lite, AXI-Stream, reset, and clock connectivity |
+| Build reproducibility | Verify complete scripted flow from RTL to XSA/ELF/BOOT.BIN |
+| Timing | Ensure implemented design meets 125 MHz |
 
 ## RTL Verification
 
-Expected RTL test coverage includes:
+Expected RTL coverage includes:
 
-- reset behavior
-- control register writes
-- status register reads
-- image width/height configuration
-- weight register loading
-- bias register loading
-- pixel input writes
-- result buffer reads
-- ReLU enable/disable behavior
-- quantization mode behavior
-- random and directed datapath cases
-
-## AXI-Lite Verification
-
-AXI-Lite testbenches check:
-
-- write address/data handshake
-- write response behavior
-- read address handshake
-- read data response
-- register write/read correctness
-- control pulse behavior
-- invalid or unused address behavior
-- status/result register behavior
-
-## System-Level Verification
-
-The integrated AXI system test verifies that the AXI-Lite slave, configuration registers, streaming input path, CNN datapath, and result readback path operate together.
+- reset and clear behavior
+- tensor address generation
+- tail masks for non-divisible channel tiles
+- tiled 1x1 and 3x3 compute engines
+- banked activation and weight scratchpad reads
+- activation, bias, and weight load streams
+- output stream ordering and `last`
+- multi-layer scheduler sequencing
+- parameter prefetch overlap
+- residual and non-residual output modes
+- packet router malformed-input errors
+- output backpressure
+- performance counter snapshots
 
 ## Build Verification
 
-Hardware/software build flow:
+Primary hardware/software build flow:
 
 ```bash
-make arty-z7-project
-make arty-z7-bitstream
-make arty-z7-xsa
-make vitis-app
+make full-preboard-proof
 ```
 
-Full flow:
+Equivalent important substeps:
 
 ```bash
+make regression
 make full-arty-z7-flow
+make boot-image
+make flow-report
 ```
 
 Passing criteria:
 
+- Python model tests pass
+- golden RTL tests pass
+- unit RTL tests pass
 - Vivado project is generated
 - block design is valid
 - bitstream is generated
-- timing is met
+- timing is met at 125 MHz
 - XSA is exported
 - Vitis bare-metal ELF is generated
+- `build/BOOT.BIN` is packaged
 
 ## Current Status
 
 | Verification Item | Status |
 |---|---|
-| RTL simulation | Passing |
-| AXI-Lite testbench | Passing |
-| AXI system testbench | Passing |
-| Synthesis | Passing |
-| Implementation | Passing |
-| Timing | Met |
+| Python model tests | Passing |
+| golden RTL tests | Passing |
+| unit RTL tests | Passing |
+| Zynq block design | Passing |
+| implementation | Passing |
+| Timing | Met at 125 MHz |
 | XSA export | Passing |
 | Vitis app build | Passing |
-| Board execution | Next step |
+| BOOT.BIN | Passing |
+| Board execution | Pending hardware |
 
 ## Board-Level Test Plan
 
@@ -103,16 +94,22 @@ The board-level test will run the generated ELF on the Zynq ARM processor after 
 
 Expected sequence:
 
-1. Program FPGA with `system_wrapper.bit`
-2. Run `cnn_baremetal.elf` on ARM Cortex-A9
-3. Open UART terminal
-4. Confirm startup banner
-5. Confirm accelerator status reads
-6. Confirm result words are printed
-7. Compare output values against expected software-side behavior
+1. Program FPGA with the `system_wrapper.bit`.
+2. Run `cnn_baremetal.elf` on ARM Cortex-A9.
+3. Open UART terminal.
+4. Confirm startup banner.
+5. Confirm register version.
+6. Confirm residual and non-residual golden DMA jobs pass.
+7. Archive printed performance counters.
 
 Expected UART banner:
 
 ```text
-Zynq CNN Accelerator Bare-Metal Test
+Zynq Image-to-Image CNN DMA Test
+```
+
+Expected final line:
+
+```text
+[PASS] image-to-image DMA golden test passed
 ```

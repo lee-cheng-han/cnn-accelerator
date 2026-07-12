@@ -36,7 +36,7 @@ UART settings:
 
 Run:
 
-make program-arty-z7-dma
+make program-arty-z7
 
 This uses:
 
@@ -48,43 +48,34 @@ After JTAG passes, copy `build/BOOT.BIN` to a FAT32 microSD card, set the board 
 
 ## Optional ILA debug bitstream
 
-If the first board run needs signal-level debug, build an ILA variant:
-
-make arty-z7-ila-bitstream
-
-This creates a separate project under:
-
-build/arty_z7_20_cnn_ila
-
-The ILA probes the DMA-to-CNN input stream, the CNN-to-DMA output stream, and a few AXI-Lite control handshakes. Use the normal bitstream for final measurements; use the ILA bitstream only for bring-up visibility.
+A specific ILA/debug block-design variant is planned after first board bring-up if UART, DMA status, and performance counters are not enough visibility.
 
 ## Expected UART output
 
 The test should print:
 
-Zynq CNN Accelerator DMA Test
+Zynq Image-to-Image CNN DMA Test
 CNN base address: 0x43c00000
-DMA base address: 0x40400000
-Kernel mode = 3x3
+AXI DMA base address: 0x40400000
 ...
-DMA+CNN transfer usec   = <measured>
-[PASS] CNN DMA accelerator test passed
+DMA+ transfer usec = <measured>
+[PASS] image-to-image DMA golden test passed
 
 ## Important addresses
 
-CNN AXI-Lite config base: 0x43C00000
-AXI DMA base:             0x40400000
+ AXI-Lite config base: 0x43C00000
+AXI DMA base: 0x40400000
 
 ## DMA data path
 
-DDR input buffer
-   ↓
+DDR packet buffer
+ ↓
 AXI DMA MM2S
-   ↓ packed RGB AXI-Stream, 0x00BBGGRR
-CNN accelerator
-   ↓ 32-bit output AXI-Stream
+ ↓ packetized tensor AXI-Stream
+ image-to-image CNN accelerator
+ ↓ 32-bit output AXI-Stream
 AXI DMA S2MM
-   ↓
+ ↓
 DDR output buffer
 
 ## Debug lines to check if it fails
@@ -99,8 +90,10 @@ DMA MM2S final status
 DMA MM2S final status decode
 DMA S2MM final status
 DMA S2MM final status decode
-DMA+CNN transfer cycles
-DMA+CNN transfer usec
-CNN status decode
-CNN result decode
+DMA+ transfer cycles
+DMA+ transfer usec
+ status decode
+ error_code
+ perf input words
+ perf output words
 [FAIL] lines

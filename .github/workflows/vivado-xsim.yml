@@ -3,12 +3,8 @@ name: Vivado XSim
 on:
   workflow_dispatch:
     inputs:
-      seed:
-        description: Random seed passed to XSim testbenches
-        required: true
-        default: "12345"
       run_bitstream:
-        description: Also run the full Arty Z7 DMA bitstream/Vitis flow
+        description: Also run the full Arty Z7 bitstream/Vitis flow
         type: boolean
         required: true
         default: false
@@ -27,9 +23,6 @@ jobs:
       - self-hosted
       - linux
       - vivado
-
-    env:
-      SEED: ${{ inputs.seed }}
 
     steps:
       - name: Checkout
@@ -53,39 +46,25 @@ jobs:
       - name: Clean generated simulation files
         run: |
           make clean
-          rm -rf xsim.dir
 
       - name: Run RTL regression
         run: |
-          make regression SEED="${SEED}"
-
-      - name: Run DMA top simulation
-        run: |
-          make dma-sim
-
-      - name: Run Zynq AXI-Lite simulation
-        run: |
-          make axi-lite
-
-      - name: Run Zynq AXI system simulation
-        run: |
-          make axi-system
+          make regression
 
       - name: Upload simulation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xsim-logs-seed-${{ env.SEED }}
+          name: xsim-logs
           if-no-files-found: ignore
           path: |
-            regression_logs/**/*.log
             sim/**/*.log
             *.log
             *.jou
             *_xsim_run.log
 
-  arty-z7-dma-flow:
-    name: Arty Z7 DMA bitstream and Vitis flow
+  arty-z7-flow:
+    name: Arty Z7 bitstream and Vitis flow
     needs: xsim-regression
     if: ${{ inputs.run_bitstream }}
     runs-on:
@@ -110,16 +89,16 @@ jobs:
           command -v vivado
           command -v vitis
 
-      - name: Run full Arty Z7 DMA flow
+      - name: Run full pre-board proof flow
         run: |
-          make clean-generated
-          make full-arty-z7-dma-flow
+          make clean
+          make full-preboard-proof
 
       - name: Upload FPGA build reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: arty-z7-dma-build-reports
+          name: arty-z7-build-reports
           if-no-files-found: ignore
           path: |
             build/**/*.rpt
@@ -128,4 +107,3 @@ jobs:
             build/**/*.bit
             build/**/*.xsa
             build/**/cnn_baremetal.elf
-

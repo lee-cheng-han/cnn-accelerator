@@ -1,363 +1,342 @@
 `timescale 1ns/1ps
 
 module cnn_axi_lite_slave #(
-  parameter int AXI_ADDR_WIDTH      = 12,
-  parameter int AXI_DATA_WIDTH      = 32,
-  parameter int NUM_INPUT_CHANNELS  = 3,
-  parameter int NUM_OUTPUT_CHANNELS = 4,
-  parameter int KERNEL_TAPS         = 9,
-  parameter int DATA_WIDTH          = 8,
-  parameter int WEIGHT_WIDTH        = 8,
-  parameter int BIAS_WIDTH          = 32
+ parameter int AXI_ADDR_WIDTH = 12,
+ parameter int AXI_DATA_WIDTH = 32,
+ parameter int DIM_W = 16
 )(
-  input  logic                         s_axi_aclk,
-  input  logic                         s_axi_aresetn,
+ input logic s_axi_aclk,
+ input logic s_axi_aresetn,
 
-  input  logic [AXI_ADDR_WIDTH-1:0]     s_axi_awaddr,
-  input  logic                         s_axi_awvalid,
-  output logic                         s_axi_awready,
+ input logic [AXI_ADDR_WIDTH-1:0] s_axi_awaddr,
+ input logic s_axi_awvalid,
+ output logic s_axi_awready,
 
-  input  logic [AXI_DATA_WIDTH-1:0]     s_axi_wdata,
-  input  logic [(AXI_DATA_WIDTH/8)-1:0] s_axi_wstrb,
-  input  logic                         s_axi_wvalid,
-  output logic                         s_axi_wready,
+ input logic [AXI_DATA_WIDTH-1:0] s_axi_wdata,
+ input logic [(AXI_DATA_WIDTH/8)-1:0] s_axi_wstrb,
+ input logic s_axi_wvalid,
+ output logic s_axi_wready,
 
-  output logic [1:0]                   s_axi_bresp,
-  output logic                         s_axi_bvalid,
-  input  logic                         s_axi_bready,
+ output logic [1:0] s_axi_bresp,
+ output logic s_axi_bvalid,
+ input logic s_axi_bready,
 
-  input  logic [AXI_ADDR_WIDTH-1:0]     s_axi_araddr,
-  input  logic                         s_axi_arvalid,
-  output logic                         s_axi_arready,
+ input logic [AXI_ADDR_WIDTH-1:0] s_axi_araddr,
+ input logic s_axi_arvalid,
+ output logic s_axi_arready,
 
-  output logic [AXI_DATA_WIDTH-1:0]     s_axi_rdata,
-  output logic [1:0]                   s_axi_rresp,
-  output logic                         s_axi_rvalid,
-  input  logic                         s_axi_rready,
+ output logic [AXI_DATA_WIDTH-1:0] s_axi_rdata,
+ output logic [1:0] s_axi_rresp,
+ output logic s_axi_rvalid,
+ input logic s_axi_rready,
 
-  output logic                         start_pulse,
-  output logic                         clear_pulse,
+ output logic start_pulse,
+ output logic clear_pulse,
+ output logic final_residual_enable,
+ output logic [DIM_W-1:0] image_width,
+ output logic [DIM_W-1:0] image_height,
+ output logic irq,
 
-  output logic [15:0]                  image_width,
-  output logic [15:0]                  image_height,
-  output logic                         kernel_mode,
-  output logic                         relu_enable,
-  output logic                         bias_enable,
-  output logic                         quant_enable,
-  output logic [4:0]                   quant_shift,
+ input logic core_busy,
+ input logic core_done,
+ input logic core_error,
+ input logic [7:0] core_error_code,
+ input logic [3:0] phase,
+ input logic [1:0] active_layer,
+ input logic [2:0] weight_layers_ready,
+ input logic prefetch_active,
+ input logic prefetch_seen,
+ input logic [2:0] input_packet_type,
+ input logic [31:0] input_packet_words,
 
-  output logic                         weight_valid,
-  output logic [7:0]                   weight_index,
-  output logic signed [WEIGHT_WIDTH-1:0] weight_data,
-  output logic                         bias_valid,
-  output logic [1:0]                   bias_index,
-  output logic signed [BIAS_WIDTH-1:0] bias_data,
-
-  output logic                         pixel_valid,
-  output logic [31:0]                  pixel_index,
-  output logic signed [DATA_WIDTH-1:0] pixel_data,
-
-  input  logic                         core_busy,
-  input  logic                         core_done,
-  input  logic                         result_valid,
-  input  logic signed [DATA_WIDTH-1:0] result_data,
-  input  logic                         result_last,
-  output logic                         result_ready
+ input logic perf_counting,
+ input logic [31:0] perf_job_cycles,
+ input logic [31:0] perf_packet_cycles,
+ input logic [31:0] perf_compute_cycles,
+ input logic [31:0] perf_prefetch_cycles,
+ input logic [31:0] perf_layer0_cycles,
+ input logic [31:0] perf_layer1_cycles,
+ input logic [31:0] perf_layer2_cycles,
+ input logic [31:0] perf_input_words,
+ input logic [31:0] perf_input_stall_cycles,
+ input logic [31:0] perf_output_words,
+ input logic [31:0] perf_output_stall_cycles
 );
 
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_CONTROL      = 12'h000;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STATUS       = 12'h004;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_WIDTH        = 12'h008;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_HEIGHT       = 12'h00C;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_MODE_FLAGS   = 12'h010;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PIXEL_IN     = 12'h020;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PIXEL_INDEX  = 12'h024;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_RESULT_DATA  = 12'h030;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_RESULT_STAT  = 12'h034;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_WEIGHT_BASE  = 12'h100;
-  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_BIAS_BASE    = 12'h400;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_CONTROL = 12'h000;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STATUS = 12'h004;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_IRQ_STATUS = 12'h008;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_IRQ_ENABLE = 12'h00C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_IMAGE_WIDTH = 12'h010;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_IMAGE_HEIGHT = 12'h014;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_MODE_FLAGS = 12'h018;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_ERROR_CODE = 12'h01C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STREAM_STATE = 12'h020;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PACKET_WORDS = 12'h024;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_JOB = 12'h080;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_PACKET = 12'h084;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_COMPUTE = 12'h088;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_PREFETCH = 12'h08C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_LAYER0 = 12'h090;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_LAYER1 = 12'h094;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_LAYER2 = 12'h098;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_INPUT_WORDS = 12'h09C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_INPUT_STALL = 12'h0A0;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_OUTPUT_WORDS = 12'h0A4;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_OUTPUT_STALL = 12'h0A8;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_VERSION = 12'h0FC;
 
-  localparam int NUM_WEIGHTS = NUM_OUTPUT_CHANNELS * NUM_INPUT_CHANNELS * KERNEL_TAPS;
+ localparam logic [1:0] AXI_RESP_OKAY = 2'b00;
+ localparam logic [1:0] AXI_RESP_SLVERR = 2'b10;
 
-  logic [AXI_ADDR_WIDTH-1:0] awaddr_q;
-  logic [AXI_DATA_WIDTH-1:0] wdata_q;
-  logic [(AXI_DATA_WIDTH/8)-1:0] wstrb_q;
-  logic aw_have;
-  logic w_have;
+ logic [AXI_ADDR_WIDTH-1:0] awaddr_q;
+ logic [AXI_DATA_WIDTH-1:0] wdata_q;
+ logic [(AXI_DATA_WIDTH/8)-1:0] wstrb_q;
+ logic aw_have;
+ logic w_have;
 
-  logic [31:0] control_reg;
-  logic [31:0] status_reg;
-  logic [31:0] mode_flags_reg;
-  logic [31:0] result_status_reg;
+ logic [1:0] irq_status;
+ logic [1:0] irq_enable;
+ logic core_done_q;
+ logic core_error_q;
 
-  logic signed [WEIGHT_WIDTH-1:0] weight_mem [0:NUM_WEIGHTS-1];
-  logic signed [BIAS_WIDTH-1:0]   bias_mem   [0:NUM_OUTPUT_CHANNELS-1];
+ logic [31:0] width_merged;
+ logic [31:0] height_merged;
+ logic [31:0] mode_merged;
+ logic [31:0] irq_enable_merged;
 
-  logic [7:0] wr_weight_idx_calc;
-  logic [31:0] width_wr_merged;
-  logic [31:0] height_wr_merged;
-  logic [31:0] mode_wr_merged;
-  logic [31:0] weight_wr_merged;
-  logic [31:0] bias_wr_merged;
-  logic [31:0] pixel_wr_merged;
-  logic [1:0] wr_bias_idx_calc;
-  logic       result_read_fire;
+ function automatic logic [31:0] apply_wstrb(
+ input logic [31:0] old_value,
+ input logic [31:0] new_value,
+ input logic [3:0] byte_strobe
+ );
+ logic [31:0] merged;
+ begin
+ merged = old_value;
+ for (int b = 0; b < 4; b++) begin
+ if (byte_strobe[b]) begin
+ merged[b*8 +: 8] = new_value[b*8 +: 8];
+ end
+ end
+ return merged;
+ end
+ endfunction
 
+ assign width_merged =
+ apply_wstrb({{(32-DIM_W){1'b0}}, image_width}, wdata_q, wstrb_q);
+ assign height_merged =
+ apply_wstrb({{(32-DIM_W){1'b0}}, image_height}, wdata_q, wstrb_q);
+ assign mode_merged =
+ apply_wstrb({31'd0, final_residual_enable}, wdata_q, wstrb_q);
+ assign irq_enable_merged =
+ apply_wstrb({30'd0, irq_enable}, wdata_q, wstrb_q);
 
-  function automatic logic [31:0] apply_wstrb(
-    input logic [31:0] old_value,
-    input logic [31:0] new_value,
-    input logic [3:0]  byte_strobe
-  );
-    logic [31:0] merged;
-    begin
-      merged = old_value;
-      for (int b = 0; b < 4; b++) begin
-        if (byte_strobe[b]) begin
-          merged[b*8 +: 8] = new_value[b*8 +: 8];
-        end
-      end
-      return merged;
-    end
-  endfunction
+ assign irq = |(irq_status & irq_enable);
 
-  assign s_axi_bresp = 2'b00;
-  assign s_axi_rresp = 2'b00;
+ always_ff @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
+ if (!s_axi_aresetn) begin
+ s_axi_awready <= 1'b0;
+ s_axi_wready <= 1'b0;
+ s_axi_bresp <= AXI_RESP_OKAY;
+ s_axi_bvalid <= 1'b0;
+ awaddr_q <= '0;
+ wdata_q <= '0;
+ wstrb_q <= '0;
+ aw_have <= 1'b0;
+ w_have <= 1'b0;
 
-  assign width_wr_merged  = apply_wstrb({16'd0, image_width},  wdata_q, wstrb_q);
-  assign height_wr_merged = apply_wstrb({16'd0, image_height}, wdata_q, wstrb_q);
-  assign mode_wr_merged   = apply_wstrb({19'd0, quant_shift, quant_enable, bias_enable, relu_enable, kernel_mode}, wdata_q, wstrb_q);
-  assign weight_wr_merged = apply_wstrb(32'd0, wdata_q, wstrb_q);
-  assign bias_wr_merged   = apply_wstrb(32'd0, wdata_q, wstrb_q);
-  assign pixel_wr_merged  = apply_wstrb(32'd0, wdata_q, wstrb_q);
+ start_pulse <= 1'b0;
+ clear_pulse <= 1'b0;
+ final_residual_enable <= 1'b0;
+ image_width <= '0;
+ image_height <= '0;
+ irq_status <= '0;
+ irq_enable <= '0;
+ core_done_q <= 1'b0;
+ core_error_q <= 1'b0;
+ end else begin
+ s_axi_awready <= 1'b0;
+ s_axi_wready <= 1'b0;
+ start_pulse <= 1'b0;
+ clear_pulse <= 1'b0;
+ core_done_q <= core_done;
+ core_error_q <= core_error;
 
-  assign result_read_fire =
-    (!s_axi_rvalid) &&
-    s_axi_arvalid &&
-    (s_axi_araddr == ADDR_RESULT_DATA);
+ if (!aw_have && s_axi_awvalid) begin
+ s_axi_awready <= 1'b1;
+ awaddr_q <= s_axi_awaddr;
+ aw_have <= 1'b1;
+ end
 
-  assign result_ready = result_read_fire && result_valid;
+ if (!w_have && s_axi_wvalid) begin
+ s_axi_wready <= 1'b1;
+ wdata_q <= s_axi_wdata;
+ wstrb_q <= s_axi_wstrb;
+ w_have <= 1'b1;
+ end
 
-  assign status_reg = {
-    27'd0,
-    result_last,
-    result_valid,
-    core_done,
-    core_busy,
-    1'b0
-  };
+ if (aw_have && w_have && !s_axi_bvalid) begin
+ s_axi_bresp <= AXI_RESP_OKAY;
 
-  assign result_status_reg = {
-    30'd0,
-    result_last,
-    result_valid
-  };
+ unique case (awaddr_q)
+ ADDR_CONTROL: begin
+ if (wstrb_q[0]) begin
+ start_pulse <= wdata_q[0];
+ clear_pulse <= wdata_q[1];
+ if (wdata_q[1]) begin
+ irq_status <= '0;
+ end
+ end
+ end
 
-  always_comb begin
-    wr_weight_idx_calc = 8'd0;
-    if ((awaddr_q >= ADDR_WEIGHT_BASE) &&
-        (awaddr_q < (ADDR_WEIGHT_BASE + (NUM_WEIGHTS * 4)))) begin
-      wr_weight_idx_calc = (awaddr_q - ADDR_WEIGHT_BASE) >> 2;
-    end
-  end
+ ADDR_IRQ_STATUS: begin
+ if (wstrb_q[0]) begin
+ irq_status <= irq_status & ~wdata_q[1:0];
+ end
+ end
 
-  always_comb begin
-    wr_bias_idx_calc = 2'd0;
-    if ((awaddr_q >= ADDR_BIAS_BASE) &&
-        (awaddr_q < (ADDR_BIAS_BASE + (NUM_OUTPUT_CHANNELS * 4)))) begin
-      wr_bias_idx_calc = (awaddr_q - ADDR_BIAS_BASE) >> 2;
-    end
-  end
+ ADDR_IRQ_ENABLE: begin
+ irq_enable <= irq_enable_merged[1:0];
+ end
 
-  always_ff @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
-    if (!s_axi_aresetn) begin
-      s_axi_awready <= 1'b0;
-      s_axi_wready  <= 1'b0;
-      s_axi_bvalid  <= 1'b0;
-      aw_have       <= 1'b0;
-      w_have        <= 1'b0;
-      awaddr_q      <= '0;
-      wdata_q       <= '0;
-      wstrb_q       <= '0;
+ ADDR_IMAGE_WIDTH: begin
+ image_width <= width_merged[DIM_W-1:0];
+ end
 
-      control_reg   <= 32'd0;
-      image_width   <= 16'd0;
-      image_height  <= 16'd0;
-      mode_flags_reg <= 32'd0;
-      kernel_mode   <= 1'b0;
-      relu_enable   <= 1'b0;
-      bias_enable   <= 1'b0;
-      quant_enable  <= 1'b0;
-      quant_shift   <= 5'd0;
+ ADDR_IMAGE_HEIGHT: begin
+ image_height <= height_merged[DIM_W-1:0];
+ end
 
-      start_pulse   <= 1'b0;
-      clear_pulse   <= 1'b0;
-      weight_valid  <= 1'b0;
-      weight_index  <= 8'd0;
-      weight_data   <= '0;
-      bias_valid    <= 1'b0;
-      bias_index    <= 2'd0;
-      bias_data     <= '0;
-      pixel_valid   <= 1'b0;
-      pixel_index   <= 32'd0;
-      pixel_data    <= '0;
+ ADDR_MODE_FLAGS: begin
+ final_residual_enable <= mode_merged[0];
+ end
 
-      for (int i = 0; i < NUM_WEIGHTS; i++) begin
-        weight_mem[i] <= '0;
-      end
+ default: begin
+ s_axi_bresp <= AXI_RESP_SLVERR;
+ end
+ endcase
 
-      for (int i = 0; i < NUM_OUTPUT_CHANNELS; i++) begin
-        bias_mem[i] <= '0;
-      end
-    end else begin
-      s_axi_awready <= 1'b0;
-      s_axi_wready  <= 1'b0;
+ aw_have <= 1'b0;
+ w_have <= 1'b0;
+ s_axi_bvalid <= 1'b1;
+ end
 
-      start_pulse   <= 1'b0;
-      clear_pulse   <= 1'b0;
-      weight_valid  <= 1'b0;
-      bias_valid    <= 1'b0;
-      pixel_valid   <= 1'b0;
+ if (s_axi_bvalid && s_axi_bready) begin
+ s_axi_bvalid <= 1'b0;
+ end
 
-      if (!aw_have && s_axi_awvalid) begin
-        s_axi_awready <= 1'b1;
-        awaddr_q      <= s_axi_awaddr;
-        aw_have       <= 1'b1;
-      end
+ if (core_done && !core_done_q) begin
+ irq_status[0] <= 1'b1;
+ end
+ if (core_error && !core_error_q) begin
+ irq_status[1] <= 1'b1;
+ end
+ end
+ end
 
-      if (!w_have && s_axi_wvalid) begin
-        s_axi_wready <= 1'b1;
-        wdata_q      <= s_axi_wdata;
-        wstrb_q      <= s_axi_wstrb;
-        w_have       <= 1'b1;
-      end
+ always_ff @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
+ if (!s_axi_aresetn) begin
+ s_axi_arready <= 1'b0;
+ s_axi_rdata <= '0;
+ s_axi_rresp <= AXI_RESP_OKAY;
+ s_axi_rvalid <= 1'b0;
+ end else begin
+ s_axi_arready <= 1'b0;
 
-      if (aw_have && w_have && !s_axi_bvalid) begin
-        unique case (awaddr_q)
-          ADDR_CONTROL: begin
-            control_reg <= wdata_q;
-            start_pulse <= wdata_q[0];
-            clear_pulse <= wdata_q[1];
-          end
+ if (!s_axi_rvalid && s_axi_arvalid) begin
+ s_axi_arready <= 1'b1;
+ s_axi_rvalid <= 1'b1;
+ s_axi_rresp <= AXI_RESP_OKAY;
 
-          ADDR_WIDTH: begin
-            image_width <= wdata_q[15:0];
-          end
+ unique case (s_axi_araddr)
+ ADDR_CONTROL: begin
+ s_axi_rdata <= 32'd0;
+ end
+ ADDR_STATUS: begin
+ s_axi_rdata <= {
+ 17'd0,
+ prefetch_seen,
+ prefetch_active,
+ weight_layers_ready,
+ active_layer,
+ phase,
+ perf_counting,
+ core_error,
+ core_done,
+ core_busy
+ };
+ end
+ ADDR_IRQ_STATUS: begin
+ s_axi_rdata <= {30'd0, irq_status};
+ end
+ ADDR_IRQ_ENABLE: begin
+ s_axi_rdata <= {30'd0, irq_enable};
+ end
+ ADDR_IMAGE_WIDTH: begin
+ s_axi_rdata <= {{(32-DIM_W){1'b0}}, image_width};
+ end
+ ADDR_IMAGE_HEIGHT: begin
+ s_axi_rdata <= {{(32-DIM_W){1'b0}}, image_height};
+ end
+ ADDR_MODE_FLAGS: begin
+ s_axi_rdata <= {31'd0, final_residual_enable};
+ end
+ ADDR_ERROR_CODE: begin
+ s_axi_rdata <= {24'd0, core_error_code};
+ end
+ ADDR_STREAM_STATE: begin
+ s_axi_rdata <= {26'd0, weight_layers_ready, input_packet_type};
+ end
+ ADDR_PACKET_WORDS: begin
+ s_axi_rdata <= input_packet_words;
+ end
+ ADDR_PERF_JOB: begin
+ s_axi_rdata <= perf_job_cycles;
+ end
+ ADDR_PERF_PACKET: begin
+ s_axi_rdata <= perf_packet_cycles;
+ end
+ ADDR_PERF_COMPUTE: begin
+ s_axi_rdata <= perf_compute_cycles;
+ end
+ ADDR_PERF_PREFETCH: begin
+ s_axi_rdata <= perf_prefetch_cycles;
+ end
+ ADDR_PERF_LAYER0: begin
+ s_axi_rdata <= perf_layer0_cycles;
+ end
+ ADDR_PERF_LAYER1: begin
+ s_axi_rdata <= perf_layer1_cycles;
+ end
+ ADDR_PERF_LAYER2: begin
+ s_axi_rdata <= perf_layer2_cycles;
+ end
+ ADDR_PERF_INPUT_WORDS: begin
+ s_axi_rdata <= perf_input_words;
+ end
+ ADDR_PERF_INPUT_STALL: begin
+ s_axi_rdata <= perf_input_stall_cycles;
+ end
+ ADDR_PERF_OUTPUT_WORDS: begin
+ s_axi_rdata <= perf_output_words;
+ end
+ ADDR_PERF_OUTPUT_STALL: begin
+ s_axi_rdata <= perf_output_stall_cycles;
+ end
+ ADDR_VERSION: begin
+ s_axi_rdata <= 32'h0002_0000;
+ end
+ default: begin
+ s_axi_rdata <= 32'hDEAD_BEEF;
+ s_axi_rresp <= AXI_RESP_SLVERR;
+ end
+ endcase
+ end
 
-          ADDR_HEIGHT: begin
-            image_height <= height_wr_merged[15:0];
-          end
-
-          ADDR_MODE_FLAGS: begin
-            mode_flags_reg <= wdata_q;
-            kernel_mode    <= wdata_q[0];
-            relu_enable    <= wdata_q[1];
-            bias_enable    <= wdata_q[2];
-            quant_enable   <= wdata_q[3];
-            quant_shift    <= wdata_q[12:8];
-          end
-
-          ADDR_PIXEL_IN: begin
-            pixel_valid <= 1'b1;
-            pixel_data  <= pixel_wr_merged[DATA_WIDTH-1:0];
-          end
-
-          ADDR_PIXEL_INDEX: begin
-            pixel_index <= wdata_q;
-          end
-
-          default: begin
-            if ((awaddr_q >= ADDR_WEIGHT_BASE) &&
-                (awaddr_q < (ADDR_WEIGHT_BASE + (NUM_WEIGHTS * 4)))) begin
-              weight_mem[wr_weight_idx_calc] <= wdata_q[WEIGHT_WIDTH-1:0];
-              weight_valid <= 1'b1;
-              weight_index <= wr_weight_idx_calc;
-              weight_data  <= weight_wr_merged[WEIGHT_WIDTH-1:0];
-            end else if ((awaddr_q >= ADDR_BIAS_BASE) &&
-                         (awaddr_q < (ADDR_BIAS_BASE + (NUM_OUTPUT_CHANNELS * 4)))) begin
-              bias_mem[wr_bias_idx_calc] <= wdata_q;
-              bias_valid <= 1'b1;
-              bias_index <= wr_bias_idx_calc;
-              bias_data  <= wdata_q;
-            end
-          end
-        endcase
-
-        aw_have      <= 1'b0;
-        w_have       <= 1'b0;
-        s_axi_bvalid <= 1'b1;
-      end
-
-      if (s_axi_bvalid && s_axi_bready) begin
-        s_axi_bvalid <= 1'b0;
-      end
-    end
-  end
-
-  always_ff @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
-    if (!s_axi_aresetn) begin
-      s_axi_arready <= 1'b0;
-      s_axi_rvalid  <= 1'b0;
-      s_axi_rdata   <= 32'd0;
-    end else begin
-      s_axi_arready <= 1'b0;
-
-      if (!s_axi_rvalid && s_axi_arvalid) begin
-        s_axi_arready <= 1'b1;
-        s_axi_rvalid  <= 1'b1;
-
-        unique case (s_axi_araddr)
-          ADDR_CONTROL: begin
-            s_axi_rdata <= control_reg;
-          end
-
-          ADDR_STATUS: begin
-            s_axi_rdata <= status_reg;
-          end
-
-          ADDR_WIDTH: begin
-            s_axi_rdata <= {16'd0, image_width};
-          end
-
-          ADDR_HEIGHT: begin
-            s_axi_rdata <= {16'd0, image_height};
-          end
-
-          ADDR_MODE_FLAGS: begin
-            s_axi_rdata <= mode_flags_reg;
-          end
-
-          ADDR_PIXEL_INDEX: begin
-            s_axi_rdata <= pixel_index;
-          end
-
-          ADDR_RESULT_DATA: begin
-            s_axi_rdata  <= {{(32-DATA_WIDTH){result_data[DATA_WIDTH-1]}}, result_data};
-          end
-
-          ADDR_RESULT_STAT: begin
-            s_axi_rdata <= result_status_reg;
-          end
-
-          default: begin
-            if ((s_axi_araddr >= ADDR_WEIGHT_BASE) &&
-                (s_axi_araddr < (ADDR_WEIGHT_BASE + (NUM_WEIGHTS * 4)))) begin
-              s_axi_rdata <= {{(32-WEIGHT_WIDTH){weight_mem[(s_axi_araddr - ADDR_WEIGHT_BASE) >> 2][WEIGHT_WIDTH-1]}},
-                              weight_mem[(s_axi_araddr - ADDR_WEIGHT_BASE) >> 2]};
-            end else if ((s_axi_araddr >= ADDR_BIAS_BASE) &&
-                         (s_axi_araddr < (ADDR_BIAS_BASE + (NUM_OUTPUT_CHANNELS * 4)))) begin
-              s_axi_rdata <= bias_mem[(s_axi_araddr - ADDR_BIAS_BASE) >> 2];
-            end else begin
-              s_axi_rdata <= 32'hDEAD_BEEF;
-            end
-          end
-        endcase
-      end
-
-      if (s_axi_rvalid && s_axi_rready) begin
-        s_axi_rvalid <= 1'b0;
-      end
-    end
-  end
+ if (s_axi_rvalid && s_axi_rready) begin
+ s_axi_rvalid <= 1'b0;
+ end
+ end
+ end
 
 endmodule

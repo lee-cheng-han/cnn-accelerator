@@ -1,8 +1,8 @@
 # Zynq CNN Accelerator
 
-A SystemVerilog CNN accelerator for the Digilent Arty Z7-20 / Zynq-7000 platform. The programmable logic implements a small streaming CNN datapath; the ARM Cortex-A9 configures it through AXI-Lite and moves image/result data through AXI DMA.
+A SystemVerilog image-to-image CNN accelerator for the Digilent Arty Z7-20 / Zynq-7000 platform. The programmable logic implements a packetized, multi-layer INT8 CNN datapath; the ARM Cortex-A9 configures it through AXI-Lite and moves tensor data through AXI DMA.
 
-The project is currently in the final pre-board stage: RTL simulation, Vivado implementation, XSA export, and Vitis bare-metal build are complete. Physical board validation is the next milestone when the Arty Z7-20 arrives.
+The project is currently in the final pre-board stage: RTL simulation, golden tensor verification, Vivado board implementation, XSA export, and Vitis bare-metal build are complete. Physical board validation is the next milestone when the Arty Z7-20 arrives.
 
 ## Results Snapshot
 
@@ -14,81 +14,92 @@ The project is currently in the final pre-board stage: RTL simulation, Vivado im
 | Toolchain | Vivado / Vitis 2025.2 |
 | Control interface | AXI-Lite |
 | Data interface | AXI DMA + AXI-Stream |
-| Input format | Packed RGB, `0x00BBGGRR` |
-| CNN modes | True 1x1 and valid 3x3 convolution |
-| Input / output channels | 3 input channels, 4 output channels |
+| Input format | Seven-packet tensor stream: activations, biases, weights |
+| CNN network | 3-layer RGB denoising path, `3 -> 16 -> 16 -> 3` |
+| Input / output channels | 3 RGB input channels, 3 RGB output channels |
 | Data / weight / accumulator width | int8 / int8 / int32 |
 | Timing | Met at 125 MHz |
-| LUTs / registers | 6,692 LUTs / 8,058 registers |
-| BRAM / DSP | 2 BRAM tiles / 1 DSP |
-| DMA top simulation | Passing, 80 checked outputs |
+| Board implementation | 6,346 LUTs / 7,568 registers |
+| BRAM / DSP | 29 BRAM tiles / 5 DSPs |
+| Worst slack | WNS +0.051 ns, WHS +0.013 ns |
+| Golden RTL tests | Full 3-layer packetized AXI flow passing |
 | Bitstream / XSA / ELF | Built |
 | Board validation | Pending hardware |
 
 Expected board-level result:
 
 ```text
-[PASS] CNN DMA accelerator test passed
+[PASS] image-to-image DMA golden test passed
 ```
+
+## Performance Snapshot
+
+| Area | Evidence |
+|---|---|
+| Board clock | 125 MHz timing-clean Zynq block design |
+| Board utilization | 11.93% LUT, 7.11% registers, 20.71% BRAM, 2.27% DSP |
+| Implemented smoke config | `PC=2`, `PK=4`, `MAX_PIXELS=16` |
+| Compute sweep baseline | `PC=4`, `PK=8` reaches 32 MACs/cycle |
+| Peak compute estimate | 4.0 GMAC/s at 125 MHz for `PC=4`, `PK=8` |
+| Software proof | bare-metal golden DMA app builds from the XSA |
+| Hardware proof pending | UART PASS log after board arrival |
 
 ## Why This Project Matters
 
-This repository demonstrates a complete FPGA accelerator slice:
+This repository demonstrates a complete FPGA accelerator subsystem:
 
-- Microarchitecture: streaming RGB input, 1x1/3x3 convolution, post-processing, output buffering.
+- Microarchitecture: packetized tensor input, stream-loaded scratchpads, 3-layer CNN scheduling, post-processing, output streaming.
 - Integration: Zynq PS, AXI-Lite control, AXI DMA, AXI-Stream datapath, Vivado block design automation.
-- Verification: unit tests, randomized datapath tests, AXI-Lite tests, DMA-style system simulation, generated golden vectors.
-- Software: bare-metal C application that configures the accelerator, runs DMA transfers, and compares hardware output against golden data.
+- Verification: unit tests, randomized datapath tests, AXI packet tests, full-network golden tensor tests, generated Python reference tensors.
+- Software: bare-metal C application that configures the accelerator, runs DMA tensor transfers, prints performance counters, and compares hardware output against golden data.
 - Implementation: scripted Vivado project creation, bitstream generation, XSA export, and Vitis app build.
 
 ## Current Architecture
 
 ```text
 ARM Cortex-A9
-    |
-    | AXI-Lite writes
-    v
-CNN config/status registers
-    |
-    | width, height, mode, weights, bias
-    v
-CNN accelerator core
+ |
+ | AXI-Lite writes
+ v
+ config/status/performance registers
+ |
+ | image width/height, residual mode, start/clear
+ v
+ image-to-image CNN accelerator
 
 
-DDR input buffer
-    |
-    | AXI memory-mapped read
-    v
+DDR packet buffer
+ |
+ | AXI memory-mapped read
+ v
 AXI DMA MM2S
-    |
-    | AXI-Stream packed RGB pixels, one beat = 0x00BBGGRR
-    v
-axis_rgb_to_channels
-    |
-    | channel-serial R, G, B samples
-    v
-streaming_cnn_core
-    |
-    | signed 8-bit CNN outputs
-    v
-axis_output_widen
-    |
-    | sign-extended 32-bit AXI-Stream words
-    v
+ |
+ | AXI-Stream tensor packets
+ v
+tensor_packet_router
+ |
+ | activation, bias, weight streams
+ v
+stream_loaded_multi_layer_job_controller
+ |
+ | 3-layer RGB image-to-image CNN
+ v
+sign-extended 32-bit output stream
+ v
 AXI DMA S2MM
-    |
-    | AXI memory-mapped write
-    v
+ |
+ | AXI memory-mapped write
+ v
 DDR output buffer
 ```
 
-The active board-facing top is [rtl/zynq/cnn_dma_system_top.sv](rtl/zynq/cnn_dma_system_top.sv).
+The active board-facing top is [rtl/zynq/cnn_image2image_system_top.sv](rtl/zynq/cnn_image2image_system_top.sv), integrated into the Zynq block design through [rtl/zynq/cnn_image2image_system_bd_wrapper.v](rtl/zynq/cnn_image2image_system_bd_wrapper.v).
 
-## Experimental V2 Image-to-Image Path
+## Image-to-Image Path
 
-The repository now has a separate v2 compute path for the future tiled image-to-image CNN architecture. The v2 work is intentionally isolated from the board-ready v1 DMA flow.
+The image-to-image path is the board-facing architecture for this repository.
 
-Current v2 status:
+Current status:
 
 - PC x PK signed INT8 MAC array foundation.
 - Default target: `PC=4`, `PK=8`, 32 multiplies per compute issue.
@@ -105,73 +116,62 @@ Current v2 status:
 - Three-layer RGB denoising descriptor ROM for the planned `3 -> 16 -> 16 -> 3` image-to-image network.
 - Multi-layer job controller that sequences the three denoising layers through one reusable scheduler, alternates intermediate feature-map banks, waits for per-layer parameter readiness, and optionally performs final residual subtraction.
 - Stream-loaded multi-layer job wrapper that starts compute after layer 0 is loaded, prefetches layer 1/2 parameters during compute, and streams final image output with backpressure.
-- AXI-Stream v2 top-level wrapper with a single packetized tensor input, signed 32-bit output words, packet order/length validation, and protocol error reporting.
-- AXI-Lite v2 control/status bank with image configuration, command pulses, sticky interrupts, diagnostics, and software-readable performance counters.
-- Integrated v2 RTL system wrapper combining the AXI-Lite control plane and packetized AXI-Stream data plane.
-- First v2 Zynq block design with PS7, AXI DMA, AXI-Lite control, AXI-Stream datapath, bitstream generation, and XSA export at 125 MHz.
-- V2 bare-metal golden DMA app that sends the seven-packet tensor job, checks residual and non-residual outputs, and prints performance counters.
-- V2 performance counters for total latency, packet ingestion, scheduler activity, prefetch overlap, per-layer cycles, stream transfers, and backpressure.
+- AXI-Stream top-level wrapper with a single packetized tensor input, signed 32-bit output words, packet order/length validation, and protocol error reporting.
+- AXI-Lite control/status bank with image configuration, command pulses, sticky interrupts, diagnostics, and software-readable performance counters.
+- Integrated RTL system wrapper combining the AXI-Lite control plane and packetized AXI-Stream data plane.
+- First Zynq block design with PS7, AXI DMA, AXI-Lite control, AXI-Stream datapath, bitstream generation, and XSA export at 125 MHz.
+- bare-metal golden DMA app that sends the seven-packet tensor job, checks residual and non-residual outputs, and prints performance counters.
+- performance counters for total latency, packet ingestion, scheduler activity, prefetch overlap, per-layer cycles, stream transfers, and backpressure.
 - Reproducible out-of-context synthesis sweep for `PC/PK` scaling at 125 MHz; `PC=4`, `PK=8` provides 32 MACs/cycle with positive post-synthesis timing slack.
 - Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
 - Golden tensor flow for single-layer scheduler fixtures, the full 3-layer denoising controller, and the stream-loaded full-network wrapper.
-- Directed v2 tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
+- Directed tests for 1x1, 3x3, address generation, tails, post-processing, and randomized MAC datapath coverage.
 - Integrated AXI packet tests covering a complete seven-packet job, output backpressure, malformed lengths, packet ordering, invalid dimensions, and repeated starts.
-- Dedicated v2 unit target.
+- Dedicated unit target.
 
 Run:
 
 ```bash
-make v2-model-test
-make v2-golden-test
-make v2-unit
-make v2-synth-sweep
-make full-v2-arty-z7-flow
-make vitis-v2-app
+make model-test
+make golden-test
+make unit
+make synth-sweep
+make full-arty-z7-flow
+make vitis-app
 ```
 
-See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md), [docs/v2_stream_interface.md](docs/v2_stream_interface.md), [docs/v2_register_map.md](docs/v2_register_map.md), [docs/v2_performance_counters.md](docs/v2_performance_counters.md), [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md), [docs/v2_board_implementation.md](docs/v2_board_implementation.md), and [docs/v2_baremetal_app.md](docs/v2_baremetal_app.md).
+See [docs/image_to_image_architecture.md](docs/image_to_image_architecture.md), [docs/stream_interface.md](docs/stream_interface.md), [docs/register_map.md](docs/register_map.md), [docs/performance_counters.md](docs/performance_counters.md), [docs/synthesis_experiments.md](docs/synthesis_experiments.md), [docs/board_implementation.md](docs/board_implementation.md), and [docs/baremetal_app.md](docs/baremetal_app.md).
 
-## Convolution Modes
+## Packetized Tensor Job
 
-### 1x1 Mode
+The board-facing job is a deterministic 3-layer RGB image-to-image workload. Software sends one AXI input stream containing seven packets:
 
 ```text
-kernel_mode  = 0
-active tap   = 0
-output words = width * height * 4
+0: input activation tensor
+1: layer 0 bias
+2: layer 0 weights
+3: layer 1 bias
+4: layer 1 weights
+5: layer 2 bias
+6: layer 2 weights
 ```
 
-For each RGB input pixel, the accelerator emits four output-channel values.
-
-### 3x3 Mode
+Each packet starts with a 32-bit header:
 
 ```text
-kernel_mode  = 1
-output words = (width - 2) * (height - 2) * 4
+0xA5TT0000
 ```
 
-Tap order:
+where `TT` is the packet type. Payload words are signed INT8 for activations/weights and signed INT32 for biases. The output stream returns sign-extended signed INT8 RGB pixels as 32-bit DMA words.
+
+The generated board software runs both:
 
 ```text
-tap 0   tap 1   tap 2
-tap 3   tap 4   tap 5
-tap 6   tap 7   tap 8
+residual mode: output = input - predicted_noise
+non-residual mode: output = raw final layer output
 ```
 
-The generated identity-style test uses tap 4 as the center tap.
-
-## Test Weights
-
-The generated board test uses easy-to-inspect weights:
-
-```text
-output channel 0 = input channel R
-output channel 1 = input channel G
-output channel 2 = input channel B
-output channel 3 = R + G + B
-```
-
-This makes simulation and bare-metal output comparison deterministic.
+Both modes compare returned DMA output against generated Python golden tensors.
 
 ## Hardware Address Map
 
@@ -180,70 +180,56 @@ This makes simulation and bare-metal output comparison deterministic.
 | `0x43C00000` | CNN AXI-Lite registers |
 | `0x40400000` | AXI DMA registers |
 
-## CNN Register Map
+## Register Map
+
+The accelerator uses AXI-Lite for configuration, status, interrupts, diagnostics, and performance counters. Tensor payloads move through AXI DMA.
+
+Key registers:
 
 | Offset | Register | Notes |
 |---:|---|---|
-| `0x000` | `CONTROL` | bit 0 start, bit 1 clear |
-| `0x004` | `STATUS` | busy/done/result status |
-| `0x008` | `WIDTH` | input image width |
-| `0x00C` | `HEIGHT` | input image height |
-| `0x010` | `MODE_FLAGS` | kernel/ReLU/bias/quantization controls |
-| `0x020` | `PIXEL_IN` | legacy AXI-Lite pixel path |
-| `0x024` | `PIXEL_INDEX` | legacy/debug pixel index |
-| `0x030` | `RESULT_DATA` | legacy AXI-Lite result path |
-| `0x034` | `RESULT_STAT` | result status |
-| `0x100` | `WEIGHT_BASE` | 108 signed 8-bit weights in 32-bit slots |
-| `0x400` | `BIAS_BASE` | four signed 32-bit biases |
-
-The current board path uses AXI DMA for image input and result output. AXI-Lite is still used for configuration.
-
-## Mode Flags
-
-| Bits | Name | Meaning |
-|---:|---|---|
-| `0` | `kernel_mode` | `0` = 1x1, `1` = 3x3 |
-| `1` | `relu_enable` | enable ReLU |
-| `2` | `bias_enable` | enable bias add |
-| `3` | `quant_enable` | enable arithmetic right shift |
-| `12:8` | `quant_shift` | quantization shift amount |
+| `0x000` | `CONTROL` | bit 0 start pulse, bit 1 clear pulse |
+| `0x004` | `STATUS` | busy, done, error, perf-counting |
+| `0x010` | `IMAGE_WIDTH` | input/output image width |
+| `0x014` | `IMAGE_HEIGHT` | input/output image height |
+| `0x018` | `MODE_FLAGS` | bit 0 final residual subtraction enable |
+| `0x01C` | `ERROR_CODE` | packet-router or compute error |
+| `0x020` | `STREAM_STATE` | current packet type and ready-layer mask |
+| `0x080`-`0x0A8` | `PERF_*` | job, packet, compute, prefetch, transfer, and stall counters |
+| `0x0FC` | `VERSION` | currently `0x00020000` |
 
 ## Important RTL Files
 
 | File | Purpose |
 |---|---|
-| [rtl/zynq/cnn_dma_system_top.sv](rtl/zynq/cnn_dma_system_top.sv) | Current DMA-capable top level |
-| [rtl/zynq/cnn_axi_lite_slave.sv](rtl/zynq/cnn_axi_lite_slave.sv) | AXI-Lite register interface |
-| [rtl/stream/axis_rgb_to_channels.sv](rtl/stream/axis_rgb_to_channels.sv) | Converts packed RGB stream into R/G/B channel samples |
-| [rtl/fpga/streaming_cnn_core.sv](rtl/fpga/streaming_cnn_core.sv) | Main streaming 1x1/3x3 CNN core |
-| [rtl/fpga/streaming_window_buffer.sv](rtl/fpga/streaming_window_buffer.sv) | Generates valid 3x3 windows |
-| [rtl/compute/conv_engine.sv](rtl/compute/conv_engine.sv) | Pipelined MAC, bias, ReLU, quantization, saturation |
-| [rtl/stream/axis_output_widen.sv](rtl/stream/axis_output_widen.sv) | Sign-extends int8 outputs to 32-bit DMA words |
-| [rtl/cnn_accel_top.sv](rtl/cnn_accel_top.sv) | Earlier non-DMA prototype top used by legacy regression tests |
-| [rtl/zynq/cnn_axi_system_top.sv](rtl/zynq/cnn_axi_system_top.sv) | Legacy AXI-Lite pixel/result system top |
+| [rtl/zynq/cnn_image2image_system_top.sv](rtl/zynq/cnn_image2image_system_top.sv) | AXI-Lite plus packetized AXI-Stream system top |
+| [rtl/zynq/cnn_image2image_system_bd_wrapper.v](rtl/zynq/cnn_image2image_system_bd_wrapper.v) | Vivado block-design wrapper for the top |
+| [rtl/zynq/cnn_axi_lite_slave.sv](rtl/zynq/cnn_axi_lite_slave.sv) | AXI-Lite register/status/performance interface |
+| [rtl/zynq/cnn_image2image_axi_stream_top.sv](rtl/zynq/cnn_image2image_axi_stream_top.sv) | Packet router plus stream-loaded multi-layer controller |
+| [rtl/stream/tensor_packet_router.sv](rtl/stream/tensor_packet_router.sv) | Validates seven-packet AXI tensor jobs |
+| [rtl/scheduler/stream_loaded_multi_layer_job_controller.sv](rtl/scheduler/stream_loaded_multi_layer_job_controller.sv) | Loads tensors, prefetches parameters, runs the 3-layer scheduler |
+| [rtl/scheduler/performance_counters.sv](rtl/scheduler/performance_counters.sv) | Software-readable latency, transfer, and stall counters |
+| [rtl/compute](rtl/compute) | Tiled INT8 convolution engines and MAC datapath |
+| [rtl/tensor](rtl/tensor) | Activation/weight scratchpads and tensor load/store controllers |
 
 ## Verification
 
-Run the full DMA top-level simulation:
+Run the software/model/RTL regression:
 
 ```bash
-make dma-sim
+make regression
 ```
 
-Expected result:
+Expected golden RTL output includes:
 
 ```text
-[TEST] DMA top 3x3 mode
-[TEST] DMA top 1x1 mode
-[PASS] tb_cnn_dma_system_top tests=80
+[PASS] tb_axi_stream_full_network_golden_flow
 ```
 
 Other useful checks:
 
 ```bash
 make regression
-make axi-lite
-make axi-system
 make lint
 ```
 
@@ -251,43 +237,39 @@ Verification docs:
 
 - [docs/verification_matrix.md](docs/verification_matrix.md)
 - [docs/verification_plan.md](docs/verification_plan.md)
-- [docs/logs/dma_top_sim_pass.log](docs/logs/dma_top_sim_pass.log)
+- [docs/baremetal_app.md](docs/baremetal_app.md)
+- [docs/stream_interface.md](docs/stream_interface.md)
 
-## Generate Test Images
+## Generate Golden Tensor Job
 
-Generate a 3x3 test:
-
-```bash
-python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 3x3
-```
-
-Generate a 1x1 test:
+Generate Python golden tensors and the C DMA packet header:
 
 ```bash
-python3 scripts/image/generate_test_headers.py --width 8 --height 8 --kernel 1x1
+make baremetal-headers
 ```
 
 Generated files:
 
 ```text
-software/zynq_baremetal/generated/test_image.h
-software/zynq_baremetal/generated/expected_output.h
+build/golden/full_network_3layer/
+software/zynq_baremetal/generated/golden_dma_job.h
 ```
 
 ## Full Pre-Board Build Flow
 
 ```bash
-make full-arty-z7-dma-flow
+make full-preboard-proof
 ```
 
 This flow:
 
-1. Generates image headers.
-2. Runs the DMA top simulation.
+1. Regenerates golden tensors and the C DMA packet header.
+2. Runs model, golden, and unit regressions.
 3. Creates the Vivado block design.
 4. Builds the FPGA bitstream.
 5. Exports the XSA.
-6. Builds the Vitis bare-metal ELF.
+6. Builds the Vitis bare-metal ELF and FSBL.
+7. Packages `build/BOOT.BIN`.
 
 For a board-arrival-ready proof package, run:
 
@@ -295,7 +277,7 @@ For a board-arrival-ready proof package, run:
 make preboard-proof
 ```
 
-That adds warning-budget checking, `BOOT.BIN` generation, and a generated flow summary. Vitis cache/config data defaults to `build/vitis_data` so the flow does not depend on free space in the home-directory Vitis cache.
+`preboard-proof` is now an alias for the proof flow. Vitis cache/config data defaults to `build/vitis_data` so the flow does not depend on free space in the home-directory Vitis cache.
 
 Generated artifacts are ignored by Git, but after a successful local build they should exist:
 
@@ -327,18 +309,17 @@ When the Arty Z7-20 is available:
 4. Run:
 
 ```bash
-make program-arty-z7-dma
+make program-arty-z7
 ```
 
 Expected UART output includes:
 
 ```text
-Zynq CNN Accelerator DMA Test
+Zynq Image-to-Image CNN DMA Test
 CNN base address: 0x43c00000
-DMA base address: 0x40400000
-Kernel mode = 3x3
+AXI DMA base address: 0x40400000
 ...
-[PASS] CNN DMA accelerator test passed
+[PASS] image-to-image DMA golden test passed
 ```
 
 ## Documentation Map
@@ -347,11 +328,10 @@ Kernel mode = 3x3
 |---|---|
 | [docs/case_study.md](docs/case_study.md) | Interview-ready project narrative |
 | [docs/block_diagram.md](docs/block_diagram.md) | DMA system and CNN pipeline diagrams |
-| [docs/assets/arty_z7_dma_architecture.svg](docs/assets/arty_z7_dma_architecture.svg) | Generated architecture visual for portfolio/readme use |
 | [docs/verification_matrix.md](docs/verification_matrix.md) | What has been tested and what remains |
-| [docs/performance_analysis.md](docs/performance_analysis.md) | Throughput, latency, resource, and scaling analysis |
-| [docs/v2_register_map.md](docs/v2_register_map.md) | V2 AXI-Lite software register and interrupt contract |
-| [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md) | Reproducible v2 PC/PK synthesis tradeoff results |
+| [docs/performance_results.md](docs/performance_results.md) | Throughput, timing, resource, and scaling results |
+| [docs/register_map.md](docs/register_map.md) | AXI-Lite software register and interrupt contract |
+| [docs/synthesis_experiments.md](docs/synthesis_experiments.md) | Reproducible PC/PK synthesis tradeoff results |
 | [docs/pre_board_checklist.md](docs/pre_board_checklist.md) | Work to complete before hardware arrives |
 | [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md) | Board programming and debug checklist |
 | [docs/known_warnings.md](docs/known_warnings.md) | Vivado warning budget and accepted generated-IP warnings |
@@ -362,8 +342,8 @@ Kernel mode = 3x3
 ## Current Limitations
 
 - Physical Arty Z7-20 validation is pending hardware arrival.
-- The bring-up CNN is intentionally small: 3 input channels and 4 output channels.
-- Weights and biases are loaded through AXI-Lite registers, not through a DMA weight loader.
+- The board-facing smoke configuration is intentionally small: `PC=2`, `PK=4`, `MAX_PIXELS=16`.
+- Weights and biases are packet-loaded through AXI DMA for the flow.
 - Software currently polls DMA completion instead of using interrupts.
 - The project is a portfolio/learning accelerator, not a production neural-network accelerator.
 
@@ -371,15 +351,15 @@ Kernel mode = 3x3
 
 - Capture real board UART PASS log, setup photo, and demo clip.
 - Archive measured board latency/throughput and optional ILA captures.
-- Expose performance counters to software.
+- Validate the UART PASS path on physical hardware.
 - Add interrupt-driven DMA completion.
-- Add stride, padding, pooling, or a second layer.
-- Add a DMA-based weight-loading path.
+- Add an ILA debug variant.
+- Scale the board implementation toward `PC=4`, `PK=8`.
 
 ## Repository Status
 
 The repository is ready for physical board validation. The next major milestone is running the generated DMA bare-metal test on the Arty Z7-20 and capturing proof of:
 
 ```text
-[PASS] CNN DMA accelerator test passed
+[PASS] image-to-image DMA golden test passed
 ```
