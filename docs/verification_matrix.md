@@ -18,6 +18,7 @@
 | V2 golden RTL | `tb_v2_stream_loaded_full_network_golden_flow` | Covered | packet-loaded full 3-layer network with scratchpad-backed compute operands |
 | V2 golden RTL | `tb_v2_axi_stream_full_network_golden_flow` | Covered | Python golden tensors sent through packetized AXI-stream top and checked bit-for-bit |
 | V2 board implementation | `make full-v2-arty-z7-flow` | Passing | Zynq block design, bitstream, and XSA generated at 125 MHz |
+| V2 software | `make vitis-v2-app` | Passing | golden tensor AXI DMA app and FSBL build from v2 XSA |
 | Unit RTL | `tb_window_generator_3x3` | Covered | window tap ordering |
 | Unit RTL | `tb_streaming_window_buffer` | Covered | streaming 3x3 window generation |
 | Unit RTL | `tb_cnn_config_loader` | Covered | config, weight, and bias loading |

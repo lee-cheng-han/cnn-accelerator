@@ -15,7 +15,7 @@ regression:
 xsim-regression:
 	SEED=$(SEED) bash scripts/run_xsim_regression.sh
 
-.PHONY: v2-unit v2-model-test v2-golden-test v2-regression v2-synth-sweep v2-synth-report v2-top-impl v2-top-report
+.PHONY: v2-unit v2-model-test v2-golden-test v2-regression v2-synth-sweep v2-synth-report v2-top-impl v2-top-report v2-baremetal-headers vitis-v2-app
 
 v2-unit:
 	bash scripts/run_v2_unit.sh
@@ -29,6 +29,14 @@ v2-golden-test:
 	bash scripts/run_v2_unit_tb.sh tb_v2_full_network_golden_flow
 	bash scripts/run_v2_unit_tb.sh tb_v2_stream_loaded_full_network_golden_flow
 	bash scripts/run_v2_unit_tb.sh tb_v2_axi_stream_full_network_golden_flow
+
+v2-baremetal-headers:
+	python3 models/generate_v2_golden_tensors.py
+	python3 scripts/v2/generate_baremetal_golden_headers.py
+
+vitis-v2-app: v2-baremetal-headers
+	mkdir -p $(VITIS_DATA_DIR)
+	XILINX_VITIS_DATA_DIR=$(VITIS_DATA_DIR) $(HOME)/Xilinx/2025.2/Vitis/bin/vitis -s scripts/vitis/create_zynq_v2_baremetal_app.py
 
 v2-regression: v2-model-test v2-golden-test v2-unit
 

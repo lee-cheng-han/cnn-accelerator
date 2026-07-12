@@ -134,9 +134,11 @@ out-of-context implementation experiment is also present; see
 out-of-context smoke experiment now fits, routes, and meets 125 MHz. The first
 Zynq block-design implementation also builds a bitstream and exports an XSA at
 125 MHz; see [v2_board_implementation.md](v2_board_implementation.md). The
+first v2 bare-metal golden DMA app also builds against that XSA; see
+[v2_baremetal_app.md](v2_baremetal_app.md). The
 remaining milestones are:
 
-1. Build v2 bare-metal software against the exported v2 XSA.
-2. Reuse the golden tensor data as a software-driven AXI DMA packet job and compare returned pixels.
-3. Add a v2 board-arrival runbook that captures UART output, timing, throughput counters, and optional ILA evidence.
+1. Generate a v2 BOOT.BIN from the v2 FSBL, bitstream, and bare-metal ELF.
+2. Add a v2 board-arrival runbook that captures UART output, timing, throughput counters, and optional ILA evidence.
+3. Add a v2 ILA/debug block-design variant if first-board visibility is needed.
 4. Scale back toward the selected `PC=4`, `PK=8` configuration and confirm full-design post-route timing.
