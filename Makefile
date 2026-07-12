@@ -45,6 +45,22 @@ v2-top-impl:
 v2-top-report:
 	python3 scripts/v2/report_top_impl.py --build-dir build/v2_top_impl --markdown docs/v2_top_implementation.md
 
+.PHONY: v2-arty-z7-project v2-arty-z7-bitstream v2-arty-z7-xsa full-v2-arty-z7-flow
+
+v2-arty-z7-project:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/create_arty_z7_20_v2_project.tcl
+
+v2-arty-z7-bitstream:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/build_arty_z7_20_v2_bitstream.tcl
+
+v2-arty-z7-xsa:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/export_arty_z7_20_v2_xsa.tcl
+
+full-v2-arty-z7-flow:
+	$(MAKE) v2-arty-z7-project
+	$(MAKE) v2-arty-z7-bitstream
+	$(MAKE) v2-arty-z7-xsa
+
 lint:
 	bash scripts/lint_verilator.sh
 

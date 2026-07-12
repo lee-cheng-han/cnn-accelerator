@@ -108,6 +108,7 @@ Current v2 status:
 - AXI-Stream v2 top-level wrapper with a single packetized tensor input, signed 32-bit output words, packet order/length validation, and protocol error reporting.
 - AXI-Lite v2 control/status bank with image configuration, command pulses, sticky interrupts, diagnostics, and software-readable performance counters.
 - Integrated v2 RTL system wrapper combining the AXI-Lite control plane and packetized AXI-Stream data plane.
+- First v2 Zynq block design with PS7, AXI DMA, AXI-Lite control, AXI-Stream datapath, bitstream generation, and XSA export at 125 MHz.
 - V2 performance counters for total latency, packet ingestion, scheduler activity, prefetch overlap, per-layer cycles, stream transfers, and backpressure.
 - Reproducible out-of-context synthesis sweep for `PC/PK` scaling at 125 MHz; `PC=4`, `PK=8` provides 32 MACs/cycle with positive post-synthesis timing slack.
 - Dependency-free bit-accurate Python integer model for image-to-image CNN arithmetic.
@@ -123,9 +124,10 @@ make v2-model-test
 make v2-golden-test
 make v2-unit
 make v2-synth-sweep
+make full-v2-arty-z7-flow
 ```
 
-See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md), [docs/v2_stream_interface.md](docs/v2_stream_interface.md), [docs/v2_register_map.md](docs/v2_register_map.md), [docs/v2_performance_counters.md](docs/v2_performance_counters.md), and [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md).
+See [docs/v2_image_to_image_architecture.md](docs/v2_image_to_image_architecture.md), [docs/v2_stream_interface.md](docs/v2_stream_interface.md), [docs/v2_register_map.md](docs/v2_register_map.md), [docs/v2_performance_counters.md](docs/v2_performance_counters.md), [docs/v2_synthesis_experiments.md](docs/v2_synthesis_experiments.md), and [docs/v2_board_implementation.md](docs/v2_board_implementation.md).
 
 ## Convolution Modes
 

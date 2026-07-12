@@ -48,7 +48,7 @@ This is an out-of-context implementation experiment for the v2 image-to-image RT
 ## Interpretation
 
 The current v2 top fits, routes, and meets the 125 MHz internal clock target in this out-of-context smoke configuration.
-The next board-facing step is integrating `cnn_image2image_system_top` into a Zynq block design with PS, AXI DMA, resets, clocking, physical constraints, and board-level timing evidence.
+The Zynq block-design implementation has also been generated and routed with board-level timing evidence; see [v2_board_implementation.md](v2_board_implementation.md).
 
 Regenerate:
 
