@@ -1,5 +1,11 @@
 # Zynq CNN Accelerator
 
+[![CI](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/ci.yml)
+[![Vivado FPGA](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/vivado-xsim.yml/badge.svg?branch=main)](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/vivado-xsim.yml)
+[![License](https://img.shields.io/github/license/lee-cheng-han/cnn-accelerator)](LICENSE)
+![Target](https://img.shields.io/badge/target-Arty%20Z7--20-1f6feb)
+![Clock](https://img.shields.io/badge/clock-125%20MHz-2ea44f)
+
 A SystemVerilog image-to-image CNN accelerator for the Digilent Arty Z7-20 / Zynq-7000 platform. The programmable logic implements a packetized, multi-layer INT8 CNN datapath; the ARM Cortex-A9 configures it through AXI-Lite and moves tensor data through AXI DMA.
 
 The project is currently in the final pre-board stage: RTL simulation, golden tensor verification, Vivado board implementation, XSA export, and Vitis bare-metal build are complete. Physical board validation is the next milestone when the Arty Z7-20 arrives.
