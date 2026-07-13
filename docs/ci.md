@@ -19,11 +19,19 @@ Workflow:
 
 Checks:
 
-- shell script syntax
-- `shellcheck`
-- Python syntax compilation
-- Tcl syntax parsing
-- Verilator lint through `make lint`
+- `ci / source · shell · python`
+  - shell script syntax
+  - `shellcheck`
+  - Python syntax compilation for models, scripts, software, and tests
+- `ci / model · golden tensors`
+  - bit-accurate Python model tests through `make model-test`
+  - deterministic golden DMA header regeneration through `make baremetal-headers`
+  - generated header diff check
+- `ci / rtl · verilator lint`
+  - Verilator lint through `make lint`
+- `ci / docs · evidence consistency`
+  - README/result docs checked against the pre-board evidence log through `make docs-check`
+  - checked-in warning-budget evidence must show zero unknown warnings, zero critical warnings, and zero errors
 
 This workflow runs on pushes, pull requests, and manual dispatch.
 
@@ -44,12 +52,10 @@ Runner requirements:
  - `$HOME/Xilinx/2025.2/Vivado/settings64.sh`
  - `/tools/Xilinx/2025.2/Vivado/settings64.sh`
 
-Default checks:
+Default check:
 
 ```bash
 make regression
-make golden-test
-make unit
 ```
 
 The workflow uploads simulation logs as artifacts even on failure.
@@ -61,10 +67,16 @@ The Vivado workflow has a manual `run_bitstream` option. When enabled, it runs:
 ```bash
 make clean
 make full-preboard-proof
+make check-warnings
+make docs-check
 ```
 
 This generates golden tensors and bare-metal headers, runs the model/golden/RTL
 regression, creates the Arty Z7 Vivado project, builds the bitstream, exports the
 XSA, builds the Vitis bare-metal application, and packages `build/BOOT.BIN`.
+It also enforces the Vivado warning budget and checks the docs against the
+checked-in evidence summaries. The full-flow jobs upload build reports,
+bitstreams, XSAs, ELFs, `BOOT.BIN`, and evidence logs as GitHub Actions
+artifacts.
 
 Use this full flow intentionally because it is much slower than RTL simulation.

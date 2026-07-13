@@ -3,7 +3,7 @@ SHELL := /bin/bash
 TB ?= tb_axi_stream_full_network_golden_flow
 VITIS_DATA_DIR ?= $(CURDIR)/build/vitis_data
 
-.PHONY: xsim regression xsim-regression lint clean flow-report report-flow check-warnings preboard-proof
+.PHONY: xsim regression xsim-regression lint clean flow-report report-flow check-warnings docs-check preboard-proof
 .PHONY: unit model-test golden-test synth-sweep synth-report
 .PHONY: top-impl top-report baremetal-headers vitis-app
 .PHONY: arty-z7-project arty-z7-bitstream arty-z7-xsa full-arty-z7-flow
@@ -89,6 +89,9 @@ report-flow: flow-report
 
 check-warnings:
 	python3 scripts/check_vivado_warnings.py
+
+docs-check:
+	python3 scripts/check_docs_evidence.py
 
 clean:
 	rm -rf sim xsim.dir .Xil

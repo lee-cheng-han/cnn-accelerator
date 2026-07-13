@@ -16,20 +16,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  source-checks:
-    name: Source checks
+  source:
+    name: ci / source · shell · python
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install check tools
+      - name: Install shell tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck verilator
+          sudo apt-get install -y shellcheck
 
-      - name: Check shell script syntax
+      - name: Check shell syntax
         run: |
           find scripts -name '*.sh' -print0 | xargs -0 -r bash -n
 
@@ -39,8 +39,59 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          python3 -m compileall -q models scripts software
+          python3 -m compileall -q models scripts software tests
 
-      - name: Verilator lint
+  model:
+    name: ci / model · golden tensors
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run bit-accurate Python model tests
+        run: |
+          make model-test
+
+      - name: Regenerate golden DMA header
+        run: |
+          make baremetal-headers
+
+      - name: Verify generated header is current
+        run: |
+          git diff --exit-code -- software/zynq_baremetal/generated/golden_dma_job.h
+
+  rtl_lint:
+    name: ci / rtl · verilator lint
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+
+      - name: Run RTL lint
         run: |
           make lint
+
+  docs:
+    name: ci / docs · evidence consistency
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check docs against pre-board evidence
+        run: |
+          make docs-check
+
+      - name: Check warning-budget evidence log
+        run: |
+          grep -q "Unknown warnings: 0" docs/logs/pre_board_warning_budget.log
+          grep -q "Critical warnings: 0" docs/logs/pre_board_warning_budget.log
+          grep -q "Errors: 0" docs/logs/pre_board_warning_budget.log

@@ -1,10 +1,10 @@
-name: Vivado XSim
+name: Vivado FPGA
 
 on:
   workflow_dispatch:
     inputs:
       run_bitstream:
-        description: Also run the full Arty Z7 bitstream/Vitis flow
+        description: Also run the full Arty Z7 bitstream/Vitis/BOOT.BIN flow
         type: boolean
         required: true
         default: false
@@ -13,12 +13,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: vivado-xsim-${{ github.ref }}
+  group: vivado-fpga-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  xsim-regression:
-    name: XSim regression
+  xsim:
+    name: vivado / xsim · RTL regression
     runs-on:
       - self-hosted
       - linux
@@ -63,9 +63,9 @@ jobs:
             *.jou
             *_xsim_run.log
 
-  arty-z7-flow:
-    name: Arty Z7 bitstream and Vitis flow
-    needs: xsim-regression
+  arty_z7:
+    name: vivado / arty-z7 · bitstream · xsa · elf · boot
+    needs: xsim
     if: ${{ inputs.run_bitstream }}
     runs-on:
       - self-hosted
@@ -88,11 +88,14 @@ jobs:
 
           command -v vivado
           command -v vitis
+          command -v bootgen
 
       - name: Run full pre-board proof flow
         run: |
           make clean
           make full-preboard-proof
+          make check-warnings
+          make docs-check
 
       - name: Upload FPGA build reports
         if: always()
@@ -106,4 +109,43 @@ jobs:
             build/**/*.jou
             build/**/*.bit
             build/**/*.xsa
-            build/**/cnn_baremetal.elf
+            build/**/*.elf
+            build/BOOT.BIN
+            docs/logs/*.log
+            docs/logs/*.md
+            docs/logs/*.txt
+
+  warnings:
+    name: vivado / warnings · budget
+    needs: arty_z7
+    if: ${{ inputs.run_bitstream }}
+    runs-on:
+      - self-hosted
+      - linux
+      - vivado
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download FPGA build reports
+        uses: actions/download-artifact@v4
+        with:
+          name: arty-z7-build-reports
+          path: .
+
+      - name: Prepare Vivado environment
+        run: |
+          if [[ -n "${VIVADO_SETTINGS:-}" && -f "${VIVADO_SETTINGS}" ]]; then
+            source "${VIVADO_SETTINGS}"
+          elif [[ -f "${HOME}/Xilinx/2025.2/Vivado/settings64.sh" ]]; then
+            source "${HOME}/Xilinx/2025.2/Vivado/settings64.sh"
+          elif [[ -f "/tools/Xilinx/2025.2/Vivado/settings64.sh" ]]; then
+            source "/tools/Xilinx/2025.2/Vivado/settings64.sh"
+          fi
+
+          command -v vivado
+
+      - name: Re-run warning budget on checked-out artifacts
+        run: |
+          make check-warnings
