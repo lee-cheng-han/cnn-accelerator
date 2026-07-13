@@ -24,10 +24,10 @@ mkdir -p sim/xsim
 cd sim/xsim
 
 rm -rf \
- ${TB_NAME}_xsim.dir \
- ${TB_NAME}.jou \
- ${TB_NAME}.log \
- ${TB_NAME}_xsim_run.log \
+ "${TB_NAME}_xsim.dir" \
+ "${TB_NAME}.jou" \
+ "${TB_NAME}.log" \
+ "${TB_NAME}_xsim_run.log" \
  xvlog.log \
  xelab.log \
  xsim.log
@@ -66,28 +66,28 @@ xvlog -sv -L work \
  ../../rtl/zynq/cnn_axi_lite_slave.sv \
  ../../rtl/zynq/cnn_image2image_axi_stream_top.sv \
  ../../rtl/zynq/cnn_image2image_system_top.sv \
- ../../${TB_FILE}
+ "../../${TB_FILE}"
 
 echo "[XSim] Elaborating $TB_NAME"
-xelab -debug typical ${TB_NAME} -s ${TB_NAME}_sim
+xelab -debug typical "$TB_NAME" -s "${TB_NAME}_sim"
 
 echo "[XSim] Running $TB_NAME"
 set +e
-xsim ${TB_NAME}_sim -runall | tee ${TB_NAME}_xsim_run.log
+xsim "${TB_NAME}_sim" -runall | tee "${TB_NAME}_xsim_run.log"
 XSIM_STATUS=${PIPESTATUS[0]}
 set -e
 
 if [[ $XSIM_STATUS -ne 0 ]]; then
  echo "[FAIL] $TB_NAME: xsim exited with status $XSIM_STATUS"
- exit $XSIM_STATUS
+ exit "$XSIM_STATUS"
 fi
 
-if grep -E "\[FAIL\]|FAILED|Fatal:|ERROR:" ${TB_NAME}_xsim_run.log >/dev/null; then
+if grep -E "\[FAIL\]|FAILED|Fatal:|ERROR:" "${TB_NAME}_xsim_run.log" >/dev/null; then
  echo "[FAIL] $TB_NAME: failure pattern found in simulation log"
  exit 1
 fi
 
-if grep -E "\[PASS\]|PASS" ${TB_NAME}_xsim_run.log >/dev/null; then
+if grep -E "\[PASS\]|PASS" "${TB_NAME}_xsim_run.log" >/dev/null; then
  echo "[PASS] $TB_NAME"
 else
  echo "[FAIL] $TB_NAME: no PASS message found in simulation log"

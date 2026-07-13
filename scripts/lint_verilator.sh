@@ -12,6 +12,8 @@ fi
 verilator --lint-only \
  -Wall \
  -Wno-fatal \
+ -Wno-BLKLOOPINIT \
+ -Wno-BLKSEQ \
  -Wno-UNUSEDSIGNAL \
  -Wno-UNUSEDPARAM \
  --top-module cnn_image2image_system_top \

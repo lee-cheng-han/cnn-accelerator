@@ -322,39 +322,39 @@ module stream_loaded_multi_layer_job_controller #(
       job_image_height <= '0;
 
       for (int c = 0; c < MAX_COUT; c++) begin
-        direct_output_data[c] <= '0;
+        direct_output_data[c] = '0;
       end
 
       for (int i = 0; i < MAX_PIXELS*MAX_CIN; i++) begin
-        input_tensor[i] <= '0;
+        input_tensor[i] = '0;
       end
 
       for (int co = 0; co < HIDDEN_C; co++) begin
-        bias_l0[co] <= '0;
-        bias_l1[co] <= '0;
+        bias_l0[co] = '0;
+        bias_l1[co] = '0;
 
         if (MIRROR_LOADED_WEIGHTS != 0) begin
           for (int ci = 0; ci < INPUT_C; ci++) begin
             for (int k = 0; k < 9; k++) begin
-              weights_l0[co][ci][k] <= '0;
+              weights_l0[co][ci][k] = '0;
             end
           end
 
           for (int ci = 0; ci < HIDDEN_C; ci++) begin
             for (int k = 0; k < 9; k++) begin
-              weights_l1[co][ci][k] <= '0;
+              weights_l1[co][ci][k] = '0;
             end
           end
         end
       end
 
       for (int co = 0; co < OUTPUT_C; co++) begin
-        bias_l2[co] <= '0;
+        bias_l2[co] = '0;
 
         if (MIRROR_LOADED_WEIGHTS != 0) begin
           for (int ci = 0; ci < HIDDEN_C; ci++) begin
             for (int k = 0; k < 9; k++) begin
-              weights_l2[co][ci][k] <= '0;
+              weights_l2[co][ci][k] = '0;
             end
           end
         end
