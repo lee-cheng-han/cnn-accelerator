@@ -71,6 +71,7 @@ boot-image:
 full-preboard-proof:
 	$(MAKE) regression
 	$(MAKE) full-arty-z7-flow
+	$(MAKE) check-warnings
 	$(MAKE) boot-image
 	$(MAKE) flow-report
 

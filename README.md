@@ -25,9 +25,9 @@ The project is currently in the final pre-board stage: RTL simulation, golden te
 | Input / output channels | 3 RGB input channels, 3 RGB output channels |
 | Data / weight / accumulator width | int8 / int8 / int32 |
 | Timing | Met at 125 MHz |
-| Board implementation | 6,346 LUTs / 7,568 registers |
-| BRAM / DSP | 29 BRAM tiles / 5 DSPs |
-| Worst slack | WNS +0.051 ns, WHS +0.013 ns |
+| Board implementation | 7,168 LUTs / 7,598 registers |
+| BRAM / DSP | 29 BRAM tiles / 4 DSPs |
+| Worst slack | WNS +0.133 ns, WHS +0.016 ns |
 | Golden RTL tests | Full 3-layer packetized AXI flow passing |
 | Bitstream / XSA / ELF | Built |
 | Board validation | Pending hardware |
@@ -43,7 +43,7 @@ Expected board-level result:
 | Area | Evidence |
 |---|---|
 | Board clock | 125 MHz timing-clean Zynq block design |
-| Board utilization | 11.93% LUT, 7.11% registers, 20.71% BRAM, 2.27% DSP |
+| Board utilization | 13.47% LUT, 7.14% registers, 20.71% BRAM, 1.82% DSP |
 | Implemented smoke config | `PC=2`, `PK=4`, `MAX_PIXELS=16` |
 | Compute sweep baseline | `PC=4`, `PK=8` reaches 32 MACs/cycle |
 | Peak compute estimate | 4.0 GMAC/s at 125 MHz for `PC=4`, `PK=8` |

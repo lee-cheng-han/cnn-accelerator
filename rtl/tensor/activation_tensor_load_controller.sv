@@ -40,7 +40,10 @@ module activation_tensor_load_controller #(
 
   logic [ADDR_W-1:0] pixel_count;
   logic [ADDR_W-1:0] pixel_index;
-  logic [ADDR_W-1:0] last_pixel_index_q;
+  logic [DIM_W-1:0] pixel_x;
+  logic [DIM_W-1:0] pixel_y;
+  logic [DIM_W-1:0] last_x_q;
+  logic [DIM_W-1:0] last_y_q;
   logic [COUNT_W-1:0] channel_index;
   logic [COUNT_W-1:0] last_channel_index_q;
   logic config_error;
@@ -55,7 +58,7 @@ module activation_tensor_load_controller #(
   assign zero_length = (pixel_count == '0) || (channels == '0);
   assign transfer = (state == S_LOAD) && stream_valid;
   assign last_channel = channel_index == last_channel_index_q;
-  assign last_pixel = pixel_index == last_pixel_index_q;
+  assign last_pixel = (pixel_x == last_x_q) && (pixel_y == last_y_q);
 
   assign stream_ready = (state == S_LOAD);
   assign write_enable = transfer;
@@ -68,7 +71,10 @@ module activation_tensor_load_controller #(
     if (!rst_n) begin
       state <= S_IDLE;
       pixel_index <= '0;
-      last_pixel_index_q <= '0;
+      pixel_x <= '0;
+      pixel_y <= '0;
+      last_x_q <= '0;
+      last_y_q <= '0;
       channel_index <= '0;
       last_channel_index_q <= '0;
       done <= 1'b0;
@@ -80,8 +86,11 @@ module activation_tensor_load_controller #(
         S_IDLE: begin
           if (start) begin
             pixel_index <= '0;
+            pixel_x <= '0;
+            pixel_y <= '0;
             channel_index <= '0;
-            last_pixel_index_q <= zero_length ? '0 : (pixel_count - ADDR_W'(1));
+            last_x_q <= (width == '0) ? '0 : (width - DIM_W'(1));
+            last_y_q <= (height == '0) ? '0 : (height - DIM_W'(1));
             last_channel_index_q <= (channels == '0) ? '0 : (channels - COUNT_W'(1));
             error <= config_error;
             state <= (config_error || zero_length) ? S_DONE : S_LOAD;
@@ -95,6 +104,12 @@ module activation_tensor_load_controller #(
             end else if (last_channel) begin
               channel_index <= '0;
               pixel_index <= pixel_index + ADDR_W'(1);
+              if (pixel_x == last_x_q) begin
+                pixel_x <= '0;
+                pixel_y <= pixel_y + DIM_W'(1);
+              end else begin
+                pixel_x <= pixel_x + DIM_W'(1);
+              end
             end else begin
               channel_index <= channel_index + COUNT_W'(1);
             end

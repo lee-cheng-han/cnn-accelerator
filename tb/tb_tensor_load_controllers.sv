@@ -321,6 +321,32 @@ module tb_tensor_load_controllers;
  end
  endtask
 
+ task automatic run_rectangular_activation_load_case;
+ begin
+ act_width = 16'd3;
+ act_height = 16'd2;
+ act_channels = 8'd2;
+ pulse_start_activation();
+
+ for (int p = 0; p < 6; p++) begin
+ for (int c = 0; c < 2; c++) begin
+ send_activation(activation_value(p, c), (p + c) % 2);
+ end
+ end
+
+ wait_activation_done("rectangular_activation_load");
+
+ if (act_error) begin
+ $display("[FAIL] rectangular_activation_load: unexpected error");
+ $finish;
+ end
+
+ expect_activation(0, 0, activation_value(0, 0));
+ expect_activation(2, 1, activation_value(2, 1));
+ expect_activation(5, 1, activation_value(5, 1));
+ end
+ endtask
+
  task automatic run_weight_load_case;
  begin
  weight_cout = 8'd3;
@@ -406,6 +432,7 @@ module tb_tensor_load_controllers;
  @(posedge clk);
 
  run_activation_load_case();
+ run_rectangular_activation_load_case();
  run_weight_load_case();
  run_invalid_config_cases();
 

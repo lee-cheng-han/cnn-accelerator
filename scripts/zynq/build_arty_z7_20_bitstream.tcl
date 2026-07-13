@@ -19,7 +19,8 @@ generate_target all [get_files $proj_dir/$proj_name.srcs/sources_1/bd/$bd_name/$
 set_property top ${bd_name}_wrapper [current_fileset]
 update_compile_order -fileset sources_1
 
-reset_run synth_1
+set synthesis_runs [get_runs -filter {IS_SYNTHESIS == 1}]
+reset_run $synthesis_runs
 launch_runs synth_1 -jobs 8
 wait_on_run synth_1
 
@@ -41,6 +42,14 @@ open_run impl_1
 
 report_utilization -file build/arty_z7_20_bitstream_util.rpt
 report_timing_summary -file build/arty_z7_20_bitstream_timing.rpt
+
+set failing_setup_paths [get_timing_paths -setup -max_paths 1 -slack_lesser_than 0]
+set failing_hold_paths [get_timing_paths -hold -max_paths 1 -slack_lesser_than 0]
+
+if {[llength $failing_setup_paths] > 0 || [llength $failing_hold_paths] > 0} {
+ puts "ERROR: routed design failed timing constraints"
+ exit 1
+}
 
 puts ""
 puts "ARTY Z7-20 BITSTREAM BUILD DONE"
