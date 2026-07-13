@@ -17,10 +17,10 @@ module multi_layer_job_controller #(
   parameter int COUNT_W     = 8,
   parameter int DIM_W       = 16,
   parameter int ADDR_W      = 32,
-  parameter int DIRECT_ARRAY_OPERANDS = 1,
-  parameter int MIRROR_SCHEDULER_OUTPUT = 1,
-  parameter int STREAM_INTERMEDIATE_OUTPUTS = 0,
-  parameter int STREAM_FINAL_OUTPUTS = 0
+  parameter bit DIRECT_ARRAY_OPERANDS = 1'b1,
+  parameter bit MIRROR_SCHEDULER_OUTPUT = 1'b1,
+  parameter bit STREAM_INTERMEDIATE_OUTPUTS = 1'b0,
+  parameter bit STREAM_FINAL_OUTPUTS = 1'b0
 )(
   input  logic clk,
   input  logic rst_n,
@@ -207,7 +207,7 @@ module multi_layer_job_controller #(
   assign scratch_feature1_write_enable =
     (scratch_store_valid || stream_store_valid) && (layer_index == 2'd1);
   assign scratch_feature_write_data =
-    stream_store_valid ? DATA_W'(stream_store_data[stream_store_channel]) :
+    stream_store_valid ? DATA_W'(stream_store_data[int'(stream_store_channel)]) :
     scratch_store_valid ?
       DATA_W'(scheduler_output[(scratch_store_pixel * ADDR_W'(MAX_COUT)) +
                                ADDR_W'(scratch_store_channel)]) :

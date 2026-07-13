@@ -14,7 +14,7 @@ module single_layer_scheduler #(
   parameter int COUNT_W    = 8,
   parameter int DIM_W      = 16,
   parameter int ADDR_W     = 32,
-  parameter int MIRROR_OUTPUT_TENSOR = 1
+  parameter bit MIRROR_OUTPUT_TENSOR = 1'b1
 )(
   input  logic clk,
   input  logic rst_n,
@@ -115,7 +115,8 @@ module single_layer_scheduler #(
   assign start_3x3 = (state == S_START_PIXEL) && (kernel_size == 2'd3);
   assign input_pixel_index_1x1 = ((out_y * DIM_W'(stride)) * input_width) +
                                  (out_x * DIM_W'(stride));
-  assign output_pixel_index_calc = (out_y * output_width) + out_x;
+  assign output_pixel_index_calc =
+    (ADDR_W'(out_y) * ADDR_W'(output_width)) + ADDR_W'(out_x);
   assign scratch_activation_read_pixel =
     (kernel_size == 2'd1) ? scratch_activation_read_pixel_1x1 :
     scratch_activation_read_pixel_3x3;

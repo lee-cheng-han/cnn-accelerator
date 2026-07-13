@@ -14,6 +14,8 @@ verilator --lint-only \
  -Wno-fatal \
  -Wno-BLKLOOPINIT \
  -Wno-BLKSEQ \
+ -Wno-DECLFILENAME \
+ -Wno-PINCONNECTEMPTY \
  -Wno-UNUSEDSIGNAL \
  -Wno-UNUSEDPARAM \
  --top-module cnn_image2image_system_top \

@@ -17,9 +17,9 @@ module stream_loaded_multi_layer_job_controller #(
   parameter int COUNT_W     = 8,
   parameter int DIM_W       = 16,
   parameter int ADDR_W      = 32,
-  parameter int MIRROR_LOADED_WEIGHTS = 1,
-  parameter int STREAM_INTERMEDIATE_OUTPUTS = 0,
-  parameter int DIRECT_STREAM_FINAL_OUTPUTS = 0
+  parameter bit MIRROR_LOADED_WEIGHTS = 1'b1,
+  parameter bit STREAM_INTERMEDIATE_OUTPUTS = 1'b0,
+  parameter bit DIRECT_STREAM_FINAL_OUTPUTS = 1'b0
 )(
   input  logic clk,
   input  logic rst_n,
@@ -143,7 +143,7 @@ module stream_loaded_multi_layer_job_controller #(
     (DIRECT_STREAM_FINAL_OUTPUTS != 0) ? direct_output_pending : store_output_stream_valid;
   assign output_stream_data =
     (DIRECT_STREAM_FINAL_OUTPUTS != 0) ?
-      direct_output_data[direct_output_channel] :
+      direct_output_data[int'(direct_output_channel)] :
       store_output_stream_data;
   assign output_stream_last =
     (DIRECT_STREAM_FINAL_OUTPUTS != 0) ?
@@ -399,9 +399,9 @@ module stream_loaded_multi_layer_job_controller #(
 
       if (bias_transfer) begin
         unique case (load_layer)
-          2'd0: bias_l0[bias_index] <= bias_stream_data;
-          2'd1: bias_l1[bias_index] <= bias_stream_data;
-          2'd2: bias_l2[bias_index] <= bias_stream_data;
+          2'd0: bias_l0[int'(bias_index)] <= bias_stream_data;
+          2'd1: bias_l1[int'(bias_index)] <= bias_stream_data;
+          2'd2: bias_l2[int'(bias_index)] <= bias_stream_data;
           default: begin end
         endcase
       end
@@ -412,7 +412,7 @@ module stream_loaded_multi_layer_job_controller #(
             2'd0: begin
               if ((weight_write_out_channel < COUNT_W'(HIDDEN_C)) &&
                   (weight_write_in_channel < COUNT_W'(INPUT_C))) begin
-                weights_l0[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
+                weights_l0[int'(weight_write_out_channel)][int'(weight_write_in_channel)][int'(weight_write_kernel_idx)] <=
                   weight_write_data;
               end
             end
@@ -420,7 +420,7 @@ module stream_loaded_multi_layer_job_controller #(
             2'd1: begin
               if ((weight_write_out_channel < COUNT_W'(HIDDEN_C)) &&
                   (weight_write_in_channel < COUNT_W'(HIDDEN_C))) begin
-                weights_l1[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
+                weights_l1[int'(weight_write_out_channel)][int'(weight_write_in_channel)][int'(weight_write_kernel_idx)] <=
                   weight_write_data;
               end
             end
@@ -428,7 +428,7 @@ module stream_loaded_multi_layer_job_controller #(
             2'd2: begin
               if ((weight_write_out_channel < COUNT_W'(OUTPUT_C)) &&
                   (weight_write_in_channel < COUNT_W'(HIDDEN_C))) begin
-                weights_l2[weight_write_out_channel][weight_write_in_channel][weight_write_kernel_idx] <=
+                weights_l2[int'(weight_write_out_channel)][int'(weight_write_in_channel)][int'(weight_write_kernel_idx)] <=
                   weight_write_data;
               end
             end

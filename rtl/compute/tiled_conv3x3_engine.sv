@@ -133,8 +133,8 @@ module tiled_conv3x3_engine #(
   logic signed [OUT_W-1:0] post_out_vec_q [PK];
 
   always_comb begin
-    kernel_y = kernel_idx / 4'd3;
-    kernel_x = kernel_idx - (kernel_y * 2'd3);
+    kernel_y = 2'(kernel_idx / 4'd3);
+    kernel_x = 2'(kernel_idx - (kernel_y * 2'd3));
   end
 
   assign addr_in_x_calc =
@@ -178,7 +178,7 @@ module tiled_conv3x3_engine #(
 
     for (int pk = 0; pk < PK; pk++) begin
       if (cout_lane_mask[pk]) begin
-        bias_vec_comb[pk] = bias[k_base + COUNT_W'(pk)];
+        bias_vec_comb[pk] = bias[int'(k_base) + pk];
       end else begin
         bias_vec_comb[pk] = '0;
       end
@@ -186,7 +186,7 @@ module tiled_conv3x3_engine #(
       for (int pc = 0; pc < PC; pc++) begin
         if (cout_lane_mask[pk] && cin_lane_mask[pc]) begin
           mac_weight_mat_comb[pk][pc] =
-            weights[k_base + COUNT_W'(pk)][c_base + COUNT_W'(pc)][kernel_idx];
+            weights[int'(k_base) + pk][int'(c_base) + pc][int'(kernel_idx)];
         end else begin
           mac_weight_mat_comb[pk][pc] = '0;
         end
@@ -469,7 +469,7 @@ module tiled_conv3x3_engine #(
         S_WRITE_TILE: begin
           for (int pk = 0; pk < PK; pk++) begin
             if (cout_lane_mask[pk]) begin
-              output_data[k_base + COUNT_W'(pk)] <= post_out_vec_q[pk];
+              output_data[int'(k_base) + pk] <= post_out_vec_q[pk];
             end
           end
 

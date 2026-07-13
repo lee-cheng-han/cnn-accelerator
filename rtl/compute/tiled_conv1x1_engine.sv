@@ -118,7 +118,7 @@ module tiled_conv1x1_engine #(
   always_comb begin
     for (int pc = 0; pc < PC; pc++) begin
       if (cin_lane_mask[pc]) begin
-        mac_act_vec_comb[pc] = activation[c_base + COUNT_W'(pc)];
+        mac_act_vec_comb[pc] = activation[int'(c_base) + pc];
       end else begin
         mac_act_vec_comb[pc] = '0;
       end
@@ -126,7 +126,7 @@ module tiled_conv1x1_engine #(
 
     for (int pk = 0; pk < PK; pk++) begin
       if (cout_lane_mask[pk]) begin
-        bias_vec_comb[pk] = bias[k_base + COUNT_W'(pk)];
+        bias_vec_comb[pk] = bias[int'(k_base) + pk];
       end else begin
         bias_vec_comb[pk] = '0;
       end
@@ -134,7 +134,7 @@ module tiled_conv1x1_engine #(
       for (int pc = 0; pc < PC; pc++) begin
         if (cout_lane_mask[pk] && cin_lane_mask[pc]) begin
           mac_weight_mat_comb[pk][pc] =
-            weights[k_base + COUNT_W'(pk)][c_base + COUNT_W'(pc)];
+            weights[int'(k_base) + pk][int'(c_base) + pc];
         end else begin
           mac_weight_mat_comb[pk][pc] = '0;
         end
@@ -339,7 +339,7 @@ module tiled_conv1x1_engine #(
         S_WRITE_TILE: begin
           for (int pk = 0; pk < PK; pk++) begin
             if (cout_lane_mask[pk]) begin
-              output_data[k_base + COUNT_W'(pk)] <= post_out_vec[pk];
+              output_data[int'(k_base) + pk] <= post_out_vec[pk];
             end
           end
 
