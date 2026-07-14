@@ -214,7 +214,7 @@ def render_markdown(result: TopImplResult, build_dir: Path) -> str:
         )
     else:
         lines.append(
-            "The current top synthesizes but does not yet fit the Arty Z7-20 target in this "
+            "The current top synthesizes but does not yet fit the Zybo Z7-20 target in this "
             "configuration. The dominant issue is LUT/MUX pressure from wide generated selection "
             "logic around the stream-loaded controller and remaining full-frame/reference storage."
         )

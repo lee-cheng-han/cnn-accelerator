@@ -11,7 +11,7 @@ The design is verified at multiple levels:
 5. AXI-Lite register and performance-counter tests
 6. Vivado synthesis and implementation checks
 7. Vitis bare-metal app build validation
-8. Planned board-level hardware test on Arty Z7-20
+8. Planned board-level hardware test on Zybo Z7-20
 
 ## Verification Goals
 
@@ -55,7 +55,7 @@ Equivalent important substeps:
 
 ```bash
 make regression
-make full-arty-z7-flow
+make full-zybo-z7-flow
 make boot-image
 make flow-report
 ```

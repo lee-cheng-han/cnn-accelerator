@@ -1,6 +1,6 @@
 # Bare-Metal Golden DMA App
 
-The bare-metal app drives the packetized image-to-image accelerator through the Arty Z7-20 AXI DMA block design.
+The bare-metal app drives the packetized image-to-image accelerator through the Zybo Z7-20 AXI DMA block design.
 
 It uses the deterministic Python golden tensor case from `build/golden/full_network_3layer`, converts it into the seven-packet AXI input stream, runs both residual and non-residual output modes, and compares the returned DMA output buffer against the expected signed INT8 RGB pixels.
 
@@ -31,8 +31,8 @@ Expected final UART result:
 - Generated golden C header: `software/zynq_baremetal/generated/golden_dma_job.h`
 - Vitis app generator: `scripts/vitis/create_zynq_baremetal_app.py`
 - Built ELF: `build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf`
-- Generated FSBL: `build/vitis_ws/arty_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf`
-- Hardware platform: `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa`
+- Generated FSBL: `build/vitis_ws/zybo_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf`
+- Hardware platform: `build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa`
 
 ## Regenerate
 

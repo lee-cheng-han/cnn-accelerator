@@ -10,7 +10,7 @@ The goal is to demonstrate end-to-end ownership of an accelerator subsystem: RTL
 
 | Constraint | Design choice |
 |---|---|
-| Target board | Digilent Arty Z7-20 |
+| Target board | Digilent Zybo Z7-20 |
 | FPGA part | `xc7z020clg400-1` |
 | Clock target | 125 MHz PL clock |
 | Software control | ARM Cortex-A9 through AXI-Lite |
@@ -72,8 +72,8 @@ Latest board implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,168 | 53,200 | 13.47% |
-| Slice registers | 7,598 | 106,400 | 7.14% |
+| Slice LUTs | 7,169 | 53,200 | 13.48% |
+| Slice registers | 7,603 | 106,400 | 7.15% |
 | Block RAM tile | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -82,8 +82,8 @@ Timing result:
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.133 ns
-WHS = 0.016 ns
+WNS = 0.028 ns
+WHS = 0.004 ns
 ```
 
 ## Software
@@ -113,7 +113,7 @@ Pre-board work is complete enough for hardware validation:
 - XSA exported.
 - Vitis bare-metal ELF built.
 - BOOT.BIN packaging available.
-- Board validation pending physical Arty Z7-20 hardware.
+- Board validation pending physical Zybo Z7-20 hardware.
 
 ## Lessons Learned
 

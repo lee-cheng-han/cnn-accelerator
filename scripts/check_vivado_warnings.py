@@ -10,15 +10,20 @@ from pathlib import Path
 
 
 REQUIRED_LOGS = [
-    Path("build/arty_z7_20_cnn/arty_z7_20_cnn.runs/synth_1/runme.log"),
-    Path("build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/runme.log"),
+    Path("build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/synth_1/runme.log"),
+    Path("build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/runme.log"),
 ]
 OPTIONAL_LOGS = [
     Path("vivado.log"),
 ]
 
 KNOWN_WARNINGS = [
+    (
+        "Official Zybo Z7 DDR DQS calibration uses negative skew",
+        re.compile(r"\[PSU-[1-4]\].*PCW_UIPARAM_DDR_DQS_TO_CLK_DELAY_[0-3] has negative value"),
+    ),
     ("Board store entries for unavailable installed parts", re.compile(r"\[Board 49-26\] cannot add Board Part")),
+    ("Board platform export omits optional image metadata", re.compile(r"\[Projectvivado 1-645\] Board images not set in Hardware Platform")),
     ("Board automation queried without installed board metadata", re.compile(r"\[Boardtcl 53-1\] No current board_part set")),
     ("Project created by part when board metadata is absent", re.compile(r"\[Project 1-5713\] Board part '' set")),
     ("Generated AXI interconnect ID-width adaptation", re.compile(r"\[BD 41-2384\] Width mismatch when connecting pin:")),
@@ -46,7 +51,7 @@ def main() -> int:
         print("Missing log files:")
         for path in missing:
             print(f"  {path}")
-        print("Run `make arty-z7-bitstream` first, then rerun this check.")
+        print("Run `make zybo-z7-bitstream` first, then rerun this check.")
         return 2
 
     logs = REQUIRED_LOGS + [path for path in OPTIONAL_LOGS if path.exists()]

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BOOTGEN="${BOOTGEN:-$HOME/Xilinx/2025.2/Vitis/bin/bootgen}"
-FSBL="build/vitis_ws/arty_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf"
-BIT="build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit"
+FSBL="build/vitis_ws/zybo_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf"
+BIT="build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit"
 ELF="build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf"
 BIF="build/boot_image.bif"
 OUT="build/BOOT.BIN"

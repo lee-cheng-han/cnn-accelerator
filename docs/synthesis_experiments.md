@@ -1,6 +1,6 @@
 # PC/PK Synthesis Experiments
 
-Target: Digilent Arty Z7-20 (`xc7z020clg400-1`) at 125 MHz.
+Target: Digilent Zybo Z7-20 (`xc7z020clg400-1`) at 125 MHz.
 
 These are out-of-context post-synthesis estimates for the parallel compute slice: MAC array, partial-sum accumulator, and parallel post-processing. They are not full-accelerator or implementation measurements; see [top_implementation.md](top_implementation.md) for the current full-top experiment.
 

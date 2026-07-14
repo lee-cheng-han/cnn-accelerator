@@ -1,6 +1,6 @@
 # Pre-Board Checklist
 
-This checklist captures work that can be completed before the Arty Z7-20 arrives.
+This checklist captures work that can be completed before the Zybo Z7-20 arrives.
 
 ## Already Complete
 
@@ -33,10 +33,10 @@ This checklist captures work that can be completed before the Arty Z7-20 arrives
 
 ## Board Arrival Checklist
 
-1. Connect Arty Z7-20 over USB.
+1. Connect Zybo Z7-20 over USB.
 2. Set boot mode to JTAG.
 3. Open UART terminal at 115200 baud, 8N1, no flow control.
-4. Run `make program-arty-z7`.
+4. Run `make program-zybo-z7`.
 5. Capture UART output.
 6. Save a passing log under `docs/logs/board_dma_pass.log`.
 7. Add a setup photo under a docs asset directory.

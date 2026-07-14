@@ -17,10 +17,10 @@
 | controller RTL | `tb_full_network_golden_flow` | Covered | full 3-layer denoising controller against Python golden tensors |
 | stream RTL | `tb_stream_loaded_full_network_golden_flow` | Covered | packet-loaded full network with output backpressure |
 | AXI stream RTL | `tb_axi_stream_full_network_golden_flow` | Covered | seven-packet AXI job, malformed packet cases, repeated starts, and output compare |
-| implementation | `make full-arty-z7-flow` | Passing | Zynq block design, bitstream, and XSA generated at 125 MHz |
+| implementation | `make full-zybo-z7-flow` | Passing | Zynq block design, bitstream, and XSA generated at 125 MHz |
 | software | `make vitis-app` | Passing | golden tensor AXI DMA app and FSBL build from XSA |
 | boot package | `make boot-image` | Passing | packages `build/BOOT.BIN` |
-| Board | Arty Z7-20 UART PASS | Pending | requires physical board |
+| Board | Zybo Z7-20 UART PASS | Pending | requires physical board |
 
 ## Feature Coverage
 
@@ -46,7 +46,7 @@ make model-test
 make golden-test
 make unit
 make regression
-make full-arty-z7-flow
+make full-zybo-z7-flow
 make vitis-app
 make boot-image
 ```

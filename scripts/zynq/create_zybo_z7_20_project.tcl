@@ -1,6 +1,8 @@
 set part_name xc7z020clg400-1
-set proj_name arty_z7_20_cnn
-set proj_dir build/arty_z7_20_cnn
+set board_part digilentinc.com:zybo-z7-20:part0:1.2
+set board_repo [file normalize board_files]
+set proj_name zybo_z7_20_cnn
+set proj_dir build/zybo_z7_20_cnn
 set bd_name system
 
 if {[info exists ::env(PROJ_NAME)]} {
@@ -13,7 +15,21 @@ if {[info exists ::env(PROJ_DIR)]} {
 
 file delete -force $proj_dir
 
+set_param board.repoPaths [list $board_repo]
+if {[llength [get_board_parts -quiet $board_part]] != 1} {
+ puts "ERROR: Zybo Z7-20 board part $board_part was not loaded from $board_repo"
+ exit 1
+}
+
+# Digilent's calibrated Zybo preset uses negative DQS-to-clock skews. Vivado
+# labels these four expected board values critical, so keep them visible as
+# budgeted warnings while preserving fatal handling for every other critical.
+foreach msg_id {PSU-1 PSU-2 PSU-3 PSU-4} {
+ set_msg_config -id $msg_id -new_severity WARNING
+}
+
 create_project $proj_name $proj_dir -part $part_name
+set_property board_part $board_part [current_project]
 
 set_property target_language Verilog [current_project]
 set_property simulator_language Mixed [current_project]
@@ -61,14 +77,8 @@ current_bd_design $bd_name
 
 create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7 ps7
 
-set_property -dict [list \
- CONFIG.PCW_UART1_PERIPHERAL_ENABLE {1} \
- CONFIG.PCW_UART1_UART1_IO {MIO 48 .. 49} \
- CONFIG.PCW_UART_PERIPHERAL_FREQMHZ {100} \
-] [get_bd_cells ps7]
-
 apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 \
- -config {make_external "FIXED_IO, DDR" apply_board_preset "0" Master "Disable" Slave "Disable"} \
+ -config {make_external "FIXED_IO, DDR" apply_board_preset "1" Master "Disable" Slave "Disable"} \
  [get_bd_cells ps7]
 
 set_property -dict [list \
@@ -189,7 +199,7 @@ set_property top ${bd_name}_wrapper [current_fileset]
 update_compile_order -fileset sources_1
 
 puts ""
-puts "ARTY Z7-20 IMAGE-TO-IMAGE BLOCK DESIGN CREATED"
+puts "ZYBO Z7-20 IMAGE-TO-IMAGE BLOCK DESIGN CREATED"
 puts "Project:"
 puts " $proj_dir/$proj_name.xpr"
 puts "CNN base address:"

@@ -106,7 +106,7 @@ def render_markdown(results: list[Result]) -> str:
     lines = [
         "# PC/PK Synthesis Experiments",
         "",
-        "Target: Digilent Arty Z7-20 (`xc7z020clg400-1`) at 125 MHz.",
+        "Target: Digilent Zybo Z7-20 (`xc7z020clg400-1`) at 125 MHz.",
         "",
         "These are out-of-context post-synthesis estimates for the parallel "
         "compute slice: MAC array, partial-sum accumulator, and parallel "

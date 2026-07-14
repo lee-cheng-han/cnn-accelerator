@@ -6,8 +6,8 @@ VITIS_DATA_DIR ?= $(CURDIR)/build/vitis_data
 .PHONY: xsim regression xsim-regression lint clean flow-report report-flow check-warnings docs-check preboard-proof
 .PHONY: unit model-test golden-test synth-sweep synth-report
 .PHONY: top-impl top-report baremetal-headers vitis-app
-.PHONY: arty-z7-project arty-z7-bitstream arty-z7-xsa full-arty-z7-flow
-.PHONY: boot-image full-preboard-proof program-arty-z7
+.PHONY: zybo-z7-project zybo-z7-bitstream zybo-z7-xsa full-zybo-z7-flow
+.PHONY: boot-image full-preboard-proof program-zybo-z7
 
 xsim:
 	bash scripts/run_unit_tb.sh $(TB)
@@ -50,19 +50,19 @@ top-impl:
 top-report:
 	python3 scripts/report_top_impl.py --build-dir build/top_impl --markdown docs/top_implementation.md
 
-arty-z7-project:
-	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/create_arty_z7_20_project.tcl
+zybo-z7-project:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/create_zybo_z7_20_project.tcl
 
-arty-z7-bitstream:
-	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/build_arty_z7_20_bitstream.tcl
+zybo-z7-bitstream:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/build_zybo_z7_20_bitstream.tcl
 
-arty-z7-xsa:
-	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/export_arty_z7_20_xsa.tcl
+zybo-z7-xsa:
+	$(HOME)/Xilinx/2025.2/Vivado/bin/vivado -mode batch -source scripts/zynq/export_zybo_z7_20_xsa.tcl
 
-full-arty-z7-flow:
-	$(MAKE) arty-z7-project
-	$(MAKE) arty-z7-bitstream
-	$(MAKE) arty-z7-xsa
+full-zybo-z7-flow:
+	$(MAKE) zybo-z7-project
+	$(MAKE) zybo-z7-bitstream
+	$(MAKE) zybo-z7-xsa
 	$(MAKE) vitis-app
 
 boot-image:
@@ -70,14 +70,14 @@ boot-image:
 
 full-preboard-proof:
 	$(MAKE) regression
-	$(MAKE) full-arty-z7-flow
+	$(MAKE) full-zybo-z7-flow
 	$(MAKE) check-warnings
 	$(MAKE) boot-image
 	$(MAKE) flow-report
 
 preboard-proof: full-preboard-proof
 
-program-arty-z7:
+program-zybo-z7:
 	$(HOME)/Xilinx/2025.2/Vitis/bin/xsct scripts/zynq/program_and_run_dma.tcl
 
 lint:

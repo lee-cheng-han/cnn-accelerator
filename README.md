@@ -3,19 +3,20 @@
 [![CI](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/ci.yml)
 [![Vivado FPGA](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/vivado-xsim.yml/badge.svg?branch=main)](https://github.com/lee-cheng-han/cnn-accelerator/actions/workflows/vivado-xsim.yml)
 [![License](https://img.shields.io/github/license/lee-cheng-han/cnn-accelerator)](LICENSE)
-![Target](https://img.shields.io/badge/target-Arty%20Z7--20-1f6feb)
+![Target](https://img.shields.io/badge/target-Zybo%20Z7--20-1f6feb)
 ![Clock](https://img.shields.io/badge/clock-125%20MHz-2ea44f)
 
-A SystemVerilog image-to-image CNN accelerator for the Digilent Arty Z7-20 / Zynq-7000 platform. The programmable logic implements a packetized, multi-layer INT8 CNN datapath; the ARM Cortex-A9 configures it through AXI-Lite and moves tensor data through AXI DMA.
+A SystemVerilog image-to-image CNN accelerator for the Digilent Zybo Z7-20 / Zynq-7000 platform. The programmable logic implements a packetized, multi-layer INT8 CNN datapath; the ARM Cortex-A9 configures it through AXI-Lite and moves tensor data through AXI DMA.
 
-The project is currently in the final pre-board stage: RTL simulation, golden tensor verification, Vivado board implementation, XSA export, and Vitis bare-metal build are complete. Physical board validation is the next milestone when the Arty Z7-20 arrives.
+The project is currently in the final pre-board stage: RTL simulation, golden tensor verification, Vivado board implementation, XSA export, and Vitis bare-metal build are complete. Physical board validation is the next milestone when the Zybo Z7-20 arrives.
 
 ## Results Snapshot
 
 | Area | Status |
 |---|---|
 | RTL language | SystemVerilog |
-| Target board | Digilent Arty Z7-20 |
+| Target board | Digilent Zybo Z7-20 |
+| Vivado board part | `digilentinc.com:zybo-z7-20:part0:1.2` |
 | FPGA part | `xc7z020clg400-1` |
 | Toolchain | Vivado / Vitis 2025.2 |
 | Control interface | AXI-Lite |
@@ -25,9 +26,9 @@ The project is currently in the final pre-board stage: RTL simulation, golden te
 | Input / output channels | 3 RGB input channels, 3 RGB output channels |
 | Data / weight / accumulator width | int8 / int8 / int32 |
 | Timing | Met at 125 MHz |
-| Board implementation | 7,168 LUTs / 7,598 registers |
+| Board implementation | 7,169 LUTs / 7,603 registers |
 | BRAM / DSP | 29 BRAM tiles / 4 DSPs |
-| Worst slack | WNS +0.133 ns, WHS +0.016 ns |
+| Worst slack | WNS +0.028 ns, WHS +0.004 ns |
 | Golden RTL tests | Full 3-layer packetized AXI flow passing |
 | Bitstream / XSA / ELF | Built |
 | Board validation | Pending hardware |
@@ -43,7 +44,7 @@ Expected board-level result:
 | Area | Evidence |
 |---|---|
 | Board clock | 125 MHz timing-clean Zynq block design |
-| Board utilization | 13.47% LUT, 7.14% registers, 20.71% BRAM, 1.82% DSP |
+| Board utilization | 13.48% LUT, 7.15% registers, 20.71% BRAM, 1.82% DSP |
 | Implemented smoke config | `PC=2`, `PK=4`, `MAX_PIXELS=16` |
 | Compute sweep baseline | `PC=4`, `PK=8` reaches 32 MACs/cycle |
 | Peak compute estimate | 4.0 GMAC/s at 125 MHz for `PC=4`, `PK=8` |
@@ -142,7 +143,7 @@ make model-test
 make golden-test
 make unit
 make synth-sweep
-make full-arty-z7-flow
+make full-zybo-z7-flow
 make vitis-app
 ```
 
@@ -288,8 +289,8 @@ make preboard-proof
 Generated artifacts are ignored by Git, but after a successful local build they should exist:
 
 ```text
-build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
-build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit
+build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa
 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
 build/BOOT.BIN
 build/flow_report.md
@@ -307,7 +308,7 @@ make boot-image
 
 Board bring-up instructions are in [docs/BOARD_BRINGUP.md](docs/BOARD_BRINGUP.md).
 
-When the Arty Z7-20 is available:
+When the Zybo Z7-20 is available:
 
 1. Connect the board over USB.
 2. Set boot mode to JTAG.
@@ -315,7 +316,7 @@ When the Arty Z7-20 is available:
 4. Run:
 
 ```bash
-make program-arty-z7
+make program-zybo-z7
 ```
 
 Expected UART output includes:
@@ -347,7 +348,7 @@ AXI DMA base address: 0x40400000
 
 ## Current Limitations
 
-- Physical Arty Z7-20 validation is pending hardware arrival.
+- Physical Zybo Z7-20 validation is pending hardware arrival.
 - The board-facing smoke configuration is intentionally small: `PC=2`, `PK=4`, `MAX_PIXELS=16`.
 - Weights and biases are packet-loaded through AXI DMA for the flow.
 - Software currently polls DMA completion instead of using interrupts.
@@ -364,7 +365,7 @@ AXI DMA base address: 0x40400000
 
 ## Repository Status
 
-The repository is ready for physical board validation. The next major milestone is running the generated DMA bare-metal test on the Arty Z7-20 and capturing proof of:
+The repository is ready for physical board validation. The next major milestone is running the generated DMA bare-metal test on the Zybo Z7-20 and capturing proof of:
 
 ```text
 [PASS] image-to-image DMA golden test passed

@@ -72,7 +72,7 @@ make docs-check
 ```
 
 This generates golden tensors and bare-metal headers, runs the model/golden/RTL
-regression, creates the Arty Z7 Vivado project, builds the bitstream, exports the
+regression, creates the Zybo Z7 Vivado project, builds the bitstream, exports the
 XSA, builds the Vitis bare-metal application, and packages `build/BOOT.BIN`.
 It also enforces the Vivado warning budget and checks the docs against the
 checked-in evidence summaries. The full-flow jobs upload build reports,

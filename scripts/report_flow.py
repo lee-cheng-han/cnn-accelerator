@@ -8,16 +8,16 @@ from datetime import datetime
 from pathlib import Path
 
 
-TIMING_RPT = Path("build/arty_z7_20_bitstream_timing.rpt")
-UTIL_RPT = Path("build/arty_z7_20_bitstream_util.rpt")
+TIMING_RPT = Path("build/zybo_z7_20_bitstream_timing.rpt")
+UTIL_RPT = Path("build/zybo_z7_20_bitstream_util.rpt")
 FLOW_RPT = Path("build/flow_report.md")
-BITSTREAM = Path("build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit")
-XSA = Path("build/arty_z7_20_cnn/arty_z7_20_cnn.xsa")
+BITSTREAM = Path("build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit")
+XSA = Path("build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa")
 PLATFORM_XSA = Path(
-    "build/vitis_ws/arty_z7_20_cnn_platform/export/arty_z7_20_cnn_platform/arty_z7_20_cnn_platform.xpfm"
+    "build/vitis_ws/zybo_z7_20_cnn_platform/export/zybo_z7_20_cnn_platform/zybo_z7_20_cnn_platform.xpfm"
 )
 ELF = Path("build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf")
-FSBL = Path("build/vitis_ws/arty_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf")
+FSBL = Path("build/vitis_ws/zybo_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf")
 BOOT_BIN = Path("build/BOOT.BIN")
 GOLDEN_HEADER = Path("software/zynq_baremetal/generated/golden_dma_job.h")
 
@@ -123,7 +123,7 @@ def render() -> str:
             ]
         )
     else:
-        lines.append("Timing report missing. Run `make arty-z7-bitstream`.")
+        lines.append("Timing report missing. Run `make zybo-z7-bitstream`.")
 
     lines.extend(["", "## Utilization", ""])
 
@@ -133,7 +133,7 @@ def render() -> str:
             used, available, pct = util.get(resource, ("unknown", "unknown", "unknown"))
             lines.append(f"| {resource} | {used} | {available} | {pct}% |")
     else:
-        lines.append("Utilization report missing. Run `make arty-z7-bitstream`.")
+        lines.append("Utilization report missing. Run `make zybo-z7-bitstream`.")
 
     lines.extend(
         [
@@ -141,7 +141,7 @@ def render() -> str:
             "## Next Hardware Evidence",
             "",
             "- UART log with `[PASS] image-to-image DMA golden test passed`.",
-            "- Photo or screenshot of programmed Arty Z7-20 setup.",
+            "- Photo or screenshot of programmed Zybo Z7-20 setup.",
             "- Measured board latency/throughput and printed performance counters.",
             "- Any ILA or debug capture used during first bring-up.",
             "",

@@ -1,6 +1,6 @@
--rw-r--r-- 1 leech leech 4.0M Jul 12 03:22 build/BOOT.BIN
--rw-r--r-- 1 leech leech 3.9M Jul 12 03:20 build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
--rw-r--r-- 1 leech leech 526K Jul 12 03:21 build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
--rwxr-xr-x 1 leech leech 291K Jul 12 03:22 build/vitis_ws/arty_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf
--rwxr-xr-x 1 leech leech 224K Jul 12 03:22 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
--rw-r--r-- 1 leech leech  46K Jul 12 03:21 software/zynq_baremetal/generated/golden_dma_job.h
+-rw-r--r-- 1 leech leech 4.1M Jul 13 22:17 build/BOOT.BIN
+-rw-r--r-- 1 leech leech 3.9M Jul 13 22:15 build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit
+-rw-r--r-- 1 leech leech 597K Jul 13 22:16 build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa
+-rwxr-xr-x 1 leech leech 573K Jul 13 22:17 build/vitis_ws/zybo_z7_20_cnn_platform/zynq_fsbl/build/fsbl.elf
+-rwxr-xr-x 1 leech leech 227K Jul 13 22:17 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
+-rw-r--r-- 1 leech leech  46K Jul 13 22:16 software/zynq_baremetal/generated/golden_dma_job.h

@@ -1,14 +1,12 @@
-set bit_file "build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit"
+set bit_file "build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit"
 set elf_file "build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf"
 
-set ps7_init_files [glob -nocomplain build/vitis_ws/*/export/*/hw/sdt/ps7_init.tcl]
+set ps7_init_file "build/vitis_ws/zybo_z7_20_cnn_platform/export/zybo_z7_20_cnn_platform/hw/sdt/ps7_init.tcl"
 
-if {[llength $ps7_init_files] < 1} {
- puts "ERROR: Could not find ps7_init.tcl"
+if {![file exists $ps7_init_file]} {
+ puts "ERROR: Could not find Zybo Z7-20 ps7_init.tcl"
  exit 1
 }
-
-set ps7_init_file [lindex $ps7_init_files 0]
 
 puts "Using bitstream:"
 puts " $bit_file"

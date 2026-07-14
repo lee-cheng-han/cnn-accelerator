@@ -4,7 +4,7 @@
 
 | Item | Value |
 |---|---|
-| Board | Digilent Arty Z7-20 |
+| Board | Digilent Zybo Z7-20 |
 | FPGA Part | `xc7z020clg400-1` |
 | Top-Level Wrapper | `system_wrapper` |
 | RTL Top | `cnn_image2image_system_top` |
@@ -27,8 +27,8 @@
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,168 | 53,200 | 13.47% |
-| Slice Registers | 7,598 | 106,400 | 7.14% |
+| Slice LUTs | 7,169 | 53,200 | 13.48% |
+| Slice Registers | 7,603 | 106,400 | 7.15% |
 | Block RAM Tile | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -37,19 +37,19 @@
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.133 ns
-WHS = 0.016 ns
+WNS = 0.028 ns
+WHS = 0.004 ns
 ```
 
 ## Important Generated Files
 
 | File | Description |
 |---|---|
-| `build/arty_z7_20_cnn/arty_z7_20_cnn.xpr` | Generated Vivado project |
-| `build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit` | Generated bitstream |
-| `build/arty_z7_20_bitstream_util.rpt` | utilization report |
-| `build/arty_z7_20_bitstream_timing.rpt` | timing report |
-| `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa` | Exported hardware platform |
+| `build/zybo_z7_20_cnn/zybo_z7_20_cnn.xpr` | Generated Vivado project |
+| `build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit` | Generated bitstream |
+| `build/zybo_z7_20_bitstream_util.rpt` | utilization report |
+| `build/zybo_z7_20_bitstream_timing.rpt` | timing report |
+| `build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa` | Exported hardware platform |
 
 ## Warning Notes
 

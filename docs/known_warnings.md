@@ -1,5 +1,14 @@
 # Known Vivado Warnings
 
+## Zybo Z7 DDR DQS calibration
+
+The vendored Digilent Zybo Z7-20 PS7 preset contains calibrated negative
+`PCW_UIPARAM_DDR_DQS_TO_CLK_DELAY_0` through `_3` values. Vivado reports
+message IDs `PSU-1` through `PSU-4` for these values. The project demotes only
+those four IDs from critical warnings to warnings, and the warning checker
+recognizes the exact parameter/message pattern. Any other critical warning
+still fails the build.
+
 The project treats warnings as a budget, not background noise. Run:
 
 ```bash
@@ -12,7 +21,9 @@ The check fails on any `ERROR`, any `CRITICAL WARNING`, or any warning outside t
 
 | Warning | Source | Why it is accepted |
 |---|---|---|
+| `PSU-1` through `PSU-4` | Official Digilent Zybo Z7-20 PS7 preset | The preset's four calibrated DDR DQS-to-clock skews are negative. Only these exact parameter warnings are demoted and budgeted. |
 | `Board 49-26` | Vivado board store scan | Local Vivado installation contains board files for parts not installed in this tool setup. This is environment noise before project creation. |
+| `Projectvivado 1-645` | Zybo Z7 hardware-platform export | The official Digilent board definition does not provide optional decorative board images. The XSA still contains the complete hardware handoff and embedded bitstream. |
 | `Boardtcl 53-1` | Vivado board metadata query | Board automation is queried while the project is targeting the Zynq part directly rather than an installed board preset. |
 | `Project 1-5713` | Vivado project metadata | The design targets the Zynq part directly when board-part metadata is unavailable. |
 | `BD 5-1069` | Optional System ILA monitor insertion | Vivado defaults monitor interface direction to input for the debug-only System ILA slots. The monitored AXI-Stream and AXI-Lite interfaces are passive taps. |

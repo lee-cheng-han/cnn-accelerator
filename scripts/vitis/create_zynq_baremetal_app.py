@@ -5,9 +5,9 @@ import vitis
 
 root = Path(os.getcwd())
 workspace = root / "build" / "vitis_ws"
-xsa_file = root / "build" / "arty_z7_20_cnn" / "arty_z7_20_cnn.xsa"
+xsa_file = root / "build" / "zybo_z7_20_cnn" / "zybo_z7_20_cnn.xsa"
 
-platform_name = "arty_z7_20_cnn_platform"
+platform_name = "zybo_z7_20_cnn_platform"
 app_name = "cnn_baremetal"
 domain_name = "standalone_domain"
 

@@ -15,10 +15,15 @@ The design uses:
 
 | Item | Value |
 |---|---|
-| Board | Digilent Arty Z7-20 |
+| Board | Digilent Zybo Z7-20 |
+| Vivado board part | `digilentinc.com:zybo-z7-20:part0:1.2` |
 | SoC | Xilinx Zynq-7000 |
 | FPGA part | `xc7z020clg400-1` |
 | Processor | Dual-core ARM Cortex-A9 |
+| PS reference clock | 33.333333 MHz |
+| DDR | 1 GB DDR3L, address range `0x00000000`-`0x3FFFFFFF` |
+| Console | UART1, MIO 48-49, 115200 8N1 |
+| Boot media | QSPI or microSD on SD0 |
 | PL clock | 125 MHz |
 | Toolchain | Vivado / Vitis 2025.2 |
 | AXI-Lite base | `0x43C00000` |

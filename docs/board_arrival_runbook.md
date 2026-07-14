@@ -1,6 +1,6 @@
 # Board Arrival Runbook
 
-Use this when the Arty Z7-20 arrives. The goal is to capture enough evidence that the project moves from pre-board complete to hardware validated.
+Use this when the Zybo Z7-20 arrives. The goal is to capture enough evidence that the project moves from pre-board complete to hardware validated.
 
 ## Before Plugging In
 
@@ -13,8 +13,8 @@ make preboard-proof
 Expected outputs:
 
 ```text
-build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
-build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit
+build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa
 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
 build/BOOT.BIN
 build/flow_report.md
@@ -22,13 +22,13 @@ build/flow_report.md
 
 ## First Run Over JTAG
 
-1. Set the Arty Z7-20 boot jumper to JTAG.
+1. Set the Zybo Z7-20 boot jumper to JTAG.
 2. Connect USB power/programming.
 3. Open UART at 115200 baud, 8N1, no flow control.
 4. Run:
 
 ```bash
-make program-arty-z7
+make program-zybo-z7
 ```
 
 Expected final line:

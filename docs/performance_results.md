@@ -4,7 +4,7 @@
 
 | Item | Value |
 |---|---|
-| Board | Digilent Arty Z7-20 |
+| Board | Digilent Zybo Z7-20 |
 | SoC | Xilinx Zynq-7000 |
 | Part | `xc7z020clg400-1` |
 | Toolchain | Vivado / Vitis 2025.2 |
@@ -27,8 +27,8 @@ Latest board implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,168 | 53,200 | 13.47% |
-| Slice Registers | 7,598 | 106,400 | 7.14% |
+| Slice LUTs | 7,169 | 53,200 | 13.48% |
+| Slice Registers | 7,603 | 106,400 | 7.15% |
 | Block RAM Tile | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -37,8 +37,8 @@ Latest board implementation:
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.133 ns
-WHS = 0.016 ns
+WNS = 0.028 ns
+WHS = 0.004 ns
 ```
 
 ## Compute Snapshot
@@ -55,14 +55,14 @@ The compute sweep also documents the scaling target:
 
 | Output | Path |
 |---|---|
-| Bitstream | `build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit` |
-| Timing Report | `build/arty_z7_20_bitstream_timing.rpt` |
-| Utilization Report | `build/arty_z7_20_bitstream_util.rpt` |
-| XSA | `build/arty_z7_20_cnn/arty_z7_20_cnn.xsa` |
+| Bitstream | `build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit` |
+| Timing Report | `build/zybo_z7_20_bitstream_timing.rpt` |
+| Utilization Report | `build/zybo_z7_20_bitstream_util.rpt` |
+| XSA | `build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa` |
 | Bare-metal ELF | `build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf` |
 | BOOT.BIN | `build/BOOT.BIN` |
 | Flow Report | `build/flow_report.md` |
 
 ## Notes
 
-The current implementation fits comfortably on the Arty Z7-20 in the board smoke configuration and leaves room for an ILA/debug variant and future scaling toward the `PC=4`, `PK=8` compute target.
+The current implementation fits comfortably on the Zybo Z7-20 in the board smoke configuration and leaves room for an ILA/debug variant and future scaling toward the `PC=4`, `PK=8` compute target.

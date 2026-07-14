@@ -1,0 +1,2 @@
+board_files/** -whitespace
+constraints/reference/Zybo-Z7-Master.xdc -whitespace

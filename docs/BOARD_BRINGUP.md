@@ -1,15 +1,15 @@
-# Arty Z7-20 Board Bring-Up
+# Zybo Z7-20 Board Bring-Up
 
 ## Required files
 
 Bitstream:
-build/arty_z7_20_cnn/arty_z7_20_cnn.runs/impl_1/system_wrapper.bit
+build/zybo_z7_20_cnn/zybo_z7_20_cnn.runs/impl_1/system_wrapper.bit
 
 ELF:
 build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf
 
 XSA:
-build/arty_z7_20_cnn/arty_z7_20_cnn.xsa
+build/zybo_z7_20_cnn/zybo_z7_20_cnn.xsa
 
 Optional SD boot image:
 build/BOOT.BIN
@@ -20,7 +20,7 @@ make preboard-proof
 
 ## Hardware setup
 
-1. Connect the Arty Z7-20 board over USB.
+1. Connect the Zybo Z7-20 board over USB.
 2. Set boot mode to JTAG.
 3. Power on the board.
 4. Open a UART terminal.
@@ -36,7 +36,7 @@ UART settings:
 
 Run:
 
-make program-arty-z7
+make program-zybo-z7
 
 This uses:
 
