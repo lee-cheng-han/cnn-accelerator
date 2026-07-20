@@ -6,10 +6,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from models.image2image_int8 import (
+    DEFAULT_DENOISE_QUANT_SHIFTS,
     LayerConfig,
     apply_residual,
     arithmetic_shift_right,
     conv2d_layer_int8,
+    make_default_denoise_parameters,
     make_denoise_layer_configs,
     postprocess_accumulator,
     run_layers_int8,
@@ -147,6 +149,73 @@ class TestImage2ImageInt8Model(unittest.TestCase):
                 for value in pixel:
                     self.assertGreaterEqual(value, -128)
                     self.assertLessEqual(value, 127)
+
+    def test_default_denoiser_matches_gaussian_impulse_response(self):
+        x = [[[0, 0, 0] for _ in range(5)] for _ in range(5)]
+        x[2][2] = [64, 64, 64]
+
+        configs = make_denoise_layer_configs(
+            quant_shifts=DEFAULT_DENOISE_QUANT_SHIFTS,
+            final_residual=True,
+        )
+        parameters = make_default_denoise_parameters()
+        layers = [
+            (cfg, weights, bias)
+            for cfg, (weights, bias) in zip(configs, parameters)
+        ]
+
+        y = run_layers_int8(x, layers)
+        expected_spatial = [
+            [0, 0, 0, 0, 0],
+            [0, 4, 8, 4, 0],
+            [0, 8, 16, 8, 0],
+            [0, 4, 8, 4, 0],
+            [0, 0, 0, 0, 0],
+        ]
+
+        for row in range(5):
+            for column in range(5):
+                self.assertEqual(y[row][column], [expected_spatial[row][column]] * 3)
+
+    def test_default_denoiser_uses_every_hidden_channel(self):
+        parameters = make_default_denoise_parameters()
+        layer0, _ = parameters[0]
+        layer1, _ = parameters[1]
+        layer2, _ = parameters[2]
+
+        for output_channel in range(16):
+            self.assertTrue(
+                any(
+                    layer0[output_channel][input_channel][ky][kx] != 0
+                    for input_channel in range(3)
+                    for ky in range(3)
+                    for kx in range(3)
+                )
+            )
+            self.assertTrue(
+                any(
+                    layer1[output_channel][input_channel][ky][kx] != 0
+                    for input_channel in range(16)
+                    for ky in range(3)
+                    for kx in range(3)
+                )
+            )
+            self.assertTrue(
+                any(
+                    layer1[next_output][output_channel][ky][kx] != 0
+                    for next_output in range(16)
+                    for ky in range(3)
+                    for kx in range(3)
+                )
+            )
+            self.assertTrue(
+                any(
+                    layer2[output_channel_rgb][output_channel][ky][kx] != 0
+                    for output_channel_rgb in range(3)
+                    for ky in range(3)
+                    for kx in range(3)
+                )
+            )
 
 
 if __name__ == "__main__":

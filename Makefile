@@ -18,7 +18,7 @@ unit:
 	bash scripts/run_unit.sh
 
 model-test:
-	python3 tests/test_image2image_int8.py
+	python3 -m unittest discover -s tests -p 'test_*.py'
 
 golden-test:
 	python3 models/generate_golden_tensors.py

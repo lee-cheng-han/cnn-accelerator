@@ -11,8 +11,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from models.image2image_int8 import (
+    DEFAULT_DENOISE_QUANT_SHIFTS,
     LayerConfig,
     conv2d_layer_int8,
+    make_default_denoise_parameters,
     make_denoise_layer_configs,
     run_layers_int8,
     tensor_shape_hwc,
@@ -138,18 +140,18 @@ def generate_full_network_case(out_dir: Path, *, name: str, seed: int, input_wid
     rng = random.Random(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    residual_configs = make_denoise_layer_configs(final_residual=True)
-    no_residual_configs = make_denoise_layer_configs(final_residual=False)
+    residual_configs = make_denoise_layer_configs(
+        quant_shifts=DEFAULT_DENOISE_QUANT_SHIFTS,
+        final_residual=True,
+    )
+    no_residual_configs = make_denoise_layer_configs(
+        quant_shifts=DEFAULT_DENOISE_QUANT_SHIFTS,
+        final_residual=False,
+    )
     x = make_random_tensor(input_height, input_width, 3, rng)
-
-    weights = [
-        make_random_weights(cfg.output_channels, cfg.input_channels, cfg.kernel_size, rng, -2, 2)
-        for cfg in residual_configs
-    ]
-    biases = [
-        [rng.randint(-8, 8) for _ in range(cfg.output_channels)]
-        for cfg in residual_configs
-    ]
+    default_parameters = make_default_denoise_parameters()
+    weights = [layer_weights for layer_weights, _ in default_parameters]
+    biases = [layer_bias for _, layer_bias in default_parameters]
 
     residual_layers = [
         (cfg, layer_weights, layer_bias)
@@ -218,10 +220,11 @@ def generate_full_network_case(out_dir: Path, *, name: str, seed: int, input_wid
         f"input_height={input_height}",
         f"output_width={output_width_model}",
         f"output_height={output_height}",
-        "network=3x3 3->16 relu, 3x3 16->16 relu, 3x3 16->3",
+        "network=default Gaussian low-pass denoiser, 3x3 3->16->16->3",
+        "parameters=deterministic signed RGB features and Gaussian high-pass residual",
         "bias_enable=1",
         "quant_enable=1",
-        "quant_shift=0,0,0",
+        "quant_shift=0,5,1",
         "expected_residual=output = input - predicted_noise",
     ]
     (out_dir / "summary.txt").write_text("\n".join(summary) + "\n", encoding="utf-8")

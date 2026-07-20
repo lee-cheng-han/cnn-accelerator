@@ -136,8 +136,8 @@ module tb_axi_stream_top;
  begin
  unique case (layer)
  0: return ((co % INPUT_C) == ci && tap == 4) ? 8'sd1 : 8'sd0;
- 1: return ((co == ci) && tap == 4) ? 8'sd1 : 8'sd0;
- 2: return ((co == ci) && tap == 4) ? 8'sd1 : 8'sd0;
+ 1: return ((co == ci) && tap == 4) ? 8'sd32 : 8'sd0;
+ 2: return ((co == ci) && tap == 4) ? 8'sd2 : 8'sd0;
  default: return 8'sd0;
  endcase
  end

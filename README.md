@@ -66,9 +66,39 @@ RGB input
   -> 3x3 convolution, 3 -> 16 channels, padding 1, ReLU
   -> 3x3 convolution, 16 -> 16 channels, padding 1, ReLU
   -> 3x3 convolution, 16 -> 3 channels, padding 1
-  -> optional residual reconstruction: output = input - predicted noise
+  -> residual reconstruction: output = input - predicted high-frequency noise
   -> RGB output
 ```
+
+The generated default parameters implement a deterministic 3x3 Gaussian
+low-pass denoiser. The 16 hidden channels are eight signed feature pairs:
+channels `0/1` through `14/15` carry positive and negative RGB components so
+ReLU does not discard signed information. All hidden channels contribute to a
+Gaussian high-pass estimate, and residual subtraction removes that estimate
+from the input. The resulting impulse response is:
+
+```text
+1  2  1
+2  4  2   / 16
+1  2  1
+```
+
+This is a useful, explainable startup preset rather than a trained model.
+Weights and biases remain packet-loaded for every job; software may replace
+the preset with trained INT8 parameters or another compatible filter bank
+without rebuilding the FPGA bitstream.
+
+### Layer-Programmable Direction
+
+The fixed three-layer board design is the preserved implementation baseline for
+an in-progress layer-programmable architecture. The V1 model-package ABI is now
+frozen for networks with one to eight convolution layers, runtime 1x1/3x3
+kernels, 1-16 channels, stride 1/2, per-edge padding, NHWC INT8 tensors, and
+dimensions up to 1024x1024 through planned DDR-backed spatial tiling. Freezing
+the ABI does not mean the current RTL already implements those runtime limits.
+
+See the normative [V1 model-package ABI](docs/model_package_abi.md) and the
+[implementation roadmap](docs/layer_programmable_roadmap.md).
 
 ### Target Platform
 
@@ -96,9 +126,9 @@ The checked-in evidence corresponds to the board-integrated configuration
 |---|---:|
 | PL clock | 125.000 MHz |
 | Clock period | 8.000 ns |
-| WNS | 0.028 ns |
+| WNS | 0.084 ns |
 | TNS | 0.000 ns |
-| WHS | 0.004 ns |
+| WHS | 0.020 ns |
 | THS | 0.000 ns |
 | Failing setup / hold endpoints | 0 / 0 |
 
@@ -106,8 +136,8 @@ The checked-in evidence corresponds to the board-integrated configuration
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,169 | 53,200 | 13.48% |
-| Slice registers | 7,603 | 106,400 | 7.15% |
+| Slice LUTs | 7,438 | 53,200 | 13.98% |
+| Slice registers | 7,601 | 106,400 | 7.14% |
 | Block RAM tiles | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -187,6 +217,7 @@ and error behavior.
 | [`rtl/zynq`](rtl/zynq) | AXI-Lite, AXI-Stream, and board-integration wrappers |
 | [`tb`](tb) | Directed, randomized, protocol, and golden-network testbenches |
 | [`models`](models) | Dependency-free bit-accurate Python reference model |
+| [`rtl/include`](rtl/include) | Shared, versioned accelerator ABI constants |
 | [`software/zynq_baremetal`](software/zynq_baremetal) | Bare-metal DMA application and generated golden job |
 | [`scripts`](scripts) | Simulation, synthesis, Vivado, Vitis, reporting, and packaging automation |
 | [`board_files`](board_files) | Vendored Digilent Zybo Z7-20 Vivado board definition |
@@ -324,13 +355,16 @@ record.
   `MAX_PIXELS=16`; larger configurations require a new implementation run.
 - Parameters are loaded for every job through AXI DMA rather than retained in
   persistent on-chip model storage.
+- `make baremetal-headers` regenerates the Gaussian default packet. Alternative
+  parameters must preserve the synthesized `3 -> 16 -> 16 -> 3` tensor shapes
+  and the documented packet order.
 - DMA completion is currently polled by software. Interrupt status exists in
   the register interface, but the application does not yet use interrupt-driven
   completion.
 - The current network topology is fixed to the three-layer RGB path; image
   dimensions and residual mode are runtime configurable within synthesized
   limits.
-- Timing closure has 0.028 ns setup and 0.004 ns hold margin at 125 MHz, so any
+- Timing closure has 0.084 ns setup and 0.020 ns hold margin at 125 MHz, so any
   architectural or tool-version change requires timing to be re-qualified.
 
 ## Documentation

@@ -7,6 +7,7 @@
 | Source hygiene | Python syntax compile | Passing | `python3 -m py_compile` over active scripts and models |
 | Source hygiene | shell syntax check | Passing | `bash -n` over active shell scripts |
 | model | `tests/test_image2image_int8.py` | Passing | bit-accurate Python integer model coverage |
+| default parameters | Gaussian impulse-response test | Passing | all 16 hidden channels used; residual output matches the expected 3x3 low-pass kernel |
 | golden generation | `make baremetal-headers` | Passing | writes deterministic tensors and C DMA packet header |
 | compute RTL | `tb_parallel_mac_array` | Covered | PC x PK signed INT8 MAC datapath |
 | compute RTL | `tb_tiled_conv1x1_engine` | Covered | array-backed and banked-scratchpad-backed 1x1 operand paths |

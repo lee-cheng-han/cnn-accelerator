@@ -19,6 +19,7 @@ verilator --lint-only \
  -Wno-UNUSEDSIGNAL \
  -Wno-UNUSEDPARAM \
  --top-module cnn_image2image_system_top \
+ rtl/include/cnn_accel_abi_pkg.sv \
  rtl/scheduler/tail_mask_generator.sv \
  rtl/postprocess/parallel_bias_add.sv \
  rtl/postprocess/parallel_relu.sv \

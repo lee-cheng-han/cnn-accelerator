@@ -35,6 +35,7 @@ rm -rf \
 echo "[XSim] Compiling RTL and ../../${TB_FILE}"
 
 xvlog -sv -L work \
+ ../../rtl/include/cnn_accel_abi_pkg.sv \
  ../../rtl/scheduler/tail_mask_generator.sv \
  ../../rtl/postprocess/parallel_bias_add.sv \
  ../../rtl/postprocess/parallel_relu.sv \

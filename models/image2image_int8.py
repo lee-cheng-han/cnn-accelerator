@@ -16,6 +16,22 @@ Tensor3D = list[list[list[int]]]
 Weights4D = list[list[list[list[int]]]]
 
 
+DEFAULT_DENOISE_QUANT_SHIFTS = (0, 5, 1)
+
+# Eight signed feature pairs fill the 16-channel hidden tensors. Repeated color
+# bases keep every channel active while preserving signed INT8 values through
+# ReLU without requiring a wider activation format.
+DEFAULT_COLOR_FEATURES = (0, 0, 0, 1, 1, 1, 2, 2)
+DEFAULT_COLOR_COEFFICIENTS = (1, 2, -1, 1, 2, -1, 1, 1)
+
+# 16 * (identity - Gaussian[1 2 1; 2 4 2; 1 2 1] / 16).
+DEFAULT_HIGHPASS_KERNEL = (
+    (-1, -2, -1),
+    (-2, 12, -2),
+    (-1, -2, -1),
+)
+
+
 @dataclass(frozen=True)
 class LayerConfig:
     input_channels: int
@@ -298,4 +314,77 @@ def make_denoise_layer_configs(
             quant_shift=quant_shifts[2],
             residual_mode="sub" if final_residual else "none",
         ),
+    )
+
+
+def _zero_weights(cout: int, cin: int, kernel_size: int = 3) -> Weights4D:
+    return [
+        [
+            [[0 for _ in range(kernel_size)] for _ in range(kernel_size)]
+            for _ in range(cin)
+        ]
+        for _ in range(cout)
+    ]
+
+
+def make_default_denoise_parameters() -> tuple[
+    tuple[Weights4D, list[int]],
+    tuple[Weights4D, list[int]],
+    tuple[Weights4D, list[int]],
+]:
+    """Return deterministic weights for the default RGB Gaussian denoiser.
+
+    Layer 0 encodes eight signed RGB feature pairs. Layer 1 converts each pair
+    into a signed high-frequency feature using ``DEFAULT_HIGHPASS_KERNEL``.
+    Layer 2 reconstructs one predicted-noise channel per RGB component. With
+    final residual subtraction enabled, the network output is a 3x3 Gaussian
+    low-pass image (subject to INT8 saturation and zero padding at boundaries).
+    """
+
+    hidden_channels = len(DEFAULT_COLOR_FEATURES) * 2
+    layer0 = _zero_weights(hidden_channels, 3)
+    layer1 = _zero_weights(hidden_channels, hidden_channels)
+    layer2 = _zero_weights(3, hidden_channels)
+
+    for feature, color in enumerate(DEFAULT_COLOR_FEATURES):
+        positive = feature * 2
+        negative = positive + 1
+        layer0[positive][color][1][1] = 1
+        layer0[negative][color][1][1] = -1
+
+    for output_feature, output_color in enumerate(DEFAULT_COLOR_FEATURES):
+        output_positive = output_feature * 2
+        output_negative = output_positive + 1
+
+        for input_feature, input_color in enumerate(DEFAULT_COLOR_FEATURES):
+            if input_color != output_color:
+                continue
+
+            coefficient = DEFAULT_COLOR_COEFFICIENTS[input_feature]
+            input_positive = input_feature * 2
+            input_negative = input_positive + 1
+
+            for ky in range(3):
+                for kx in range(3):
+                    tap = coefficient * DEFAULT_HIGHPASS_KERNEL[ky][kx]
+                    layer1[output_positive][input_positive][ky][kx] = tap
+                    layer1[output_positive][input_negative][ky][kx] = -tap
+                    layer1[output_negative][input_positive][ky][kx] = -tap
+                    layer1[output_negative][input_negative][ky][kx] = tap
+
+    for color in range(3):
+        for feature, feature_color in enumerate(DEFAULT_COLOR_FEATURES):
+            if feature_color != color:
+                continue
+
+            coefficient = DEFAULT_COLOR_COEFFICIENTS[feature]
+            positive = feature * 2
+            negative = positive + 1
+            layer2[color][positive][1][1] = coefficient
+            layer2[color][negative][1][1] = -coefficient
+
+    return (
+        (layer0, [0 for _ in range(hidden_channels)]),
+        (layer1, [0 for _ in range(hidden_channels)]),
+        (layer2, [0 for _ in range(3)]),
     )

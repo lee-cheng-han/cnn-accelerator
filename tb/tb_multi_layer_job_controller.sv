@@ -156,11 +156,11 @@ module tb_multi_layer_job_controller;
 
  for (int co = 0; co < HIDDEN_C; co++) begin
  weights_l0[co][co % INPUT_C][4] = 8'sd1;
- weights_l1[co][co][4] = 8'sd1;
+ weights_l1[co][co][4] = 8'sd32;
  end
 
  for (int co = 0; co < OUTPUT_C; co++) begin
- weights_l2[co][co][4] = 8'sd1;
+ weights_l2[co][co][4] = 8'sd2;
  end
  end
  endtask

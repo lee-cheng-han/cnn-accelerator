@@ -55,7 +55,8 @@ module tb_layer_descriptors;
  input int exp_cin,
  input int exp_cout,
  input bit exp_relu,
- input bit exp_residual
+ input bit exp_residual,
+ input int exp_quant_shift
  );
  begin
  layer_index = idx[1:0];
@@ -76,6 +77,7 @@ module tb_layer_descriptors;
  (bias_enable !== 1'b1) ||
  (relu_enable !== exp_relu) ||
  (quant_enable !== 1'b1) ||
+ (quant_shift !== exp_quant_shift[4:0]) ||
  (residual_enable !== exp_residual)) begin
  $display("[FAIL] layer %0d descriptor mismatch", idx);
  $finish;
@@ -91,9 +93,9 @@ module tb_layer_descriptors;
  layer_index = '0;
  tests = 0;
 
- check_layer(0, 3, 16, 1, 0);
- check_layer(1, 16, 16, 1, 0);
- check_layer(2, 16, 3, 0, 1);
+ check_layer(0, 3, 16, 1, 0, 0);
+ check_layer(1, 16, 16, 1, 0, 5);
+ check_layer(2, 16, 3, 0, 1, 1);
 
  layer_index = 2'd3;
  #1;

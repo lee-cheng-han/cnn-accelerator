@@ -72,8 +72,8 @@ Latest board implementation:
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,169 | 53,200 | 13.48% |
-| Slice registers | 7,603 | 106,400 | 7.15% |
+| Slice LUTs | 7,438 | 53,200 | 13.98% |
+| Slice registers | 7,601 | 106,400 | 7.14% |
 | Block RAM tile | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -82,8 +82,8 @@ Timing result:
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.028 ns
-WHS = 0.004 ns
+WNS = 0.084 ns
+WHS = 0.020 ns
 ```
 
 ## Software

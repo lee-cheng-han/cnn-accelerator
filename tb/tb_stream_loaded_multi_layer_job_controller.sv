@@ -138,8 +138,8 @@ module tb_stream_loaded_multi_layer_job_controller;
  begin
  unique case (layer)
  0: return ((co % INPUT_C) == ci && k == 4) ? 8'sd1 : 8'sd0;
- 1: return ((co == ci) && k == 4) ? 8'sd1 : 8'sd0;
- 2: return ((co == ci) && k == 4) ? 8'sd1 : 8'sd0;
+ 1: return ((co == ci) && k == 4) ? 8'sd32 : 8'sd0;
+ 2: return ((co == ci) && k == 4) ? 8'sd2 : 8'sd0;
  default: return 8'sd0;
  endcase
  end

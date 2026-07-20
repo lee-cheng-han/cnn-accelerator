@@ -2,6 +2,12 @@
 
 The bare-metal app drives the packetized image-to-image accelerator through the Zybo Z7-20 AXI DMA block design.
 
+The generated demo packet contains deterministic Gaussian-denoiser parameters,
+not random full-network weights. Residual mode returns the low-pass RGB image;
+non-residual mode returns the predicted high-frequency component. Parameters
+are ordinary packet payloads and can be replaced without changing the FPGA
+bitstream, provided the fixed layer shapes and packet lengths are preserved.
+
 It uses the deterministic Python golden tensor case from `build/golden/full_network_3layer`, converts it into the seven-packet AXI input stream, runs both residual and non-residual output modes, and compares the returned DMA output buffer against the expected signed INT8 RGB pixels.
 
 ## Software Flow

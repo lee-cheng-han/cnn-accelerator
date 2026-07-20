@@ -65,6 +65,7 @@ module denoise_layer_descriptor_rom #(
         input_channels = CH_W'(3);
         output_channels = CH_W'(16);
         relu_enable = 1'b1;
+        quant_shift = 5'd0;
       end
 
       2'd1: begin
@@ -75,6 +76,7 @@ module denoise_layer_descriptor_rom #(
         input_channels = CH_W'(16);
         output_channels = CH_W'(16);
         relu_enable = 1'b1;
+        quant_shift = 5'd5;
       end
 
       2'd2: begin
@@ -85,6 +87,7 @@ module denoise_layer_descriptor_rom #(
         input_channels = CH_W'(16);
         output_channels = CH_W'(3);
         relu_enable = 1'b0;
+        quant_shift = 5'd1;
         residual_enable = FINAL_RESIDUAL_ENABLE;
         residual_input_base = INPUT_BASE;
       end
