@@ -14,8 +14,8 @@ atomically activated, and reused across multiple images.
 |---:|---|---|
 | 0 | Preserve fixed-network board baseline and evidence | Complete; physical board validation pending |
 | 1 | Freeze exact V1 model-package ABI | Complete |
-| 2 | Build model compiler and package-level bit-accurate executor | Next |
-| 3 | Add capability discovery and structured errors | Planned |
+| 2 | Build model compiler and package-level bit-accurate executor | Complete |
+| 3 | Add capability discovery and structured errors | Next |
 | 4 | Add runtime metadata memories and atomic model lifecycle | Planned |
 | 5 | Generalize descriptor-driven layer execution control | Planned |
 | 6 | Add reusable active/prefetch parameter banks | Planned |

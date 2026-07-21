@@ -1,0 +1,29 @@
+{
+  "format": "cnn-accelerator-model-v1",
+  "model_id": 1,
+  "model_generation_id": 0,
+  "input": {
+    "name": "rgb_input",
+    "width": 4,
+    "height": 4,
+    "channels": 3
+  },
+  "layers": [
+    {
+      "name": "rgb_identity",
+      "output": "rgb_output",
+      "output_channels": 3,
+      "kernel_size": 1,
+      "stride": 1,
+      "padding": 0,
+      "activation": "none",
+      "quant_shift": 0,
+      "weights": [
+        1, 0, 0,
+        0, 1, 0,
+        0, 0, 1
+      ],
+      "bias": [0, 0, 0]
+    }
+  ]
+}

@@ -98,7 +98,10 @@ dimensions up to 1024x1024 through planned DDR-backed spatial tiling. Freezing
 the ABI does not mean the current RTL already implements those runtime limits.
 
 See the normative [V1 model-package ABI](docs/model_package_abi.md) and the
-[implementation roadmap](docs/layer_programmable_roadmap.md).
+[implementation roadmap](docs/layer_programmable_roadmap.md). The first
+[model compiler and package executor](docs/model_compiler.md) now emit,
+validate, inspect, and bit-accurately execute relocatable V1 packages; runtime
+RTL consumption of those packages remains a later milestone.
 
 ### Target Platform
 
@@ -217,6 +220,7 @@ and error behavior.
 | [`rtl/zynq`](rtl/zynq) | AXI-Lite, AXI-Stream, and board-integration wrappers |
 | [`tb`](tb) | Directed, randomized, protocol, and golden-network testbenches |
 | [`models`](models) | Dependency-free bit-accurate Python reference model |
+| [`examples`](examples) | Human-readable model specifications and input tensors |
 | [`rtl/include`](rtl/include) | Shared, versioned accelerator ABI constants |
 | [`software/zynq_baremetal`](software/zynq_baremetal) | Bare-metal DMA application and generated golden job |
 | [`scripts`](scripts) | Simulation, synthesis, Vivado, Vitis, reporting, and packaging automation |
@@ -254,6 +258,7 @@ Run individual verification layers:
 
 ```bash
 make model-test       # bit-accurate Python arithmetic tests
+make model-package-example # compile and execute the V1 RGB identity package
 make golden-test      # generated tensor fixtures against integrated RTL
 make unit             # directed and randomized RTL testbenches
 make lint             # Verilator lint
