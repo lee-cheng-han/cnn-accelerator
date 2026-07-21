@@ -35,7 +35,8 @@ set_property target_language Verilog [current_project]
 set_property simulator_language Mixed [current_project]
 
 set rtl_files [list \
- rtl/scheduler/tail_mask_generator.sv \
+	rtl/include/cnn_accel_abi_pkg.sv \
+	rtl/scheduler/tail_mask_generator.sv \
  rtl/postprocess/parallel_bias_add.sv \
  rtl/postprocess/parallel_relu.sv \
  rtl/postprocess/parallel_quantizer.sv \
@@ -63,6 +64,8 @@ set rtl_files [list \
  rtl/scheduler/single_layer_scheduler.sv \
  rtl/scheduler/multi_layer_job_controller.sv \
  rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
+ rtl/zynq/cnn_runtime_capabilities.sv \
+ rtl/zynq/cnn_structured_error_snapshot.sv \
  rtl/zynq/cnn_axi_lite_slave.sv \
  rtl/zynq/cnn_image2image_axi_stream_top.sv \
  rtl/zynq/cnn_image2image_system_top.sv \

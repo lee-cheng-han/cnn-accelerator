@@ -34,6 +34,7 @@ Expected final UART result:
 ## Artifacts
 
 - App source: `software/zynq_baremetal/main.c`
+- Shared ABI/capability definitions: `software/zynq_baremetal/cnn_accel_abi.h`
 - Generated golden C header: `software/zynq_baremetal/generated/golden_dma_job.h`
 - Vitis app generator: `scripts/vitis/create_zynq_baremetal_app.py`
 - Built ELF: `build/vitis_ws/cnn_baremetal/build/cnn_baremetal.elf`

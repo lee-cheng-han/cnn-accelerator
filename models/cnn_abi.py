@@ -20,7 +20,9 @@ MODEL_MAGIC = 0x314E4E43  # "CNN1" as little-endian bytes.
 MODEL_HEADER_SIZE = 128
 LAYER_DESCRIPTOR_SIZE = 128
 TENSOR_DESCRIPTOR_SIZE = 64
-QUANT_DESCRIPTOR_SIZE = 32
+QUANT_DESCRIPTOR_SIZE = 192
+CAPABILITY_RECORD_SIZE = 128
+ERROR_RECORD_SIZE = 64
 RECORD_ALIGNMENT = 64
 NO_TENSOR_ID = 0xFFFF
 
@@ -33,7 +35,9 @@ MAX_TENSOR_HEIGHT = 1024
 MAX_LAYER_WEIGHT_BYTES = 2304
 MAX_LAYER_BIAS_BYTES = 64
 WEIGHT_BANK_CAPACITY_BYTES = 4096
-BIAS_BANK_CAPACITY_BYTES = 256
+POSTPROCESS_BANK_CAPACITY_BYTES = 256
+BIAS_BANK_CAPACITY_BYTES = POSTPROCESS_BANK_CAPACITY_BYTES
+POSTPROCESS_ENTRY_SIZE = 16
 
 
 class AbiError(ValueError):
@@ -84,6 +88,84 @@ class ResidualMode(IntEnum):
 
 class RoundingMode(IntEnum):
     ARITHMETIC_SHIFT = 0
+    ROUND_HALF_TO_EVEN = 1
+
+
+class CapabilityFeature(IntFlag):
+    CAPABILITY_QUERY = 1 << 0
+    STRUCTURED_ERRORS = 1 << 1
+    MODEL_PACKAGES = 1 << 2
+    RUNTIME_METADATA = 1 << 3
+    PACKED_DMA = 1 << 4
+    DDR_TILING = 1 << 5
+    AUTONOMOUS_FETCH = 1 << 6
+    INTERRUPTS = 1 << 7
+    FIXED_NETWORK = 1 << 31
+
+
+class ErrorCode(IntEnum):
+    NONE = 0
+    PACKAGE_VALIDATION_FAILED = 0x0101
+    MODEL_ABI_UNSUPPORTED = 0x0102
+    CAPABILITY_FEATURE_MISSING = 0x0201
+    CAPABILITY_LIMIT_EXCEEDED = 0x0202
+    UNSUPPORTED_OPERATION = 0x0203
+    DATA_PLANE_PROTOCOL = 0x0400
+
+
+class ErrorStage(IntEnum):
+    NONE = 0
+    PACKAGE_LOAD = 1
+    PACKAGE_VALIDATE = 2
+    MODEL_ACTIVATE = 3
+    EXECUTE = 4
+    DATA_PLANE = 5
+
+
+class ErrorRecordKind(IntEnum):
+    NONE = 0
+    MODEL = 1
+    LAYER = 2
+    TENSOR = 3
+    QUANTIZATION = 4
+    PACKET = 5
+
+
+class ErrorField(IntEnum):
+    NONE = 0
+    ABI_VERSION = 1
+    FEATURE_FLAGS = 2
+    LAYER_COUNT = 3
+    TENSOR_COUNT = 4
+    QUANTIZATION_COUNT = 5
+    WIDTH = 6
+    HEIGHT = 7
+    INPUT_CHANNELS = 8
+    OUTPUT_CHANNELS = 9
+    OPCODE = 10
+    KERNEL_SIZE = 11
+    STRIDE = 12
+    PADDING = 13
+    WEIGHT_BYTES = 14
+    BIAS_BYTES = 15
+    ELEMENT_TYPE = 16
+    ACTIVATION = 17
+    ROUNDING_MODE = 18
+    RESIDUAL_MODE = 19
+    PACKET_TYPE = 20
+    PAYLOAD_LENGTH = 21
+    TENSOR_ELEMENTS = 22
+    QUANT_MULTIPLIER = 23
+    QUANT_SHIFT = 24
+    OUTPUT_ZERO_POINT = 25
+
+
+class CapabilityError(AbiError):
+    """Raised with a machine-readable record when hardware cannot run a model."""
+
+    def __init__(self, message: str, record: "ErrorRecord") -> None:
+        super().__init__(message)
+        self.record = record
 
 
 def _check_u(name: str, value: int, bits: int) -> None:
@@ -376,23 +458,35 @@ class TensorDescriptor:
 @dataclass(frozen=True)
 class QuantizationDescriptor:
     quantization_id: int
-    quant_multiplier: int = 1
-    quant_shift: int = 0
+    channel_count: int = 1
+    quant_multipliers: tuple[int, ...] = (1,)
+    quant_shifts: tuple[int, ...] = (0,)
     output_zero_point: int = 0
-    rounding_mode: RoundingMode = RoundingMode.ARITHMETIC_SHIFT
+    rounding_mode: RoundingMode = RoundingMode.ROUND_HALF_TO_EVEN
     flags: int = 0
 
     def pack(self) -> bytes:
         _check_u("quantization_id", self.quantization_id, 16)
         _check_u("flags", self.flags, 16)
-        _check_i("quant_multiplier", self.quant_multiplier, 32)
-        _check_u("quant_shift", self.quant_shift, 8)
+        _check_u("channel_count", self.channel_count, 16)
+        if not 1 <= self.channel_count <= MAX_CHANNELS:
+            raise AbiError(f"channel_count must be in range 1..{MAX_CHANNELS}")
+        if len(self.quant_multipliers) != self.channel_count:
+            raise AbiError("quant_multipliers length must match channel_count")
+        if len(self.quant_shifts) != self.channel_count:
+            raise AbiError("quant_shifts length must match channel_count")
         _check_i("output_zero_point", self.output_zero_point, 8)
         out = bytearray(QUANT_DESCRIPTOR_SIZE)
         struct.pack_into("<HHHH", out, 0, ABI_VERSION, QUANT_DESCRIPTOR_SIZE,
                          self.quantization_id, self.flags)
-        struct.pack_into("<iBbB", out, 8, self.quant_multiplier, self.quant_shift,
-                         self.output_zero_point, int(self.rounding_mode))
+        struct.pack_into("<HBb", out, 8, self.channel_count,
+                         int(self.rounding_mode), self.output_zero_point)
+        for channel, (multiplier, shift) in enumerate(
+            zip(self.quant_multipliers, self.quant_shifts)
+        ):
+            _check_i(f"quant_multipliers[{channel}]", multiplier, 32)
+            _check_u(f"quant_shifts[{channel}]", shift, 8)
+            struct.pack_into("<iB", out, 64 + channel * 8, multiplier, shift)
         return bytes(out)
 
     @classmethod
@@ -402,11 +496,411 @@ class QuantizationDescriptor:
         version, size, quant_id, flags = struct.unpack_from("<HHHH", data, 0)
         if version != ABI_VERSION or size != QUANT_DESCRIPTOR_SIZE:
             raise AbiError(f"unsupported quant descriptor version/size {version}/{size}")
-        _require_zero(data, 15, 32, "quant descriptor")
-        multiplier, shift, zero_point, rounding = struct.unpack_from("<iBbB", data, 8)
-        return cls(quantization_id=quant_id, flags=flags, quant_multiplier=multiplier,
-                   quant_shift=shift, output_zero_point=zero_point,
-                   rounding_mode=_enum(RoundingMode, rounding, "rounding mode"))
+        channel_count, rounding, zero_point = struct.unpack_from("<HBb", data, 8)
+        if not 1 <= channel_count <= MAX_CHANNELS:
+            raise AbiError(f"quant channel_count must be in range 1..{MAX_CHANNELS}")
+        _require_zero(data, 12, 64, "quant descriptor")
+        multipliers = []
+        shifts = []
+        for channel in range(MAX_CHANNELS):
+            offset = 64 + channel * 8
+            multiplier, shift = struct.unpack_from("<iB", data, offset)
+            _require_zero(data, offset + 5, offset + 8, "quant channel entry")
+            if channel < channel_count:
+                multipliers.append(multiplier)
+                shifts.append(shift)
+            elif multiplier != 0 or shift != 0:
+                raise AbiError("unused quant channel entries must be zero")
+        return cls(
+            quantization_id=quant_id, flags=flags, channel_count=channel_count,
+            quant_multipliers=tuple(multipliers), quant_shifts=tuple(shifts),
+            output_zero_point=zero_point,
+            rounding_mode=_enum(RoundingMode, rounding, "rounding mode"),
+        )
+
+
+@dataclass(frozen=True)
+class CapabilityRecord:
+    hardware_interface_version: int
+    model_abi_version: int
+    dma_data_width_bytes: int
+    feature_flags: CapabilityFeature
+    opcode_mask: int
+    element_type_mask: int
+    activation_mask: int
+    rounding_mode_mask: int
+    residual_mode_mask: int
+    kernel_size_mask: int
+    stride_mask: int
+    max_layers: int
+    max_tensors: int
+    max_quantizations: int
+    max_input_channels: int
+    max_output_channels: int
+    max_tensor_width: int
+    max_tensor_height: int
+    max_padding_per_edge: int
+    max_tile_width: int
+    max_tile_height: int
+    max_tensor_elements: int
+    weight_bank_capacity_bytes: int
+    bias_bank_capacity_bytes: int
+    max_layer_weight_bytes: int
+    max_layer_bias_bytes: int
+    record_alignment_bytes: int
+    parameter_alignment_bytes: int
+    parallel_input_channels: int
+    parallel_output_channels: int
+    clock_hz: int
+
+    def pack(self) -> bytes:
+        out = bytearray(CAPABILITY_RECORD_SIZE)
+        struct.pack_into("<HHIHH", out, 0, ABI_VERSION, CAPABILITY_RECORD_SIZE,
+                         self.hardware_interface_version, self.model_abi_version,
+                         self.dma_data_width_bytes)
+        struct.pack_into("<8I", out, 12, int(self.feature_flags), self.opcode_mask,
+                         self.element_type_mask, self.activation_mask,
+                         self.rounding_mode_mask, self.residual_mode_mask,
+                         self.kernel_size_mask, self.stride_mask)
+        struct.pack_into(
+            "<10H", out, 44, self.max_layers, self.max_tensors,
+            self.max_quantizations, self.max_input_channels,
+            self.max_output_channels, self.max_tensor_width,
+            self.max_tensor_height, self.max_padding_per_edge,
+            self.max_tile_width, self.max_tile_height,
+        )
+        struct.pack_into(
+            "<5I", out, 64, self.max_tensor_elements,
+            self.weight_bank_capacity_bytes, self.bias_bank_capacity_bytes,
+            self.max_layer_weight_bytes, self.max_layer_bias_bytes,
+        )
+        struct.pack_into(
+            "<4HI", out, 84, self.record_alignment_bytes,
+            self.parameter_alignment_bytes, self.parallel_input_channels,
+            self.parallel_output_channels, self.clock_hz,
+        )
+        return bytes(out)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "CapabilityRecord":
+        if len(data) != CAPABILITY_RECORD_SIZE:
+            raise AbiError(f"capability record must be {CAPABILITY_RECORD_SIZE} bytes")
+        version, size, hardware_version, model_abi, dma_bytes = struct.unpack_from(
+            "<HHIHH", data, 0
+        )
+        if version != ABI_VERSION or size != CAPABILITY_RECORD_SIZE:
+            raise AbiError(f"unsupported capability record version/size {version}/{size}")
+        masks = struct.unpack_from("<8I", data, 12)
+        limits = struct.unpack_from("<10H", data, 44)
+        capacities = struct.unpack_from("<5I", data, 64)
+        alignment = struct.unpack_from("<4HI", data, 84)
+        _require_zero(data, 96, 128, "capability record")
+        return cls(
+            hardware_interface_version=hardware_version,
+            model_abi_version=model_abi,
+            dma_data_width_bytes=dma_bytes,
+            feature_flags=CapabilityFeature(masks[0]), opcode_mask=masks[1],
+            element_type_mask=masks[2], activation_mask=masks[3],
+            rounding_mode_mask=masks[4], residual_mode_mask=masks[5],
+            kernel_size_mask=masks[6], stride_mask=masks[7],
+            max_layers=limits[0], max_tensors=limits[1],
+            max_quantizations=limits[2], max_input_channels=limits[3],
+            max_output_channels=limits[4], max_tensor_width=limits[5],
+            max_tensor_height=limits[6], max_padding_per_edge=limits[7],
+            max_tile_width=limits[8], max_tile_height=limits[9],
+            max_tensor_elements=capacities[0],
+            weight_bank_capacity_bytes=capacities[1],
+            bias_bank_capacity_bytes=capacities[2],
+            max_layer_weight_bytes=capacities[3],
+            max_layer_bias_bytes=capacities[4],
+            record_alignment_bytes=alignment[0],
+            parameter_alignment_bytes=alignment[1],
+            parallel_input_channels=alignment[2],
+            parallel_output_channels=alignment[3], clock_hz=alignment[4],
+        )
+
+
+@dataclass(frozen=True)
+class ErrorRecord:
+    error_code: ErrorCode
+    stage: ErrorStage
+    record_kind: ErrorRecordKind = ErrorRecordKind.NONE
+    record_index: int = 0
+    field_id: ErrorField = ErrorField.NONE
+    observed_value: int = 0
+    expected_min: int = 0
+    expected_max: int = 0
+    model_id: int = 0
+    model_generation_id: int = 0
+    detail: int = 0
+    flags: int = 0
+
+    def pack(self) -> bytes:
+        out = bytearray(ERROR_RECORD_SIZE)
+        struct.pack_into("<HHI", out, 0, ABI_VERSION, ERROR_RECORD_SIZE,
+                         int(self.error_code))
+        struct.pack_into("<BBH", out, 8, int(self.stage), int(self.record_kind), self.flags)
+        struct.pack_into("<HH", out, 12, self.record_index, int(self.field_id))
+        struct.pack_into("<QQQ", out, 16, self.observed_value,
+                         self.expected_min, self.expected_max)
+        struct.pack_into("<III", out, 40, self.model_id,
+                         self.model_generation_id, self.detail)
+        return bytes(out)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "ErrorRecord":
+        if len(data) != ERROR_RECORD_SIZE:
+            raise AbiError(f"error record must be {ERROR_RECORD_SIZE} bytes")
+        version, size, code = struct.unpack_from("<HHI", data, 0)
+        if version != ABI_VERSION or size != ERROR_RECORD_SIZE:
+            raise AbiError(f"unsupported error record version/size {version}/{size}")
+        stage, kind, flags = struct.unpack_from("<BBH", data, 8)
+        record_index, field = struct.unpack_from("<HH", data, 12)
+        observed, expected_min, expected_max = struct.unpack_from("<QQQ", data, 16)
+        model_id, generation, detail = struct.unpack_from("<III", data, 40)
+        _require_zero(data, 52, 64, "error record")
+        return cls(
+            error_code=_enum(ErrorCode, code, "error code"),
+            stage=_enum(ErrorStage, stage, "error stage"),
+            record_kind=_enum(ErrorRecordKind, kind, "error record kind"),
+            record_index=record_index,
+            field_id=_enum(ErrorField, field, "error field"),
+            flags=flags, observed_value=observed,
+            expected_min=expected_min, expected_max=expected_max,
+            model_id=model_id, model_generation_id=generation, detail=detail,
+        )
+
+
+def target_v1_capabilities(
+    *,
+    parallel_input_channels: int = 2,
+    parallel_output_channels: int = 4,
+    clock_hz: int = 125_000_000,
+) -> CapabilityRecord:
+    """Return the final V1 architectural capability envelope."""
+    return CapabilityRecord(
+        hardware_interface_version=0x00030000,
+        model_abi_version=ABI_VERSION,
+        dma_data_width_bytes=4,
+        feature_flags=(
+            CapabilityFeature.CAPABILITY_QUERY
+            | CapabilityFeature.STRUCTURED_ERRORS
+            | CapabilityFeature.MODEL_PACKAGES
+            | CapabilityFeature.RUNTIME_METADATA
+            | CapabilityFeature.PACKED_DMA
+            | CapabilityFeature.DDR_TILING
+            | CapabilityFeature.AUTONOMOUS_FETCH
+            | CapabilityFeature.INTERRUPTS
+        ),
+        opcode_mask=1 << int(Opcode.CONV2D),
+        element_type_mask=1 << int(ElementType.INT8),
+        activation_mask=(1 << int(Activation.NONE)) | (1 << int(Activation.RELU)),
+        rounding_mode_mask=1 << int(RoundingMode.ROUND_HALF_TO_EVEN),
+        residual_mode_mask=(
+            (1 << int(ResidualMode.NONE))
+            | (1 << int(ResidualMode.POST_QUANT_ADD))
+            | (1 << int(ResidualMode.POST_QUANT_SUBTRACT))
+        ),
+        kernel_size_mask=(1 << 1) | (1 << 3),
+        stride_mask=(1 << 1) | (1 << 2),
+        max_layers=MAX_LAYERS, max_tensors=MAX_TENSORS,
+        max_quantizations=MAX_QUANTIZATIONS,
+        max_input_channels=MAX_CHANNELS, max_output_channels=MAX_CHANNELS,
+        max_tensor_width=MAX_TENSOR_WIDTH, max_tensor_height=MAX_TENSOR_HEIGHT,
+        max_padding_per_edge=1, max_tile_width=16, max_tile_height=16,
+        max_tensor_elements=MAX_TENSOR_WIDTH * MAX_TENSOR_HEIGHT,
+        weight_bank_capacity_bytes=WEIGHT_BANK_CAPACITY_BYTES,
+        bias_bank_capacity_bytes=POSTPROCESS_BANK_CAPACITY_BYTES,
+        max_layer_weight_bytes=MAX_LAYER_WEIGHT_BYTES,
+        max_layer_bias_bytes=MAX_LAYER_BIAS_BYTES,
+        record_alignment_bytes=RECORD_ALIGNMENT,
+        parameter_alignment_bytes=64,
+        parallel_input_channels=parallel_input_channels,
+        parallel_output_channels=parallel_output_channels,
+        clock_hz=clock_hz,
+    )
+
+
+def fixed_hardware_capabilities(
+    *,
+    max_input_channels: int = 16,
+    max_output_channels: int = 16,
+    max_pixels: int = 16,
+    parallel_input_channels: int = 2,
+    parallel_output_channels: int = 4,
+    clock_hz: int = 125_000_000,
+) -> CapabilityRecord:
+    """Describe the current fixed three-layer board implementation honestly."""
+    return CapabilityRecord(
+        hardware_interface_version=0x00030000,
+        model_abi_version=ABI_VERSION,
+        dma_data_width_bytes=4,
+        feature_flags=(
+            CapabilityFeature.CAPABILITY_QUERY
+            | CapabilityFeature.STRUCTURED_ERRORS
+            | CapabilityFeature.INTERRUPTS
+            | CapabilityFeature.FIXED_NETWORK
+        ),
+        opcode_mask=1 << int(Opcode.CONV2D),
+        element_type_mask=1 << int(ElementType.INT8),
+        activation_mask=(1 << int(Activation.NONE)) | (1 << int(Activation.RELU)),
+        rounding_mode_mask=1 << int(RoundingMode.ARITHMETIC_SHIFT),
+        residual_mode_mask=(
+            (1 << int(ResidualMode.NONE))
+            | (1 << int(ResidualMode.POST_QUANT_SUBTRACT))
+        ),
+        kernel_size_mask=1 << 3,
+        stride_mask=1 << 1,
+        max_layers=3, max_tensors=4, max_quantizations=3,
+        max_input_channels=max_input_channels,
+        max_output_channels=max_output_channels,
+        max_tensor_width=max_pixels, max_tensor_height=max_pixels,
+        max_padding_per_edge=1, max_tile_width=1, max_tile_height=1,
+        max_tensor_elements=max_pixels,
+        weight_bank_capacity_bytes=MAX_LAYER_WEIGHT_BYTES,
+        bias_bank_capacity_bytes=MAX_LAYER_BIAS_BYTES,
+        max_layer_weight_bytes=MAX_LAYER_WEIGHT_BYTES,
+        max_layer_bias_bytes=MAX_LAYER_BIAS_BYTES,
+        record_alignment_bytes=1, parameter_alignment_bytes=1,
+        parallel_input_channels=parallel_input_channels,
+        parallel_output_channels=parallel_output_channels,
+        clock_hz=clock_hz,
+    )
+
+
+def validate_package_capabilities(package: bytes, capabilities: CapabilityRecord) -> None:
+    """Raise ``CapabilityError`` with structured context if a package cannot run."""
+    header, layers, tensors, quantizations = parse_model_package(package)
+
+    def reject(message, code, kind, index, field, observed, expected_min, expected_max):
+        raise CapabilityError(
+            message,
+            ErrorRecord(
+                error_code=code, stage=ErrorStage.PACKAGE_VALIDATE,
+                record_kind=kind, record_index=index, field_id=field,
+                observed_value=observed, expected_min=expected_min,
+                expected_max=expected_max, model_id=header.model_id,
+                model_generation_id=header.model_generation_id,
+            ),
+        )
+
+    if capabilities.model_abi_version != ABI_VERSION:
+        reject(
+            "hardware does not support the package ABI version",
+            ErrorCode.MODEL_ABI_UNSUPPORTED, ErrorRecordKind.MODEL, 0,
+            ErrorField.ABI_VERSION, ABI_VERSION,
+            capabilities.model_abi_version, capabilities.model_abi_version,
+        )
+    if not capabilities.feature_flags & CapabilityFeature.MODEL_PACKAGES:
+        reject(
+            "hardware does not implement runtime model packages",
+            ErrorCode.CAPABILITY_FEATURE_MISSING, ErrorRecordKind.MODEL, 0,
+            ErrorField.FEATURE_FLAGS, int(CapabilityFeature.MODEL_PACKAGES),
+            int(CapabilityFeature.MODEL_PACKAGES),
+            int(CapabilityFeature.MODEL_PACKAGES),
+        )
+
+    for count, maximum, field in (
+        (len(layers), capabilities.max_layers, ErrorField.LAYER_COUNT),
+        (len(tensors), capabilities.max_tensors, ErrorField.TENSOR_COUNT),
+        (len(quantizations), capabilities.max_quantizations,
+         ErrorField.QUANTIZATION_COUNT),
+    ):
+        if count > maximum:
+            reject(
+                f"package {field.name.lower()} exceeds hardware capability",
+                ErrorCode.CAPABILITY_LIMIT_EXCEEDED, ErrorRecordKind.MODEL, 0,
+                field, count, 0, maximum,
+            )
+
+    tensor_by_id = {tensor.tensor_id: tensor for tensor in tensors}
+    for quantization in quantizations:
+        if not capabilities.rounding_mode_mask & (
+            1 << int(quantization.rounding_mode)
+        ):
+            reject(
+                f"quantization {quantization.quantization_id} uses unsupported "
+                "rounding mode",
+                ErrorCode.UNSUPPORTED_OPERATION,
+                ErrorRecordKind.QUANTIZATION,
+                quantization.quantization_id,
+                ErrorField.ROUNDING_MODE,
+                int(quantization.rounding_mode),
+                0,
+                capabilities.rounding_mode_mask,
+            )
+
+    for tensor in tensors:
+        for observed, maximum, field in (
+            (tensor.width, capabilities.max_tensor_width, ErrorField.WIDTH),
+            (tensor.height, capabilities.max_tensor_height, ErrorField.HEIGHT),
+            (tensor.width * tensor.height, capabilities.max_tensor_elements,
+             ErrorField.TENSOR_ELEMENTS),
+        ):
+            if observed > maximum:
+                reject(
+                    f"tensor {tensor.tensor_id} exceeds {field.name.lower()} capability",
+                    ErrorCode.CAPABILITY_LIMIT_EXCEEDED,
+                    ErrorRecordKind.TENSOR, tensor.tensor_id, field,
+                    observed, 1, maximum,
+                )
+        if not capabilities.element_type_mask & (1 << int(tensor.element_type)):
+            reject(
+                f"tensor {tensor.tensor_id} element type is unsupported",
+                ErrorCode.UNSUPPORTED_OPERATION, ErrorRecordKind.TENSOR,
+                tensor.tensor_id, ErrorField.ELEMENT_TYPE,
+                int(tensor.element_type), 0, capabilities.element_type_mask,
+            )
+
+    for layer in layers:
+        input_tensor = tensor_by_id[layer.input_tensor_id]
+        output_tensor = tensor_by_id[layer.output_tensor_id]
+        checks = (
+            (input_tensor.channels, capabilities.max_input_channels,
+             ErrorField.INPUT_CHANNELS),
+            (output_tensor.channels, capabilities.max_output_channels,
+             ErrorField.OUTPUT_CHANNELS),
+            (layer.weight_size, capabilities.max_layer_weight_bytes,
+             ErrorField.WEIGHT_BYTES),
+            (layer.bias_size, capabilities.max_layer_bias_bytes,
+             ErrorField.BIAS_BYTES),
+        )
+        for observed, maximum, field in checks:
+            if observed > maximum:
+                reject(
+                    f"layer {layer.layer_id} exceeds {field.name.lower()} capability",
+                    ErrorCode.CAPABILITY_LIMIT_EXCEEDED, ErrorRecordKind.LAYER,
+                    layer.layer_id, field, observed, 0, maximum,
+                )
+        bit_checks = (
+            (int(layer.opcode), capabilities.opcode_mask, ErrorField.OPCODE),
+            (layer.kernel_width, capabilities.kernel_size_mask,
+             ErrorField.KERNEL_SIZE),
+            (layer.stride_x, capabilities.stride_mask, ErrorField.STRIDE),
+            (layer.stride_y, capabilities.stride_mask, ErrorField.STRIDE),
+            (int(layer.activation), capabilities.activation_mask,
+             ErrorField.ACTIVATION),
+            (int(layer.residual_mode), capabilities.residual_mode_mask,
+             ErrorField.RESIDUAL_MODE),
+        )
+        for observed, mask, field in bit_checks:
+            if not mask & (1 << observed):
+                reject(
+                    f"layer {layer.layer_id} uses unsupported {field.name.lower()}",
+                    ErrorCode.UNSUPPORTED_OPERATION, ErrorRecordKind.LAYER,
+                    layer.layer_id, field, observed, 0, mask,
+                )
+        maximum_padding = max(
+            layer.padding_top, layer.padding_bottom,
+            layer.padding_left, layer.padding_right,
+        )
+        if maximum_padding > capabilities.max_padding_per_edge:
+            reject(
+                f"layer {layer.layer_id} padding exceeds hardware capability",
+                ErrorCode.CAPABILITY_LIMIT_EXCEEDED, ErrorRecordKind.LAYER,
+                layer.layer_id, ErrorField.PADDING, maximum_padding,
+                0, capabilities.max_padding_per_edge,
+            )
 
 
 def parameter_crc32(weight_bytes: bytes, bias_bytes: bytes) -> int:
@@ -525,12 +1019,20 @@ def validate_model(
     for quant in quantizations:
         if quant.flags != 0:
             raise AbiError(f"quantization {quant.quantization_id} has unknown flags")
-        if quant.quant_multiplier != 1 or quant.output_zero_point != 0:
-            raise AbiError("V1 supports multiplier=1 and output_zero_point=0 only")
-        if not 0 <= quant.quant_shift <= 31:
-            raise AbiError("V1 quant_shift must be in range 0..31")
-        if quant.rounding_mode != RoundingMode.ARITHMETIC_SHIFT:
-            raise AbiError("V1 supports arithmetic-shift rounding only")
+        if not 1 <= quant.channel_count <= MAX_CHANNELS:
+            raise AbiError("V1 quantization channel_count is outside capability")
+        if len(quant.quant_multipliers) != quant.channel_count:
+            raise AbiError("V1 quantization multiplier count does not match channels")
+        if len(quant.quant_shifts) != quant.channel_count:
+            raise AbiError("V1 quantization shift count does not match channels")
+        if any(multiplier <= 0 for multiplier in quant.quant_multipliers):
+            raise AbiError("V1 quantization multipliers must be positive INT32 values")
+        if any(not 0 <= shift <= 62 for shift in quant.quant_shifts):
+            raise AbiError("V1 quantization shifts must be in range 0..62")
+        if quant.output_zero_point != 0:
+            raise AbiError("V1 supports symmetric output_zero_point=0 only")
+        if quant.rounding_mode != RoundingMode.ROUND_HALF_TO_EVEN:
+            raise AbiError("V1 requires round-half-to-even requantization")
 
     for tensor in tensors:
         if not 1 <= tensor.width <= MAX_TENSOR_WIDTH:
@@ -541,6 +1043,10 @@ def validate_model(
             raise AbiError(f"tensor {tensor.tensor_id} channels are outside V1 capability")
         if tensor.quantization_id not in quant_by_id:
             raise AbiError(f"tensor {tensor.tensor_id} references missing quantization")
+        if quant_by_id[tensor.quantization_id].channel_count != tensor.channels:
+            raise AbiError(
+                f"tensor {tensor.tensor_id} channel count does not match quantization"
+            )
         if tensor.element_type != ElementType.INT8 or tensor.layout != TensorLayout.NHWC:
             raise AbiError(f"tensor {tensor.tensor_id} must be signed INT8 NHWC in V1")
         if tensor.channel_stride != 1 or tensor.pixel_stride < tensor.channels:

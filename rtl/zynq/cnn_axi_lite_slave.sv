@@ -3,7 +3,13 @@
 module cnn_axi_lite_slave #(
  parameter int AXI_ADDR_WIDTH = 12,
  parameter int AXI_DATA_WIDTH = 32,
- parameter int DIM_W = 16
+ parameter int DIM_W = 16,
+ parameter int PC = 2,
+ parameter int PK = 4,
+ parameter int MAX_CIN = 16,
+ parameter int MAX_COUT = 16,
+ parameter int MAX_PIXELS = 16,
+ parameter int CLOCK_HZ = 125_000_000
 )(
  input logic s_axi_aclk,
  input logic s_axi_aresetn,
@@ -41,6 +47,17 @@ module cnn_axi_lite_slave #(
  input logic core_done,
  input logic core_error,
  input logic [7:0] core_error_code,
+ input logic [31:0] structured_error_code,
+ input logic [7:0] structured_error_stage,
+ input logic [7:0] structured_error_record_kind,
+ input logic [15:0] structured_error_record_index,
+ input logic [15:0] structured_error_field_id,
+ input logic [63:0] structured_error_observed,
+ input logic [63:0] structured_error_expected_min,
+ input logic [63:0] structured_error_expected_max,
+ input logic [31:0] structured_error_model_id,
+ input logic [31:0] structured_error_model_generation_id,
+ input logic [31:0] structured_error_detail,
  input logic [3:0] phase,
  input logic [1:0] active_layer,
  input logic [2:0] weight_layers_ready,
@@ -85,6 +102,10 @@ module cnn_axi_lite_slave #(
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_OUTPUT_WORDS = 12'h0A4;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_OUTPUT_STALL = 12'h0A8;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_VERSION = 12'h0FC;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_CAPABILITY_BASE = 12'h100;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_CAPABILITY_LAST = 12'h17C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_ERROR_RECORD_BASE = 12'h180;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_ERROR_RECORD_LAST = 12'h1BC;
 
  localparam logic [1:0] AXI_RESP_OKAY = 2'b00;
  localparam logic [1:0] AXI_RESP_SLVERR = 2'b10;
@@ -104,6 +125,10 @@ module cnn_axi_lite_slave #(
  logic [31:0] height_merged;
  logic [31:0] mode_merged;
  logic [31:0] irq_enable_merged;
+ logic [4:0] capability_word_index;
+ logic [31:0] capability_word_data;
+ logic [4:0] error_word_index;
+ logic [31:0] error_word_data;
 
  function automatic logic [31:0] apply_wstrb(
  input logic [31:0] old_value,
@@ -132,6 +157,40 @@ module cnn_axi_lite_slave #(
  apply_wstrb({30'd0, irq_enable}, wdata_q, wstrb_q);
 
  assign irq = |(irq_status & irq_enable);
+ assign capability_word_index = s_axi_araddr[6:2];
+ assign error_word_index = s_axi_araddr[6:2];
+
+ cnn_runtime_capabilities #(
+ .PC(PC),
+ .PK(PK),
+ .MAX_CIN(MAX_CIN),
+ .MAX_COUT(MAX_COUT),
+ .MAX_PIXELS(MAX_PIXELS),
+ .CLOCK_HZ(CLOCK_HZ)
+ ) u_cnn_runtime_capabilities (
+ .word_index(capability_word_index),
+ .word_data(capability_word_data)
+ );
+
+ cnn_structured_error_snapshot u_cnn_structured_error_snapshot (
+ .clk(s_axi_aclk),
+ .resetn(s_axi_aresetn),
+ .clear(clear_pulse),
+ .capture(core_error && !core_error_q),
+ .error_code(structured_error_code),
+ .error_stage(structured_error_stage),
+ .record_kind(structured_error_record_kind),
+ .record_index(structured_error_record_index),
+ .field_id(structured_error_field_id),
+ .observed_value(structured_error_observed),
+ .expected_min(structured_error_expected_min),
+ .expected_max(structured_error_expected_max),
+ .model_id(structured_error_model_id),
+ .model_generation_id(structured_error_model_generation_id),
+ .detail(structured_error_detail),
+ .word_index(error_word_index),
+ .word_data(error_word_data)
+ );
 
  always_ff @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
  if (!s_axi_aresetn) begin
@@ -248,6 +307,15 @@ module cnn_axi_lite_slave #(
  s_axi_rvalid <= 1'b1;
  s_axi_rresp <= AXI_RESP_OKAY;
 
+ if ((s_axi_araddr >= ADDR_CAPABILITY_BASE) &&
+     (s_axi_araddr <= ADDR_CAPABILITY_LAST) &&
+     (s_axi_araddr[1:0] == 2'b00)) begin
+ s_axi_rdata <= capability_word_data;
+ end else if ((s_axi_araddr >= ADDR_ERROR_RECORD_BASE) &&
+              (s_axi_araddr <= ADDR_ERROR_RECORD_LAST) &&
+              (s_axi_araddr[1:0] == 2'b00)) begin
+ s_axi_rdata <= error_word_data;
+ end else begin
  unique case (s_axi_araddr)
  ADDR_CONTROL: begin
  s_axi_rdata <= 32'd0;
@@ -324,13 +392,14 @@ module cnn_axi_lite_slave #(
  s_axi_rdata <= perf_output_stall_cycles;
  end
  ADDR_VERSION: begin
- s_axi_rdata <= 32'h0002_0000;
+ s_axi_rdata <= 32'h0003_0000;
  end
  default: begin
  s_axi_rdata <= 32'hDEAD_BEEF;
  s_axi_rresp <= AXI_RESP_SLVERR;
  end
  endcase
+ end
  end
 
  if (s_axi_rvalid && s_axi_rready) begin

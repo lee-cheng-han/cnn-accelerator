@@ -32,7 +32,9 @@ reads return `0xDEAD_BEEF` with `SLVERR`.
 | `0x0A0` | `PERF_INPUT_STALLS` | RO | Input valid without ready cycles |
 | `0x0A4` | `PERF_OUTPUT_WORDS` | RO | Accepted output AXI-Stream words |
 | `0x0A8` | `PERF_OUTPUT_STALLS` | RO | Output valid without ready cycles |
-| `0x0FC` | `VERSION` | RO | Register-map version, currently `0x00020000` |
+| `0x0FC` | `VERSION` | RO | Register-map version, currently `0x00030000` |
+| `0x100`-`0x17C` | `CAPABILITY_*` | RO | Versioned 128-byte capability record |
+| `0x180`-`0x1BC` | `ERROR_RECORD_*` | RO | Sticky 64-byte structured-error record |
 
 ## Status Bits
 
@@ -65,8 +67,14 @@ read ERROR_CODE and performance registers
 ```
 
 `CONTROL.clear` resets the active packet/compute job and clears pending interrupt
-status. Completion and error interrupts are edge-captured and remain pending
-until cleared through `IRQ_STATUS` or `CONTROL.clear`.
+status. It also clears the structured-error snapshot. Completion and error
+interrupts are edge-captured and remain pending until cleared through
+`IRQ_STATUS` or `CONTROL.clear`.
+
+Software should read and validate the capability record once during driver
+initialization. The exact record layouts, feature flags, error enums, and
+current fixed-hardware interpretation are specified in
+[capability_and_errors.md](capability_and_errors.md).
 
 The current wrapper shares one clock/reset domain between AXI-Lite, AXI-Stream,
 and the accelerator. A future block design must insert clock converters if those

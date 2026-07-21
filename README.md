@@ -59,6 +59,11 @@ signed INT8 outputs carried as sign-extended 32-bit AXI-Stream words. Local
 banked scratchpads hold activations and weights while a reusable tiled engine
 executes each network layer.
 
+Final programmable V1 uses per-output-channel integer multiplier/shift
+requantization with round-half-to-even and symmetric zero point zero. Its
+compute scaling is bounded by the documented [DDR bandwidth budget](docs/bandwidth_budget.md),
+not presented as arithmetic peak alone.
+
 ### Target Network
 
 ```text
@@ -103,6 +108,11 @@ See the normative [V1 model-package ABI](docs/model_package_abi.md) and the
 validate, inspect, and bit-accurately execute relocatable V1 packages; runtime
 RTL consumption of those packages remains a later milestone.
 
+The control plane also exposes versioned
+[capability discovery and structured errors](docs/capability_and_errors.md).
+The current bitstream identifies itself as the fixed-network baseline and does
+not advertise runtime package support prematurely.
+
 ### Target Platform
 
 | Component | Configuration |
@@ -129,9 +139,9 @@ The checked-in evidence corresponds to the board-integrated configuration
 |---|---:|
 | PL clock | 125.000 MHz |
 | Clock period | 8.000 ns |
-| WNS | 0.084 ns |
+| WNS | 0.036 ns |
 | TNS | 0.000 ns |
-| WHS | 0.020 ns |
+| WHS | 0.027 ns |
 | THS | 0.000 ns |
 | Failing setup / hold endpoints | 0 / 0 |
 
@@ -139,8 +149,8 @@ The checked-in evidence corresponds to the board-integrated configuration
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,438 | 53,200 | 13.98% |
-| Slice registers | 7,601 | 106,400 | 7.14% |
+| Slice LUTs | 7,501 | 53,200 | 14.10% |
+| Slice registers | 7,673 | 106,400 | 7.21% |
 | Block RAM tiles | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -181,7 +191,9 @@ Source evidence:
 | `0x020` | `STREAM_STATE` | Active packet and layer readiness |
 | `0x024` | `PACKET_WORDS` | Accepted words in the active packet |
 | `0x080`-`0x0A8` | `PERF_*` | Job, layer, transfer, overlap, and stall counters |
-| `0x0FC` | `VERSION` | Interface version (`0x00020000`) |
+| `0x0FC` | `VERSION` | Interface version (`0x00030000`) |
+| `0x100`-`0x17C` | `CAPABILITY_*` | Versioned implementation capability record |
+| `0x180`-`0x1BC` | `ERROR_RECORD_*` | Sticky structured failure context |
 
 The complete software contract is documented in
 [register_map.md](docs/register_map.md) and
@@ -369,7 +381,7 @@ record.
 - The current network topology is fixed to the three-layer RGB path; image
   dimensions and residual mode are runtime configurable within synthesized
   limits.
-- Timing closure has 0.084 ns setup and 0.020 ns hold margin at 125 MHz, so any
+- Timing closure has 0.036 ns setup and 0.027 ns hold margin at 125 MHz, so any
   architectural or tool-version change requires timing to be re-qualified.
 
 ## Documentation
@@ -381,6 +393,7 @@ record.
 | [Stream interface](docs/stream_interface.md) | Tensor packet format and protocol errors |
 | [Register map](docs/register_map.md) | AXI-Lite software interface |
 | [Performance counters](docs/performance_counters.md) | Counter definitions and interpretation |
+| [Compute and bandwidth budget](docs/bandwidth_budget.md) | Tail efficiency and DDR roofline calculations |
 | [Verification matrix](docs/verification_matrix.md) | Coverage, evidence, and outstanding hardware tests |
 | [Synthesis experiments](docs/synthesis_experiments.md) | Parallelism and implementation tradeoffs |
 | [Board implementation](docs/board_implementation.md) | Timing, utilization, and generated artifacts |

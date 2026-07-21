@@ -81,6 +81,7 @@ Phase B/Chunk 1 foundation is present:
 | `parallel_bias_add` | PK-lane INT32 bias add |
 | `parallel_relu` | PK-lane ReLU |
 | `parallel_quantizer` | PK-lane arithmetic right-shift quantization |
+| `parallel_requantizer` | Pipelined per-output-channel INT32 multiplier/shift requantization with round-half-to-even and clipping masks for final V1 |
 | `parallel_saturate` | PK-lane signed INT8 saturation |
 | `residual_add` | Optional signed residual add/subtract helper |
 
@@ -132,6 +133,11 @@ The Python reference model is present in `models/image2image_int8.py`. It is dep
 - arithmetic right shift quantization
 - signed INT8 saturation
 - optional residual add/subtract, including the denoising form `output = input - predicted_noise`
+
+The preserved fixed-network path still uses its original scalar arithmetic
+shift. Final descriptor-driven V1 uses the independently tested
+`parallel_requantizer`; it is integrated when runtime postprocessing banks are
+connected in Phase 9.
 
 The golden tensor flow is also present. `models/generate_golden_tensors.py` writes deterministic input, weight, bias, config, and expected-output memories under `build/golden`; `tb_golden_tensor_flow` loads single-layer fixtures into RTL and compares the scheduler output bit-for-bit against the Python model. `tb_full_network_golden_flow` does the same for the full 3-layer denoising controller, including both final residual reconstruction and raw final-layer output. `tb_stream_loaded_full_network_golden_flow` feeds those generated tensors through the stream-loaded controller and checks the streamed RGB output under backpressure. `tb_axi_stream_full_network_golden_flow` sends the same tensors as packetized AXI-stream traffic through the packet router and top-level stream wrapper before checking the final output bit-for-bit.
 

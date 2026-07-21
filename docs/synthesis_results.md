@@ -27,8 +27,8 @@
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,438 | 53,200 | 13.98% |
-| Slice Registers | 7,601 | 106,400 | 7.14% |
+| Slice LUTs | 7,501 | 53,200 | 14.10% |
+| Slice Registers | 7,673 | 106,400 | 7.21% |
 | Block RAM Tile | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 
@@ -37,8 +37,8 @@
 ```text
 All user specified timing constraints are met.
 Clock = 125.000 MHz
-WNS = 0.084 ns
-WHS = 0.020 ns
+WNS = 0.036 ns
+WHS = 0.027 ns
 ```
 
 ## Important Generated Files

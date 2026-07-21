@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "cnn_accel_abi.h"
 #include "generated/golden_dma_job.h"
 
 #define CNN_BASE 0x43C00000U
@@ -34,6 +35,14 @@
 #define REG_PERF_OUTPUT_WORDS 0x0A4U
 #define REG_PERF_OUTPUT_STALLS 0x0A8U
 #define REG_VERSION 0x0FCU
+#define REG_CAP_HEADER (CNN_REG_CAPABILITY_BASE + 0x00U)
+#define REG_CAP_HW_VERSION (CNN_REG_CAPABILITY_BASE + 0x04U)
+#define REG_CAP_ABI_DMA (CNN_REG_CAPABILITY_BASE + 0x08U)
+#define REG_CAP_FEATURES (CNN_REG_CAPABILITY_BASE + 0x0CU)
+#define REG_CAP_LIMITS0 (CNN_REG_CAPABILITY_BASE + 0x2CU)
+#define REG_CAP_MAX_ELEMENTS (CNN_REG_CAPABILITY_BASE + 0x40U)
+#define REG_CAP_PARALLELISM (CNN_REG_CAPABILITY_BASE + 0x58U)
+#define REG_CAP_CLOCK_HZ (CNN_REG_CAPABILITY_BASE + 0x5CU)
 
 #define CONTROL_START 0x00000001U
 #define CONTROL_CLEAR 0x00000002U
@@ -46,7 +55,10 @@
 #define MODE_FINAL_RESIDUAL 0x00000001U
 #define IRQ_DONE 0x00000001U
 #define IRQ_ERROR 0x00000002U
-#define EXPECTED_VERSION 0x00020000U
+#define EXPECTED_VERSION CNN_REGISTER_MAP_VERSION
+#define REQUIRED_FIXED_FEATURES (CNN_FEATURE_CAPABILITY_QUERY | \
+ CNN_FEATURE_STRUCTURED_ERRORS | CNN_FEATURE_INTERRUPTS | \
+ CNN_FEATURE_FIXED_NETWORK)
 
 #define DMA_MM2S_DMACR 0x00U
 #define DMA_MM2S_DMASR 0x04U
@@ -92,6 +104,40 @@ static inline void cnn_write(uint32_t offset, uint32_t value)
 static inline uint32_t cnn_read(uint32_t offset)
 {
  return Xil_In32(CNN_BASE + offset);
+}
+
+static int validate_runtime_capabilities(void)
+{
+ uint32_t header = cnn_read(REG_CAP_HEADER);
+ uint32_t hardware_version = cnn_read(REG_CAP_HW_VERSION);
+ uint32_t abi_dma = cnn_read(REG_CAP_ABI_DMA);
+ uint32_t features = cnn_read(REG_CAP_FEATURES);
+ uint32_t limits = cnn_read(REG_CAP_LIMITS0);
+ uint32_t max_elements = cnn_read(REG_CAP_MAX_ELEMENTS);
+ uint32_t parallelism = cnn_read(REG_CAP_PARALLELISM);
+ uint32_t clock_hz = cnn_read(REG_CAP_CLOCK_HZ);
+
+ xil_printf(" capability record: version=%d size=%d bytes\r\n",
+ header & 0xFFFFU, header >> 16);
+ xil_printf(" hardware interface: 0x%08x model ABI=%d DMA bytes=%d\r\n",
+ hardware_version, abi_dma & 0xFFFFU, abi_dma >> 16);
+ xil_printf(" features=0x%08x layers=%d tensors=%d max_elements=%d\r\n",
+ features, limits & 0xFFFFU, limits >> 16, max_elements);
+ xil_printf(" parallelism PC=%d PK=%d clock=%d Hz\r\n",
+ parallelism & 0xFFFFU, parallelism >> 16, clock_hz);
+
+ if (header != ((CNN_CAPABILITY_RECORD_SIZE << 16) | CNN_ABI_VERSION)) {
+  xil_printf("[FAIL] Invalid capability record header\r\n");
+  return -1;
+ }
+ if (hardware_version != EXPECTED_VERSION ||
+     (abi_dma & 0xFFFFU) != CNN_ABI_VERSION ||
+     (features & REQUIRED_FIXED_FEATURES) != REQUIRED_FIXED_FEATURES ||
+     (features & CNN_FEATURE_MODEL_PACKAGES) != 0U) {
+  xil_printf("[FAIL] Bitstream capability profile does not match fixed app\r\n");
+  return -1;
+ }
+ return 0;
 }
 
 static inline void dma_write(uint32_t offset, uint32_t value)
@@ -372,6 +418,12 @@ int main(void)
  EXPECTED_VERSION);
  while (1) {
  sleep(1);
+ }
+
+ if (validate_runtime_capabilities() != 0) {
+  while (1) {
+   sleep(1);
+  }
  }
  }
 

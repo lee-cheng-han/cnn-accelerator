@@ -12,6 +12,7 @@ from typing import Iterable, Literal, Sequence
 
 
 ResidualMode = Literal["none", "add", "sub"]
+RoundingMode = Literal["arithmetic_shift", "round_half_to_even"]
 Tensor3D = list[list[list[int]]]
 Weights4D = list[list[list[list[int]]]]
 
@@ -42,7 +43,9 @@ class LayerConfig:
     bias_enable: bool = True
     relu_enable: bool = True
     quant_enable: bool = True
+    quant_multiplier: int = 1
     quant_shift: int = 0
+    rounding_mode: RoundingMode = "arithmetic_shift"
     residual_mode: ResidualMode = "none"
 
 
@@ -56,6 +59,35 @@ def arithmetic_shift_right(value: int, shift: int) -> int:
     return int(value) >> int(shift)
 
 
+def round_half_to_even_shift(value: int, shift: int) -> int:
+    """Divide by 2**shift using deterministic ties-to-even rounding."""
+    if shift < 0 or shift > 62:
+        raise ValueError(f"quant_shift must be in range 0..62, got {shift}")
+    if shift == 0:
+        return int(value)
+    magnitude = abs(int(value))
+    quotient, remainder = divmod(magnitude, 1 << shift)
+    half = 1 << (shift - 1)
+    if remainder > half or (remainder == half and quotient & 1):
+        quotient += 1
+    return -quotient if value < 0 else quotient
+
+
+def requantize_int32(
+    value: int,
+    multiplier: int,
+    shift: int,
+    output_zero_point: int = 0,
+) -> int:
+    """Apply final V1 per-channel fixed-point requantization."""
+    if multiplier <= 0 or multiplier > 0x7FFF_FFFF:
+        raise ValueError("quant_multiplier must be a positive signed INT32 value")
+    if output_zero_point != 0:
+        raise ValueError("V1 requires symmetric output_zero_point=0")
+    scaled = round_half_to_even_shift(int(value) * int(multiplier), shift)
+    return saturate_int8(scaled + output_zero_point)
+
+
 def postprocess_accumulator(
     acc: int,
     bias: int = 0,
@@ -63,7 +95,9 @@ def postprocess_accumulator(
     bias_enable: bool = True,
     relu_enable: bool = True,
     quant_enable: bool = True,
+    quant_multiplier: int = 1,
     quant_shift: int = 0,
+    rounding_mode: RoundingMode = "arithmetic_shift",
 ) -> int:
     value = int(acc)
 
@@ -74,7 +108,12 @@ def postprocess_accumulator(
         value = 0
 
     if quant_enable:
-        value = arithmetic_shift_right(value, quant_shift)
+        if rounding_mode == "arithmetic_shift":
+            value = arithmetic_shift_right(value * quant_multiplier, quant_shift)
+        elif rounding_mode == "round_half_to_even":
+            return requantize_int32(value, quant_multiplier, quant_shift)
+        else:
+            raise ValueError(f"unsupported rounding_mode {rounding_mode!r}")
 
     return saturate_int8(value)
 
@@ -149,8 +188,11 @@ def _validate_conv_args(
         raise ValueError(f"padding must be 0 or 1, got {cfg.padding}")
     if cfg.input_channels < 1 or cfg.output_channels < 1:
         raise ValueError("input_channels and output_channels must be positive")
-    if cfg.quant_shift < 0 or cfg.quant_shift > 31:
-        raise ValueError(f"quant_shift must be in range 0..31, got {cfg.quant_shift}")
+    max_shift = 62 if cfg.rounding_mode == "round_half_to_even" else 31
+    if cfg.quant_shift < 0 or cfg.quant_shift > max_shift:
+        raise ValueError(f"quant_shift must be in range 0..{max_shift}, got {cfg.quant_shift}")
+    if cfg.quant_multiplier <= 0 or cfg.quant_multiplier > 0x7FFF_FFFF:
+        raise ValueError("quant_multiplier must be a positive signed INT32 value")
 
     in_h, in_w, channels = tensor_shape_hwc(x)
     weight_oc, weight_ic, weight_kh, weight_kw = weights_shape_oihw(weights)
@@ -219,7 +261,9 @@ def conv2d_layer_int8(
                     bias_enable=cfg.bias_enable,
                     relu_enable=cfg.relu_enable,
                     quant_enable=cfg.quant_enable,
+                    quant_multiplier=cfg.quant_multiplier,
                     quant_shift=cfg.quant_shift,
+                    rounding_mode=cfg.rounding_mode,
                 )
 
     return y

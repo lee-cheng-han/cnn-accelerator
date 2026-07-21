@@ -24,6 +24,7 @@ verilator --lint-only \
  rtl/postprocess/parallel_bias_add.sv \
  rtl/postprocess/parallel_relu.sv \
  rtl/postprocess/parallel_quantizer.sv \
+ rtl/postprocess/parallel_requantizer.sv \
  rtl/postprocess/parallel_saturate.sv \
  rtl/postprocess/residual_add.sv \
  rtl/tensor/tensor_address_gen.sv \
@@ -48,6 +49,8 @@ verilator --lint-only \
  rtl/scheduler/single_layer_scheduler.sv \
  rtl/scheduler/multi_layer_job_controller.sv \
  rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
+ rtl/zynq/cnn_runtime_capabilities.sv \
+ rtl/zynq/cnn_structured_error_snapshot.sv \
  rtl/zynq/cnn_axi_lite_slave.sv \
  rtl/zynq/cnn_image2image_axi_stream_top.sv \
  rtl/zynq/cnn_image2image_system_top.sv

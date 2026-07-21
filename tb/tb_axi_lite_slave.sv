@@ -26,6 +26,26 @@ module tb_axi_lite_slave;
  localparam logic [11:0] ADDR_PERF_OUTPUT_WORDS = 12'h0A4;
  localparam logic [11:0] ADDR_PERF_OUTPUT_STALL = 12'h0A8;
  localparam logic [11:0] ADDR_VERSION = 12'h0FC;
+ localparam logic [11:0] ADDR_CAP_HEADER = 12'h100;
+ localparam logic [11:0] ADDR_CAP_HW_VERSION = 12'h104;
+ localparam logic [11:0] ADDR_CAP_ABI_DMA = 12'h108;
+ localparam logic [11:0] ADDR_CAP_FEATURES = 12'h10C;
+ localparam logic [11:0] ADDR_CAP_LIMITS0 = 12'h12C;
+ localparam logic [11:0] ADDR_CAP_LIMITS2 = 12'h134;
+ localparam logic [11:0] ADDR_CAP_MAX_ELEMENTS = 12'h140;
+ localparam logic [11:0] ADDR_CAP_PARALLELISM = 12'h158;
+ localparam logic [11:0] ADDR_CAP_CLOCK_HZ = 12'h15C;
+ localparam logic [11:0] ADDR_ERR_HEADER = 12'h180;
+ localparam logic [11:0] ADDR_ERR_CODE = 12'h184;
+ localparam logic [11:0] ADDR_ERR_CONTEXT = 12'h188;
+ localparam logic [11:0] ADDR_ERR_RECORD_FIELD = 12'h18C;
+ localparam logic [11:0] ADDR_ERR_OBSERVED_LO = 12'h190;
+ localparam logic [11:0] ADDR_ERR_OBSERVED_HI = 12'h194;
+ localparam logic [11:0] ADDR_ERR_EXPECTED_MIN_LO = 12'h198;
+ localparam logic [11:0] ADDR_ERR_EXPECTED_MAX_LO = 12'h1A0;
+ localparam logic [11:0] ADDR_ERR_MODEL_ID = 12'h1A8;
+ localparam logic [11:0] ADDR_ERR_GENERATION = 12'h1AC;
+ localparam logic [11:0] ADDR_ERR_DETAIL = 12'h1B0;
 
  logic clk;
  logic rst_n;
@@ -58,6 +78,17 @@ module tb_axi_lite_slave;
  logic core_done;
  logic core_error;
  logic [7:0] core_error_code;
+ logic [31:0] structured_error_code;
+ logic [7:0] structured_error_stage;
+ logic [7:0] structured_error_record_kind;
+ logic [15:0] structured_error_record_index;
+ logic [15:0] structured_error_field_id;
+ logic [63:0] structured_error_observed;
+ logic [63:0] structured_error_expected_min;
+ logic [63:0] structured_error_expected_max;
+ logic [31:0] structured_error_model_id;
+ logic [31:0] structured_error_model_generation_id;
+ logic [31:0] structured_error_detail;
  logic [3:0] phase;
  logic [1:0] active_layer;
  logic [2:0] weight_layers_ready;
@@ -115,6 +146,17 @@ module tb_axi_lite_slave;
  .core_done(core_done),
  .core_error(core_error),
  .core_error_code(core_error_code),
+ .structured_error_code(structured_error_code),
+ .structured_error_stage(structured_error_stage),
+ .structured_error_record_kind(structured_error_record_kind),
+ .structured_error_record_index(structured_error_record_index),
+ .structured_error_field_id(structured_error_field_id),
+ .structured_error_observed(structured_error_observed),
+ .structured_error_expected_min(structured_error_expected_min),
+ .structured_error_expected_max(structured_error_expected_max),
+ .structured_error_model_id(structured_error_model_id),
+ .structured_error_model_generation_id(structured_error_model_generation_id),
+ .structured_error_detail(structured_error_detail),
  .phase(phase),
  .active_layer(active_layer),
  .weight_layers_ready(weight_layers_ready),
@@ -265,6 +307,17 @@ module tb_axi_lite_slave;
  core_done = 1'b0;
  core_error = 1'b0;
  core_error_code = 8'h00;
+ structured_error_code = 32'h0000_0000;
+ structured_error_stage = 8'd0;
+ structured_error_record_kind = 8'd0;
+ structured_error_record_index = 16'd0;
+ structured_error_field_id = 16'd0;
+ structured_error_observed = 64'd0;
+ structured_error_expected_min = 64'd0;
+ structured_error_expected_max = 64'd0;
+ structured_error_model_id = 32'd0;
+ structured_error_model_generation_id = 32'd0;
+ structured_error_detail = 32'd0;
  phase = 4'h0;
  active_layer = 2'h0;
  weight_layers_ready = 3'h0;
@@ -290,8 +343,27 @@ module tb_axi_lite_slave;
  repeat (2) @(posedge clk);
 
  axi_read(ADDR_VERSION, rd, resp);
- check_eq("version", rd, 32'h0002_0000);
+ check_eq("version", rd, 32'h0003_0000);
  check_eq("version RRESP", {30'd0, resp}, 32'd0);
+
+ axi_read(ADDR_CAP_HEADER, rd, resp);
+ check_eq("capability header", rd, 32'h0080_0001);
+ axi_read(ADDR_CAP_HW_VERSION, rd, resp);
+ check_eq("capability hardware version", rd, 32'h0003_0000);
+ axi_read(ADDR_CAP_ABI_DMA, rd, resp);
+ check_eq("capability ABI and DMA width", rd, 32'h0004_0001);
+ axi_read(ADDR_CAP_FEATURES, rd, resp);
+ check_eq("capability fixed features", rd, 32'h8000_0083);
+ axi_read(ADDR_CAP_LIMITS0, rd, resp);
+ check_eq("capability layer tensor limits", rd, 32'h0004_0003);
+ axi_read(ADDR_CAP_LIMITS2, rd, resp);
+ check_eq("capability output width limits", rd, 32'h0010_0010);
+ axi_read(ADDR_CAP_MAX_ELEMENTS, rd, resp);
+ check_eq("capability max elements", rd, 32'd16);
+ axi_read(ADDR_CAP_PARALLELISM, rd, resp);
+ check_eq("capability PC PK", rd, 32'h0004_0002);
+ axi_read(ADDR_CAP_CLOCK_HZ, rd, resp);
+ check_eq("capability clock", rd, 32'd125_000_000);
 
  axi_write(ADDR_IMAGE_WIDTH, 32'd640, 4'hF, resp);
  check_eq("width BRESP", {30'd0, resp}, 32'd0);
@@ -318,6 +390,17 @@ module tb_axi_lite_slave;
  core_done = 1'b1;
  core_error = 1'b1;
  core_error_code = 8'h42;
+ structured_error_code = 32'h0000_0202;
+ structured_error_stage = 8'd2;
+ structured_error_record_kind = 8'd2;
+ structured_error_record_index = 16'd5;
+ structured_error_field_id = 16'd9;
+ structured_error_observed = 64'h1122_3344_5566_7788;
+ structured_error_expected_min = 64'd1;
+ structured_error_expected_max = 64'd16;
+ structured_error_model_id = 32'd7;
+ structured_error_model_generation_id = 32'd9;
+ structured_error_detail = 32'h0000_00A5;
  phase = 4'hA;
  active_layer = 2'h2;
  weight_layers_ready = 3'h5;
@@ -336,6 +419,28 @@ module tb_axi_lite_slave;
  check_eq("stream state", rd, 32'h0000_002E);
  axi_read(ADDR_PACKET_WORDS, rd, resp);
  check_eq("packet words", rd, 32'd77);
+ axi_read(ADDR_ERR_HEADER, rd, resp);
+ check_eq("structured error header", rd, 32'h0040_0001);
+ axi_read(ADDR_ERR_CODE, rd, resp);
+ check_eq("structured error code", rd, 32'h0000_0202);
+ axi_read(ADDR_ERR_CONTEXT, rd, resp);
+ check_eq("structured error context", rd, 32'h0000_0202);
+ axi_read(ADDR_ERR_RECORD_FIELD, rd, resp);
+ check_eq("structured error record field", rd, 32'h0009_0005);
+ axi_read(ADDR_ERR_OBSERVED_LO, rd, resp);
+ check_eq("structured error observed low", rd, 32'h5566_7788);
+ axi_read(ADDR_ERR_OBSERVED_HI, rd, resp);
+ check_eq("structured error observed high", rd, 32'h1122_3344);
+ axi_read(ADDR_ERR_EXPECTED_MIN_LO, rd, resp);
+ check_eq("structured error expected min", rd, 32'd1);
+ axi_read(ADDR_ERR_EXPECTED_MAX_LO, rd, resp);
+ check_eq("structured error expected max", rd, 32'd16);
+ axi_read(ADDR_ERR_MODEL_ID, rd, resp);
+ check_eq("structured error model ID", rd, 32'd7);
+ axi_read(ADDR_ERR_GENERATION, rd, resp);
+ check_eq("structured error generation", rd, 32'd9);
+ axi_read(ADDR_ERR_DETAIL, rd, resp);
+ check_eq("structured error detail", rd, 32'h0000_00A5);
 
  axi_write(ADDR_IRQ_ENABLE, 32'd3, 4'hF, resp);
  check_eq("IRQ asserted", irq, 32'd1);
@@ -381,6 +486,8 @@ module tb_axi_lite_slave;
  check_eq("IRQ cleared", irq, 32'd0);
  axi_read(ADDR_IRQ_STATUS, rd, resp);
  check_eq("IRQ status cleared", rd, 32'd0);
+ axi_read(ADDR_ERR_CODE, rd, resp);
+ check_eq("structured error cleared", rd, 32'd0);
 
  if (errors == 0) begin
  $display("[PASS] tb_axi_lite_slave tests=%0d", checks);

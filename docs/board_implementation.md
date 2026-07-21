@@ -26,9 +26,9 @@ The design is board-implementation-ready evidence. The bare-metal software now p
 
 | Metric | Value |
 |---|---:|
-| WNS | 0.084 ns |
+| WNS | 0.036 ns |
 | TNS | 0.000 ns |
-| WHS | 0.020 ns |
+| WHS | 0.027 ns |
 | THS | 0.000 ns |
 | Timing met | True |
 
@@ -36,8 +36,8 @@ The design is board-implementation-ready evidence. The bare-metal software now p
 
 | Resource | Used | Available | Utilization |
 |---|---:|---:|---:|
-| Slice LUTs | 7,438 | 53,200 | 13.98% |
-| Slice Registers | 7,601 | 106,400 | 7.14% |
+| Slice LUTs | 7,501 | 53,200 | 14.10% |
+| Slice Registers | 7,673 | 106,400 | 7.21% |
 | Block RAM Tile | 29 | 140 | 20.71% |
 | DSPs | 4 | 220 | 1.82% |
 

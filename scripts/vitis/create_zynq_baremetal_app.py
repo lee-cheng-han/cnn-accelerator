@@ -51,15 +51,19 @@ app = client.create_app_component(
 app_src_dir = app_dir / "src"
 src_main = root / "software" / "zynq_baremetal" / "main.c"
 dst_main = app_src_dir / "main.c"
+src_abi_header = root / "software" / "zynq_baremetal" / "cnn_accel_abi.h"
+dst_abi_header = app_src_dir / "cnn_accel_abi.h"
 dst_hello = app_src_dir / "helloworld.c"
 user_config = app_src_dir / "UserConfig.cmake"
 hello_cmake = app_src_dir / "Hello_worldExample.cmake"
 cmake_file = app_src_dir / "CMakeLists.txt"
 
-if not src_main.exists():
-    raise FileNotFoundError(f"Missing source file: {src_main}")
+for source in (src_main, src_abi_header):
+    if not source.exists():
+        raise FileNotFoundError(f"Missing source file: {source}")
 
 shutil.copyfile(src_main, dst_main)
+shutil.copyfile(src_abi_header, dst_abi_header)
 
 src_generated = root / "software" / "zynq_baremetal" / "generated"
 dst_generated = app_src_dir / "generated"

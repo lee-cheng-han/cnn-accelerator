@@ -44,6 +44,7 @@ module cnn_image2image_system_top #(
  output logic done,
  output logic error
 );
+ import cnn_accel_abi_pkg::*;
 
  logic start_pulse;
  logic clear_pulse;
@@ -73,7 +74,13 @@ module cnn_image2image_system_top #(
 
  cnn_axi_lite_slave #(
  .AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
- .DIM_W(DIM_W)
+ .DIM_W(DIM_W),
+ .PC(PC),
+ .PK(PK),
+ .MAX_CIN(MAX_CIN),
+ .MAX_COUT(MAX_COUT),
+ .MAX_PIXELS(MAX_PIXELS),
+ .CLOCK_HZ(125_000_000)
  ) u_cnn_axi_lite_slave (
  .s_axi_aclk(aclk),
  .s_axi_aresetn(aresetn),
@@ -104,6 +111,17 @@ module cnn_image2image_system_top #(
  .core_done(done),
  .core_error(error),
  .core_error_code(error_code),
+ .structured_error_code(ERROR_DATA_PLANE_PROTOCOL),
+ .structured_error_stage(ERROR_STAGE_DATA_PLANE),
+ .structured_error_record_kind(ERROR_RECORD_PACKET),
+ .structured_error_record_index({13'd0, input_packet_type}),
+ .structured_error_field_id(ERROR_FIELD_NONE),
+ .structured_error_observed({32'd0, input_packet_words}),
+ .structured_error_expected_min(64'd0),
+ .structured_error_expected_max(64'd0),
+ .structured_error_model_id(32'd0),
+ .structured_error_model_generation_id(32'd0),
+ .structured_error_detail({24'd0, error_code}),
  .phase(phase),
  .active_layer(active_layer),
  .weight_layers_ready(weight_layers_ready),

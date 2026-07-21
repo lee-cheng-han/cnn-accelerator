@@ -23,7 +23,7 @@ software and RTL are in
 | Property | V1 limit |
 |---|---:|
 | Layers | 1-8 |
-| Tensors / quantization records | 32 / 32 |
+| Tensors / quantization records | 32 / 32, with 1-16 channel parameters each |
 | Input channels per layer | 1-16 |
 | Output channels per layer | 1-16 |
 | Kernel | square 1x1 or 3x3 |
@@ -39,7 +39,7 @@ software and RTL are in
 | Residual | none, post-quant add, or post-quant subtract |
 | Weight bytes per layer | at most 2,304 |
 | Bias bytes per layer | at most 64 |
-| Physical active/prefetch banks | 4,096 weight bytes and 256 bias bytes each |
+| Physical active/prefetch banks | two 4,096-byte weight banks and two 256-byte postprocessing banks |
 
 Dimensions up to 1024x1024 are a functional maximum enabled by later spatial
 tiling, not a real-time performance claim. The primary benchmark is 224x224,
@@ -72,7 +72,7 @@ stress test.
 +---------------------------+ 64-byte aligned
 | tensor descriptors        | tensor_count x 64
 +---------------------------+ 64-byte aligned
-| quantization descriptors  | quantization_count x 32
+| quantization descriptors  | quantization_count x 192
 +---------------------------+ 64-byte aligned
 | optional alignment        |
 +---------------------------+ 64-byte aligned
@@ -198,37 +198,59 @@ allocations only when tensor lifetimes do not overlap.
 
 ## Quantization Descriptor
 
-Each quantization descriptor is 32 bytes.
+Each quantization descriptor is 192 bytes and contains one fixed-point
+requantization entry per output channel. Its size is a multiple of the 64-byte
+record alignment.
 
 | Offset | Size | Field | V1 rule |
 |---:|---:|---|---|
 | `0x00` | 2 | `descriptor_version` | 1 |
-| `0x02` | 2 | `descriptor_size` | 32 |
+| `0x02` | 2 | `descriptor_size` | 192 |
 | `0x04` | 2 | `quantization_id` | unique table identity |
 | `0x06` | 2 | `flags` | zero |
-| `0x08` | 4 | `quant_multiplier` | signed INT32, exactly 1 in V1 |
-| `0x0C` | 1 | `quant_shift` | 0-31 |
-| `0x0D` | 1 | `output_zero_point` | signed INT8, exactly 0 in V1 |
-| `0x0E` | 1 | `rounding_mode` | 0 = arithmetic shift |
-| `0x0F` | 17 | reserved | zero |
+| `0x08` | 2 | `channel_count` | 1-16 and equal to the tensor channel count |
+| `0x0A` | 1 | `rounding_mode` | 1 = round half to even |
+| `0x0B` | 1 | `output_zero_point` | exactly zero for symmetric V1 INT8 |
+| `0x0C` | 52 | reserved | zero |
+| `0x40` | 128 | channel entries | sixteen 8-byte entries |
 
-V1 quantization is symmetric power-of-two scaling, not arbitrary affine INT8
-quantization. For a signed INT32 accumulator:
+Each channel entry contains a positive signed INT32 `quant_multiplier` at
+offset zero, a `quant_shift` from 0 through 62 at offset four, and three zero
+reserved bytes. Entries at or above `channel_count` are all zero.
+
+Training-time input, weight, and output scales are converted by the compiler
+into the integer multiplier and shift for each output channel. The accelerator
+does not use floating-point arithmetic. For output channel `c`:
 
 ```text
-biased = accumulator + bias
+biased = accumulator + bias[c]
 activated = relu_enable ? max(biased, 0) : biased
-scaled = activated >>> quant_shift
-predicted_int8 = clamp(scaled, -128, 127)
+product = activated * quant_multiplier[c]
+rounded = round_half_to_even(product / 2^quant_shift[c])
+predicted_int8 = clamp(rounded, -128, 127)
 ```
 
-`>>>` is a signed arithmetic right shift. It rounds negative values toward
-negative infinity; it is not round-to-nearest.
+Round-half-to-even chooses the nearest integer and resolves an exact half-way
+case to the even integer. The rule is symmetric for positive and negative
+values and bit-identical in the Python executor and RTL requantizer.
 
-Post-quant residual add/subtract widens the predicted and residual INT8 values,
-performs the selected operation, and saturates to INT8 again. The residual and
-output tensors must have identical dimensions, element types, and
-`quantization_id`. Accumulator-domain residual arithmetic is not part of V1.
+During parameter loading, each bias and channel quantization entry becomes one
+16-byte postprocessing-bank entry: INT32 bias, INT32 multiplier, UINT8 shift,
+INT8 zero point, UINT8 rounding mode, UINT8 flags, and four reserved bytes.
+Sixteen entries consume exactly 256 bytes.
+
+Post-quant residual add/subtract sign-extends both the requantized convolution
+INT8 value and residual INT8 value, performs the selected operation, and
+saturates to INT8 again. The residual and output tensors must have identical
+dimensions, element types, and `quantization_id`. Accumulator-domain residual
+arithmetic is not part of V1.
+
+## Physical Parameter Banks
+
+V1 uses two independent 4,096-byte weight banks, not one bank divided into two
+halves. Either bank can hold the maximum 2,304-byte `16x16x3x3` weight payload
+while the other is filled. Two independent 256-byte postprocessing banks hold
+all bias and requantization entries for one layer each.
 
 ## Validation and Activation
 

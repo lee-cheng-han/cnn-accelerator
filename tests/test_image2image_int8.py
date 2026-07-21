@@ -15,6 +15,8 @@ from models.image2image_int8 import (
     make_denoise_layer_configs,
     postprocess_accumulator,
     run_layers_int8,
+    requantize_int32,
+    round_half_to_even_shift,
     saturate_int8,
     tensor_shape_hwc,
 )
@@ -38,6 +40,20 @@ def make_random_weights(cout, cin, kernel, rng, low=-3, high=3):
 
 
 class TestImage2ImageInt8Model(unittest.TestCase):
+    def test_round_half_to_even_is_symmetric_and_tie_exact(self):
+        self.assertEqual(round_half_to_even_shift(1, 1), 0)
+        self.assertEqual(round_half_to_even_shift(3, 1), 2)
+        self.assertEqual(round_half_to_even_shift(5, 1), 2)
+        self.assertEqual(round_half_to_even_shift(-1, 1), 0)
+        self.assertEqual(round_half_to_even_shift(-3, 1), -2)
+        self.assertEqual(round_half_to_even_shift(-5, 1), -2)
+
+    def test_requantize_multiplies_rounds_and_saturates(self):
+        self.assertEqual(requantize_int32(5, 3, 1), 8)
+        self.assertEqual(requantize_int32(-5, 3, 1), -8)
+        self.assertEqual(requantize_int32(100, 3, 1), 127)
+        self.assertEqual(requantize_int32(-100, 3, 1), -128)
+
     def test_saturate_int8_edges(self):
         self.assertEqual(saturate_int8(127), 127)
         self.assertEqual(saturate_int8(128), 127)

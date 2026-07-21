@@ -108,22 +108,25 @@ The accelerator uses AXI-Lite for control and observability. Tensor payloads are
 | `0x020` | `STREAM_STATE` | Packet type and ready-layer state |
 | `0x024` | `PACKET_WORDS` | Current packet payload words accepted |
 | `0x080`-`0x0A8` | `PERF_*` | Latency, layer, transfer, and stall counters |
-| `0x0FC` | `VERSION` | Register-map version, `0x00020000` |
+| `0x0FC` | `VERSION` | Register-map version, `0x00030000` |
+| `0x100`-`0x17C` | `CAPABILITY_*` | Versioned hardware capability record |
+| `0x180`-`0x1BC` | `ERROR_RECORD_*` | Sticky structured-error context |
 
 ## Software Interaction
 
 The bare-metal app:
 
-1. Resets AXI DMA.
-2. Clears the accelerator.
-3. Programs image dimensions and residual mode.
-4. Starts S2MM and MM2S DMA channels.
-5. Pulses `CONTROL.start`.
-6. Sends seven tensor packets through MM2S.
-7. Receives output pixels through S2MM.
-8. Polls DMA and status completion.
-9. Prints diagnostics and performance counters.
-10. Compares DDR output against generated Python golden tensors.
+1. Verifies the register version and fixed-bitstream capability profile.
+2. Resets AXI DMA.
+3. Clears the accelerator.
+4. Programs image dimensions and residual mode.
+5. Starts S2MM and MM2S DMA channels.
+6. Pulses `CONTROL.start`.
+7. Sends seven tensor packets through MM2S.
+8. Receives output pixels through S2MM.
+9. Polls DMA and status completion.
+10. Prints diagnostics and performance counters.
+11. Compares DDR output against generated Python golden tensors.
 
 Expected board result:
 

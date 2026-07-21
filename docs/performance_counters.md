@@ -44,3 +44,22 @@ For the fixed default network, a complete input contains:
 The counters are exposed directly by the stream top and through read-only
 AXI-Lite registers in `cnn_axi_lite_slave`. See
 [register_map.md](register_map.md) for offsets.
+
+## Final V1 Observability
+
+The counters above describe the current fixed three-layer bitstream. The final
+descriptor-driven V1 runtime additionally requires:
+
+| Counter | Meaning |
+|---|---|
+| Per-layer cycle count | Complete scheduler ownership time for each of up to eight layers |
+| Parameter-prefetch stall cycles | Compute waited for the next active parameter bank |
+| Tile-load / tile-store cycles | DDR-backed input and output tile movement |
+| DMA starvation cycles | Compute required data that the data plane had not supplied |
+| Positive saturation events | Requantized values clipped above +127 |
+| Negative saturation events | Requantized values clipped below -128 |
+
+Saturation counters increment once per clipped tensor element, not once per
+cycle. Both per-layer and whole-job totals are retained with the active model
+ID and generation ID. The `parallel_requantizer` already emits positive and
+negative lane masks; Phase 9 connects those events to the runtime counters.

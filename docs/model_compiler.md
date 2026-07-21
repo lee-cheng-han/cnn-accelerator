@@ -73,7 +73,8 @@ The top-level JSON object is:
 | `layers` | yes | One to eight sequential convolution layers |
 
 The input object accepts `name`, `width`, `height`, `channels`, and optional
-`quantization_profile` and `quant_shift`. Batch is fixed at one and tensor
+`quantization_profile`, `quant_multiplier`/`quant_multipliers`, and
+`quant_shift`/`quant_shifts`. Batch is fixed at one and tensor
 layout is NHWC.
 
 ### Layer Fields
@@ -87,7 +88,10 @@ layout is NHWC.
 | `stride` | no | Scalar or `[y, x]`, each 1 or 2 |
 | `padding` | no | Scalar, `[top,bottom,left,right]`, or named object |
 | `activation` | no | `none` or `relu` |
-| `quant_shift` | no | Arithmetic right shift from 0 through 31 |
+| `quant_multiplier` | no | Positive INT32 expanded across output channels; default 1 |
+| `quant_multipliers` | no | Positive INT32 value per output channel |
+| `quant_shift` | no | Shift 0-62 expanded across output channels; default 0 |
+| `quant_shifts` | no | Shift 0-62 per output channel |
 | `quantization_profile` | no | Named compatibility domain for residual tensors |
 | `bias_enable` | no | Boolean, default true |
 | `weights` / `weights_file` | yes | Exactly one weight source |
@@ -124,15 +128,18 @@ padding into the package but excludes padding from parameter CRC calculations.
 
 Every layer output receives a quantization descriptor. A named
 `quantization_profile` lets tensors declare that they occupy the same numeric
-domain. Reusing a profile with a different `quant_shift` is rejected in V1.
+domain. Reusing a profile with different channel counts, multipliers, or shifts
+is rejected in V1.
 
 When a layer uses the model input as a residual source and does not name a
 profile explicitly, its output automatically uses the input profile. This
 models the current denoiser correctly: convolution output is shifted to the
 input image's INT8 domain before `input - predicted_noise` is evaluated.
 
-V1 remains symmetric power-of-two quantization: multiplier one, zero point
-zero, and signed arithmetic right shift.
+V1 uses symmetric per-output-channel fixed-point requantization. The output
+zero point is zero and every channel carries its own positive INT32 multiplier
+and shift. Scalar fields are expanded to all output channels. Rounding is
+always round-half-to-even.
 
 ## Compiler Outputs
 
@@ -163,7 +170,7 @@ axis stride and asymmetric per-edge padding, and follows this arithmetic order:
 
 ```text
 INT8 convolution -> INT32 bias -> optional ReLU
-  -> signed arithmetic shift -> INT8 saturation
+  -> per-channel INT32 multiply -> round-half-to-even shift -> INT8 saturation
   -> optional post-quant residual -> INT8 saturation
 ```
 
@@ -176,6 +183,7 @@ but it must not change these element results.
 `make model-test` covers:
 
 - mixed 1x1 and 3x3 package execution against the existing arithmetic model
+- per-output-channel multiplier/shift serialization and execution
 - the complete default Gaussian network with input residual subtraction
 - asymmetric padding driven by serialized descriptors
 - raw binary and JSON parameter files

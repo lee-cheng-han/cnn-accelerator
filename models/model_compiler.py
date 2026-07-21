@@ -89,6 +89,21 @@ def _padding(value: Any, field: str) -> tuple[int, int, int, int]:
     raise CompilerError(f"{field} must be an integer, [top, bottom, left, right], or object")
 
 
+def _channel_values(
+    record: Mapping[str, Any], singular: str, plural: str, count: int, default: int
+) -> tuple[int, ...]:
+    if singular in record and plural in record:
+        raise CompilerError(f"record cannot define both {singular} and {plural}")
+    value = record.get(plural, record.get(singular, default))
+    if isinstance(value, int) and not isinstance(value, bool):
+        return (value,) * count
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        if len(value) != count:
+            raise CompilerError(f"{plural} requires {count} values, got {len(value)}")
+        return tuple(_require_int(item, f"{plural}[{index}]") for index, item in enumerate(value))
+    raise CompilerError(f"{singular} must be an integer or {plural} must be an array")
+
+
 def _flatten_nested(value: Any) -> list[Any]:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         result = []
@@ -227,21 +242,39 @@ def compile_model(spec: Mapping[str, Any], *, base_dir: Path | str = ".") -> byt
     ]
     tensor_by_name = {input_name: tensor_meta[0]}
     compiled_layers: list[dict[str, Any]] = []
-    quant_profiles: dict[str, tuple[int, int]] = {}
+    quant_profiles: dict[str, QuantizationDescriptor] = {}
     quantizations: list[QuantizationDescriptor] = []
 
-    def quantization_for(profile: str, shift: int) -> int:
+    def quantization_for(
+        profile: str,
+        channel_count: int,
+        multipliers: tuple[int, ...],
+        shifts: tuple[int, ...],
+    ) -> int:
+        if any(multiplier <= 0 or multiplier > 0x7FFF_FFFF for multiplier in multipliers):
+            raise CompilerError("quantization multipliers must be positive signed INT32 values")
+        if any(shift < 0 or shift > 62 for shift in shifts):
+            raise CompilerError("quantization shifts must be in range 0..62")
         existing = quant_profiles.get(profile)
         if existing is not None:
-            quant_id, existing_shift = existing
-            if existing_shift != shift:
+            if (
+                existing.channel_count != channel_count
+                or existing.quant_multipliers != multipliers
+                or existing.quant_shifts != shifts
+            ):
                 raise CompilerError(
-                    f"quantization profile {profile!r} uses shifts {existing_shift} and {shift}"
+                    f"quantization profile {profile!r} has inconsistent per-channel parameters"
                 )
-            return quant_id
+            return existing.quantization_id
         quant_id = len(quantizations)
-        quant_profiles[profile] = (quant_id, shift)
-        quantizations.append(QuantizationDescriptor(quant_id, quant_shift=shift))
+        descriptor = QuantizationDescriptor(
+            quantization_id=quant_id,
+            channel_count=channel_count,
+            quant_multipliers=multipliers,
+            quant_shifts=shifts,
+        )
+        quant_profiles[profile] = descriptor
+        quantizations.append(descriptor)
         return quant_id
 
     current_name = input_name
@@ -296,13 +329,28 @@ def compile_model(spec: Mapping[str, Any], *, base_dir: Path | str = ".") -> byt
             if not isinstance(residual_name, str) or residual_name not in tensor_by_name:
                 raise CompilerError(f"layer {name!r} residual must name an earlier tensor")
             residual_tensor = tensor_by_name[residual_name]
+            if (
+                residual_tensor["width"] != output_width
+                or residual_tensor["height"] != output_height
+                or residual_tensor["channels"] != output_channels
+            ):
+                raise CompilerError(
+                    f"layer {name!r} residual tensor shape does not match output"
+                )
 
-        quant_shift = _require_int(layer.get("quant_shift", 0), f"layers[{index}].quant_shift")
+        quant_multipliers = _channel_values(
+            layer, "quant_multiplier", "quant_multipliers", output_channels, 1
+        )
+        quant_shifts = _channel_values(
+            layer, "quant_shift", "quant_shifts", output_channels, 0
+        )
         default_profile = input_quant_profile if residual_name == input_name else f"{name}.output"
         quant_profile = str(layer.get("quantization_profile", default_profile))
         if not quant_profile:
             raise CompilerError(f"layer {name!r} quantization_profile cannot be empty")
-        quant_id = quantization_for(quant_profile, quant_shift)
+        quant_id = quantization_for(
+            quant_profile, output_channels, quant_multipliers, quant_shifts
+        )
 
         output_tensor = {
             "name": output_name,
@@ -359,16 +407,29 @@ def compile_model(spec: Mapping[str, Any], *, base_dir: Path | str = ".") -> byt
 
     input_tensor = tensor_meta[0]
     if input_quant_profile not in quant_profiles:
-        input_shift = _require_int(
-            input_spec.get("quant_shift", 0), "input.quant_shift"
+        input_multipliers = _channel_values(
+            input_spec, "quant_multiplier", "quant_multipliers", channels, 1
         )
-        input_quant_id = quantization_for(input_quant_profile, input_shift)
+        input_shifts = _channel_values(
+            input_spec, "quant_shift", "quant_shifts", channels, 0
+        )
+        input_quant_id = quantization_for(
+            input_quant_profile, channels, input_multipliers, input_shifts
+        )
     else:
-        input_quant_id = quant_profiles[input_quant_profile][0]
-        if "quant_shift" in input_spec:
+        input_quant_id = quant_profiles[input_quant_profile].quantization_id
+        if any(key in input_spec for key in (
+            "quant_multiplier", "quant_multipliers", "quant_shift", "quant_shifts"
+        )):
             quantization_for(
                 input_quant_profile,
-                _require_int(input_spec["quant_shift"], "input.quant_shift"),
+                channels,
+                _channel_values(
+                    input_spec, "quant_multiplier", "quant_multipliers", channels, 1
+                ),
+                _channel_values(
+                    input_spec, "quant_shift", "quant_shifts", channels, 0
+                ),
             )
     input_tensor["quantization_id"] = input_quant_id
 
@@ -535,6 +596,17 @@ def package_summary(package: bytes) -> dict[str, Any]:
         "layer_count": len(layers),
         "tensor_count": len(tensors),
         "quantization_count": len(quantizations),
+        "quantizations": [
+            {
+                "quantization_id": quant.quantization_id,
+                "channel_count": quant.channel_count,
+                "quant_multipliers": list(quant.quant_multipliers),
+                "quant_shifts": list(quant.quant_shifts),
+                "output_zero_point": quant.output_zero_point,
+                "rounding_mode": quant.rounding_mode.name.lower(),
+            }
+            for quant in quantizations
+        ],
         "layers": [
             {
                 "layer_id": layer.layer_id,

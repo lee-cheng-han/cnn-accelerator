@@ -7,7 +7,9 @@ package cnn_accel_abi_pkg;
   localparam int unsigned MODEL_HEADER_BYTES = 128;
   localparam int unsigned LAYER_DESCRIPTOR_BYTES = 128;
   localparam int unsigned TENSOR_DESCRIPTOR_BYTES = 64;
-  localparam int unsigned QUANT_DESCRIPTOR_BYTES = 32;
+  localparam int unsigned QUANT_DESCRIPTOR_BYTES = 192;
+  localparam int unsigned CAPABILITY_RECORD_BYTES = 128;
+  localparam int unsigned ERROR_RECORD_BYTES = 64;
   localparam int unsigned RECORD_ALIGNMENT_BYTES = 64;
   localparam logic [15:0] NO_TENSOR_ID = 16'hFFFF;
 
@@ -20,7 +22,76 @@ package cnn_accel_abi_pkg;
   localparam int unsigned MAX_LAYER_WEIGHT_BYTES = 2304;
   localparam int unsigned MAX_LAYER_BIAS_BYTES = 64;
   localparam int unsigned WEIGHT_BANK_CAPACITY_BYTES = 4096;
-  localparam int unsigned BIAS_BANK_CAPACITY_BYTES = 256;
+  localparam int unsigned POSTPROCESS_BANK_CAPACITY_BYTES = 256;
+  localparam int unsigned BIAS_BANK_CAPACITY_BYTES = POSTPROCESS_BANK_CAPACITY_BYTES;
+  localparam int unsigned POSTPROCESS_ENTRY_BYTES = 16;
+
+  localparam logic [31:0] FEATURE_CAPABILITY_QUERY = 32'h0000_0001;
+  localparam logic [31:0] FEATURE_STRUCTURED_ERRORS = 32'h0000_0002;
+  localparam logic [31:0] FEATURE_MODEL_PACKAGES = 32'h0000_0004;
+  localparam logic [31:0] FEATURE_RUNTIME_METADATA = 32'h0000_0008;
+  localparam logic [31:0] FEATURE_PACKED_DMA = 32'h0000_0010;
+  localparam logic [31:0] FEATURE_DDR_TILING = 32'h0000_0020;
+  localparam logic [31:0] FEATURE_AUTONOMOUS_FETCH = 32'h0000_0040;
+  localparam logic [31:0] FEATURE_INTERRUPTS = 32'h0000_0080;
+  localparam logic [31:0] FEATURE_FIXED_NETWORK = 32'h8000_0000;
+
+  typedef enum logic [31:0] {
+    ERROR_NONE = 32'h0000_0000,
+    ERROR_PACKAGE_VALIDATION_FAILED = 32'h0000_0101,
+    ERROR_MODEL_ABI_UNSUPPORTED = 32'h0000_0102,
+    ERROR_CAPABILITY_FEATURE_MISSING = 32'h0000_0201,
+    ERROR_CAPABILITY_LIMIT_EXCEEDED = 32'h0000_0202,
+    ERROR_UNSUPPORTED_OPERATION = 32'h0000_0203,
+    ERROR_DATA_PLANE_PROTOCOL = 32'h0000_0400
+  } error_code_e;
+
+  typedef enum logic [7:0] {
+    ERROR_STAGE_NONE = 8'd0,
+    ERROR_STAGE_PACKAGE_LOAD = 8'd1,
+    ERROR_STAGE_PACKAGE_VALIDATE = 8'd2,
+    ERROR_STAGE_MODEL_ACTIVATE = 8'd3,
+    ERROR_STAGE_EXECUTE = 8'd4,
+    ERROR_STAGE_DATA_PLANE = 8'd5
+  } error_stage_e;
+
+  typedef enum logic [7:0] {
+    ERROR_RECORD_NONE = 8'd0,
+    ERROR_RECORD_MODEL = 8'd1,
+    ERROR_RECORD_LAYER = 8'd2,
+    ERROR_RECORD_TENSOR = 8'd3,
+    ERROR_RECORD_QUANTIZATION = 8'd4,
+    ERROR_RECORD_PACKET = 8'd5
+  } error_record_kind_e;
+
+  typedef enum logic [15:0] {
+    ERROR_FIELD_NONE = 16'd0,
+    ERROR_FIELD_ABI_VERSION = 16'd1,
+    ERROR_FIELD_FEATURE_FLAGS = 16'd2,
+    ERROR_FIELD_LAYER_COUNT = 16'd3,
+    ERROR_FIELD_TENSOR_COUNT = 16'd4,
+    ERROR_FIELD_QUANTIZATION_COUNT = 16'd5,
+    ERROR_FIELD_WIDTH = 16'd6,
+    ERROR_FIELD_HEIGHT = 16'd7,
+    ERROR_FIELD_INPUT_CHANNELS = 16'd8,
+    ERROR_FIELD_OUTPUT_CHANNELS = 16'd9,
+    ERROR_FIELD_OPCODE = 16'd10,
+    ERROR_FIELD_KERNEL_SIZE = 16'd11,
+    ERROR_FIELD_STRIDE = 16'd12,
+    ERROR_FIELD_PADDING = 16'd13,
+    ERROR_FIELD_WEIGHT_BYTES = 16'd14,
+    ERROR_FIELD_BIAS_BYTES = 16'd15,
+    ERROR_FIELD_ELEMENT_TYPE = 16'd16,
+    ERROR_FIELD_ACTIVATION = 16'd17,
+    ERROR_FIELD_ROUNDING_MODE = 16'd18,
+    ERROR_FIELD_RESIDUAL_MODE = 16'd19,
+    ERROR_FIELD_PACKET_TYPE = 16'd20,
+    ERROR_FIELD_PAYLOAD_LENGTH = 16'd21,
+    ERROR_FIELD_TENSOR_ELEMENTS = 16'd22,
+    ERROR_FIELD_QUANT_MULTIPLIER = 16'd23,
+    ERROR_FIELD_QUANT_SHIFT = 16'd24,
+    ERROR_FIELD_OUTPUT_ZERO_POINT = 16'd25
+  } error_field_e;
 
   typedef enum logic [15:0] {
     OPCODE_CONV2D = 16'd1
@@ -38,7 +109,8 @@ package cnn_accel_abi_pkg;
   } residual_mode_e;
 
   typedef enum logic [7:0] {
-    ROUND_ARITHMETIC_SHIFT = 8'd0
+    ROUND_ARITHMETIC_SHIFT = 8'd0,
+    ROUND_HALF_TO_EVEN = 8'd1
   } rounding_mode_e;
 
   localparam logic [31:0] LAYER_FLAG_BIAS_ENABLE = 32'h0000_0001;
@@ -70,8 +142,29 @@ package cnn_accel_abi_pkg;
   localparam int unsigned TD_ROW_STRIDE_OFS = 36;
 
   localparam int unsigned QD_QUANTIZATION_ID_OFS = 4;
-  localparam int unsigned QD_MULTIPLIER_OFS = 8;
-  localparam int unsigned QD_SHIFT_OFS = 12;
+  localparam int unsigned QD_CHANNEL_COUNT_OFS = 8;
+  localparam int unsigned QD_ROUNDING_MODE_OFS = 10;
+  localparam int unsigned QD_OUTPUT_ZERO_POINT_OFS = 11;
+  localparam int unsigned QD_CHANNEL_PARAMS_OFS = 64;
+  localparam int unsigned QD_CHANNEL_PARAM_BYTES = 8;
+
+  localparam int unsigned CAP_HARDWARE_VERSION_OFS = 4;
+  localparam int unsigned CAP_MODEL_ABI_VERSION_OFS = 8;
+  localparam int unsigned CAP_FEATURE_FLAGS_OFS = 12;
+  localparam int unsigned CAP_LIMITS_OFS = 44;
+  localparam int unsigned CAP_MAX_TENSOR_ELEMENTS_OFS = 64;
+  localparam int unsigned CAP_BANK_CAPACITY_OFS = 68;
+  localparam int unsigned CAP_PARALLELISM_OFS = 88;
+  localparam int unsigned CAP_CLOCK_HZ_OFS = 92;
+
+  localparam int unsigned ERR_CODE_OFS = 4;
+  localparam int unsigned ERR_CONTEXT_OFS = 8;
+  localparam int unsigned ERR_RECORD_INDEX_OFS = 12;
+  localparam int unsigned ERR_OBSERVED_OFS = 16;
+  localparam int unsigned ERR_EXPECTED_MIN_OFS = 24;
+  localparam int unsigned ERR_EXPECTED_MAX_OFS = 32;
+  localparam int unsigned ERR_MODEL_ID_OFS = 40;
+  localparam int unsigned ERR_DETAIL_OFS = 48;
 endpackage
 
 `default_nettype wire

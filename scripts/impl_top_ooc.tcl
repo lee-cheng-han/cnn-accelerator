@@ -124,6 +124,8 @@ set sources [list \
  rtl/scheduler/single_layer_scheduler.sv \
  rtl/scheduler/multi_layer_job_controller.sv \
  rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
+ rtl/zynq/cnn_runtime_capabilities.sv \
+ rtl/zynq/cnn_structured_error_snapshot.sv \
  rtl/zynq/cnn_axi_lite_slave.sv \
  rtl/zynq/cnn_image2image_axi_stream_top.sv \
  rtl/zynq/cnn_image2image_system_top.sv \

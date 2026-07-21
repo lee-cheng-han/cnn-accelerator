@@ -39,9 +39,17 @@ Expected RTL coverage includes:
 - multi-layer scheduler sequencing
 - parameter prefetch overlap
 - residual and non-residual output modes
+- per-output-channel multiplier/shift requantization
+- positive and negative round-half-to-even ties
+- positive and negative INT8 clipping with saturation-event masks
+- INT8 residual add/subtract overflow saturation
 - packet router malformed-input errors
 - output backpressure
-- performance counter snapshots
+- per-layer, DMA-stall, and saturation performance counter snapshots
+
+V1 uses ordinary PC/PK channel-tail masks. The first RGB layer is intentionally
+not channel-packed; verification therefore covers the explicit 3-channel tail
+at the configured input parallelism as well as full-width middle layers.
 
 ## Build Verification
 

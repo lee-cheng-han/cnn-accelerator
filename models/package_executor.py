@@ -23,7 +23,7 @@ from models.image2image_int8 import (
     Tensor3D,
     apply_residual,
     copy_int8_tensor,
-    postprocess_accumulator,
+    requantize_int32,
     tensor_shape_hwc,
     zeros_hwc,
 )
@@ -66,13 +66,16 @@ def _run_layer(source, weights, bias, layer, output_tensor, quantization):
                             continue
                         for ci in range(input_channels):
                             accumulator += int(source[iy][ix][ci]) * int(weights[co][ci][ky][kx])
-                output[oy][ox][co] = postprocess_accumulator(
-                    accumulator,
-                    bias[co] if layer.flags & LayerFlags.BIAS_ENABLE else 0,
-                    bias_enable=bool(layer.flags & LayerFlags.BIAS_ENABLE),
-                    relu_enable=layer.activation == Activation.RELU,
-                    quant_enable=True,
-                    quant_shift=quantization.quant_shift,
+                biased = accumulator + (
+                    bias[co] if layer.flags & LayerFlags.BIAS_ENABLE else 0
+                )
+                if layer.activation == Activation.RELU and biased < 0:
+                    biased = 0
+                output[oy][ox][co] = requantize_int32(
+                    biased,
+                    quantization.quant_multipliers[co],
+                    quantization.quant_shifts[co],
+                    quantization.output_zero_point,
                 )
     return output
 

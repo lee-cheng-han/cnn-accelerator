@@ -10,6 +10,7 @@
 | default parameters | Gaussian impulse-response test | Passing | all 16 hidden channels used; residual output matches the expected 3x3 low-pass kernel |
 | golden generation | `make baremetal-headers` | Passing | writes deterministic tensors and C DMA packet header |
 | compute RTL | `tb_parallel_mac_array` | Covered | PC x PK signed INT8 MAC datapath |
+| post-processing RTL | `tb_parallel_requantizer` | Covered | per-channel multiply/shift, round-half-to-even ties, lane masks, and signed saturation |
 | compute RTL | `tb_tiled_conv1x1_engine` | Covered | array-backed and banked-scratchpad-backed 1x1 operand paths |
 | compute RTL | `tb_tiled_conv3x3_engine` | Covered | array-backed and banked-scratchpad-backed 3x3 operand paths |
 | tensor RTL | `tb_tensor_address_gen` | Covered | stride, padding, and valid/invalid address behavior |
@@ -30,8 +31,10 @@
 | INT8 arithmetic | High | Python model tests and RTL MAC/engine tests |
 | 1x1 convolution | High | tiled engine tests and scheduler tests |
 | 3x3 convolution | High | address generator, tiled engine, scheduler, and full-network golden tests |
-| runtime channel tails | High | directed PC/PK tail cases |
-| bias, ReLU, quantization, saturation | High | Python model and compute/post-processing RTL tests |
+| runtime channel tails | High | directed PC/PK tail cases; V1 intentionally uses no special RGB channel packing |
+| bias, ReLU, quantization, saturation | High | Python model and parallel requantizer RTL tests cover per-channel scales, ties, and clipping |
+| residual numeric domain | High | post-requantization signed INT8 add/subtract with signed INT8 saturation |
+| bandwidth feasibility | Analytical | worked 1024x1024 3x3 and 1x1 budgets in `docs/bandwidth_budget.md` |
 | stream-loaded activations/weights/biases | High | stream-loaded full-network golden flow |
 | seven-packet AXI tensor job | High | AXI stream full-network golden flow |
 | output backpressure | High | stream-loaded and AXI stream golden flows |

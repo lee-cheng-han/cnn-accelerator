@@ -71,6 +71,33 @@ def mixed_model_spec():
 
 
 class TestModelCompiler(unittest.TestCase):
+    def test_per_output_channel_requantization_is_serialized_and_executed(self):
+        spec = {
+            "format": "cnn-accelerator-model-v1",
+            "model_id": 99,
+            "input": {"width": 1, "height": 1, "channels": 1},
+            "layers": [
+                {
+                    "output_channels": 2,
+                    "kernel_size": 1,
+                    "weights": [[[[1]]], [[[1]]]],
+                    "bias": [0, 0],
+                    "quant_multipliers": [1, 3],
+                    "quant_shifts": [1, 1],
+                }
+            ],
+        }
+        package = compile_model(spec)
+        _, layers, _, quantizations = parse_model_package(package)
+        quant = next(
+            item for item in quantizations
+            if item.quantization_id == layers[0].quantization_id
+        )
+        self.assertEqual(quant.channel_count, 2)
+        self.assertEqual(quant.quant_multipliers, (1, 3))
+        self.assertEqual(quant.quant_shifts, (1, 1))
+        self.assertEqual(execute_model_package(package, [[[5]]]), [[[2, 8]]])
+
     def test_mixed_network_matches_existing_bit_accurate_model(self):
         spec, layer0_weights, layer1_weights = mixed_model_spec()
         package = compile_model(spec)
@@ -81,13 +108,13 @@ class TestModelCompiler(unittest.TestCase):
             [
                 (
                     LayerConfig(3, 4, kernel_size=1, padding=0, relu_enable=True,
-                                quant_shift=1),
+                                quant_shift=1, rounding_mode="round_half_to_even"),
                     layer0_weights,
                     [2, -1, 3, 0],
                 ),
                 (
                     LayerConfig(4, 2, kernel_size=3, padding=1, relu_enable=False,
-                                quant_shift=2),
+                                quant_shift=2, rounding_mode="round_half_to_even"),
                     layer1_weights,
                     [-4, 5],
                 ),
@@ -134,7 +161,24 @@ class TestModelCompiler(unittest.TestCase):
         expected = run_layers_int8(
             input_tensor,
             [
-                (config, weights, bias)
+                (
+                    LayerConfig(
+                        input_channels=config.input_channels,
+                        output_channels=config.output_channels,
+                        kernel_size=config.kernel_size,
+                        stride=config.stride,
+                        padding=config.padding,
+                        bias_enable=config.bias_enable,
+                        relu_enable=config.relu_enable,
+                        quant_enable=config.quant_enable,
+                        quant_multiplier=config.quant_multiplier,
+                        quant_shift=config.quant_shift,
+                        rounding_mode="round_half_to_even",
+                        residual_mode=config.residual_mode,
+                    ),
+                    weights,
+                    bias,
+                )
                 for config, (weights, bias) in zip(configs, parameters)
             ],
         )
