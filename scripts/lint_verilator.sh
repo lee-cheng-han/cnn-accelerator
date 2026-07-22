@@ -39,6 +39,8 @@ verilator --lint-only \
  rtl/tensor/weight_tensor_load_controller.sv \
  rtl/tensor/output_tensor_store_controller.sv \
  rtl/stream/tensor_packet_router.sv \
+ rtl/runtime/cnn_metadata_word_ram.sv \
+ rtl/runtime/cnn_model_metadata_store.sv \
  rtl/scheduler/denoise_layer_descriptor_rom.sv \
  rtl/scheduler/performance_counters.sv \
  rtl/compute/reduction_tree.sv \

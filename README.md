@@ -106,12 +106,14 @@ See the normative [V1 model-package ABI](docs/model_package_abi.md) and the
 [implementation roadmap](docs/layer_programmable_roadmap.md). The first
 [model compiler and package executor](docs/model_compiler.md) now emit,
 validate, inspect, and bit-accurately execute relocatable V1 packages; runtime
-RTL consumption of those packages remains a later milestone.
+RTL now retains two complete metadata banks and atomically activates validated
+model generations. The fixed scheduler does not consume those descriptors yet;
+descriptor-driven execution is the next milestone.
 
 The control plane also exposes versioned
 [capability discovery and structured errors](docs/capability_and_errors.md).
-The current bitstream identifies itself as the fixed-network baseline and does
-not advertise runtime package support prematurely.
+It advertises runtime metadata storage while continuing to identify itself as
+the fixed-network baseline and withholding complete runtime package support.
 
 ### Target Platform
 
@@ -190,8 +192,9 @@ Source evidence:
 | `0x01C` | `ERROR_CODE` | Packet or compute error code |
 | `0x020` | `STREAM_STATE` | Active packet and layer readiness |
 | `0x024` | `PACKET_WORDS` | Accepted words in the active packet |
+| `0x028`-`0x054` | `MODEL_*`, `METADATA_*` | Metadata loading, validation, atomic activation, and model identity |
 | `0x080`-`0x0A8` | `PERF_*` | Job, layer, transfer, overlap, and stall counters |
-| `0x0FC` | `VERSION` | Interface version (`0x00030000`) |
+| `0x0FC` | `VERSION` | Interface version (`0x00040000`) |
 | `0x100`-`0x17C` | `CAPABILITY_*` | Versioned implementation capability record |
 | `0x180`-`0x1BC` | `ERROR_RECORD_*` | Sticky structured failure context |
 
@@ -392,6 +395,7 @@ record.
 | [Block diagrams](docs/block_diagram.md) | System and accelerator data-flow diagrams |
 | [Stream interface](docs/stream_interface.md) | Tensor packet format and protocol errors |
 | [Register map](docs/register_map.md) | AXI-Lite software interface |
+| [Runtime model lifecycle](docs/runtime_model_lifecycle.md) | Dual-bank metadata loading, validation, and atomic activation |
 | [Performance counters](docs/performance_counters.md) | Counter definitions and interpretation |
 | [Compute and bandwidth budget](docs/bandwidth_budget.md) | Tail efficiency and DDR roofline calculations |
 | [Verification matrix](docs/verification_matrix.md) | Coverage, evidence, and outstanding hardware tests |

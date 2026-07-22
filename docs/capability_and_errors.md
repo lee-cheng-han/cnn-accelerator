@@ -69,13 +69,13 @@ Bitmask fields use `1 << enum_value`. Kernel and stride masks use
 The checked-in board RTL currently reports:
 
 ```text
-CAPABILITY_QUERY | STRUCTURED_ERRORS | INTERRUPTS | FIXED_NETWORK
+CAPABILITY_QUERY | STRUCTURED_ERRORS | RUNTIME_METADATA | INTERRUPTS | FIXED_NETWORK
 ```
 
-It deliberately does **not** report `MODEL_PACKAGES`. The Python compiler can
-create and execute packages, but the current board runtime cannot load them
-until the metadata-memory and lifecycle phase is complete. This prevents
-software from confusing the final V1 target envelope with present hardware.
+It deliberately does **not** report `MODEL_PACKAGES`. Software can load,
+validate, and atomically activate metadata, but the fixed scheduler does not
+yet execute those descriptors. This prevents software from confusing retained
+metadata with complete runtime package execution.
 
 The fixed RTL also reports three layers, fixed 3x3/stride-1 operation,
 `MAX_PIXELS` as both the maximum spatial element count and single-axis bound,

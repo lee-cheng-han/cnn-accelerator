@@ -16,6 +16,7 @@ from typing import Mapping, Sequence
 
 
 ABI_VERSION = 1
+REGISTER_MAP_VERSION = 0x00040000
 MODEL_MAGIC = 0x314E4E43  # "CNN1" as little-endian bytes.
 MODEL_HEADER_SIZE = 128
 LAYER_DESCRIPTOR_SIZE = 128
@@ -89,6 +90,24 @@ class ResidualMode(IntEnum):
 class RoundingMode(IntEnum):
     ARITHMETIC_SHIFT = 0
     ROUND_HALF_TO_EVEN = 1
+
+
+class ModelStagingState(IntEnum):
+    UNLOADED = 0
+    LOADING = 1
+    LOADED_UNVALIDATED = 2
+    VALIDATED = 3
+
+
+class ModelLifecycleError(IntEnum):
+    NONE = 0
+    BAD_STATE = 1
+    BUSY = 2
+    BAD_ADDRESS = 3
+    INCOMPLETE = 4
+    BAD_HEADER = 5
+    LIMIT = 6
+    BAD_DESCRIPTOR = 7
 
 
 class CapabilityFeature(IntFlag):
@@ -679,7 +698,7 @@ def target_v1_capabilities(
 ) -> CapabilityRecord:
     """Return the final V1 architectural capability envelope."""
     return CapabilityRecord(
-        hardware_interface_version=0x00030000,
+        hardware_interface_version=REGISTER_MAP_VERSION,
         model_abi_version=ABI_VERSION,
         dma_data_width_bytes=4,
         feature_flags=(
@@ -732,12 +751,13 @@ def fixed_hardware_capabilities(
 ) -> CapabilityRecord:
     """Describe the current fixed three-layer board implementation honestly."""
     return CapabilityRecord(
-        hardware_interface_version=0x00030000,
+        hardware_interface_version=REGISTER_MAP_VERSION,
         model_abi_version=ABI_VERSION,
         dma_data_width_bytes=4,
         feature_flags=(
             CapabilityFeature.CAPABILITY_QUERY
             | CapabilityFeature.STRUCTURED_ERRORS
+            | CapabilityFeature.RUNTIME_METADATA
             | CapabilityFeature.INTERRUPTS
             | CapabilityFeature.FIXED_NETWORK
         ),

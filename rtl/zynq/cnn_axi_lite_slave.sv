@@ -90,6 +90,18 @@ module cnn_axi_lite_slave #(
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_ERROR_CODE = 12'h01C;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STREAM_STATE = 12'h020;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PACKET_WORDS = 12'h024;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_MODEL_COMMAND = 12'h028;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_MODEL_STATUS = 12'h02C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STAGING_MODEL_ID = 12'h030;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STAGING_GENERATION = 12'h034;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_ACTIVE_MODEL_ID = 12'h038;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_ACTIVE_GENERATION = 12'h03C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_METADATA_ADDRESS = 12'h040;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_METADATA_DATA = 12'h044;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_METADATA_COMMIT = 12'h048;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_MODEL_ERROR = 12'h04C;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STAGING_COUNTS0 = 12'h050;
+ localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_STAGING_COUNTS1 = 12'h054;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_JOB = 12'h080;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_PACKET = 12'h084;
  localparam logic [AXI_ADDR_WIDTH-1:0] ADDR_PERF_COMPUTE = 12'h088;
@@ -125,10 +137,35 @@ module cnn_axi_lite_slave #(
  logic [31:0] height_merged;
  logic [31:0] mode_merged;
  logic [31:0] irq_enable_merged;
+ logic [31:0] metadata_address_merged;
  logic [4:0] capability_word_index;
  logic [31:0] capability_word_data;
  logic [4:0] error_word_index;
  logic [31:0] error_word_data;
+ logic model_begin_load;
+ logic model_finish_load;
+ logic model_validate;
+ logic model_activate;
+ logic model_retire;
+ logic model_clear_error;
+ logic metadata_write;
+ logic metadata_commit;
+ logic [31:0] metadata_address;
+ logic [31:0] metadata_write_data_merged;
+ logic [31:0] metadata_write_data_q;
+ logic [31:0] metadata_read_data;
+ logic [2:0] model_staging_state;
+ logic model_staging_bank;
+ logic model_active_valid;
+ logic model_active_bank;
+ logic [31:0] staging_model_id;
+ logic [31:0] staging_generation_id;
+ logic [31:0] active_model_id;
+ logic [31:0] active_generation_id;
+ logic [15:0] staging_layer_count;
+ logic [15:0] staging_tensor_count;
+ logic [15:0] staging_quantization_count;
+ logic [7:0] model_lifecycle_error;
 
  function automatic logic [31:0] apply_wstrb(
  input logic [31:0] old_value,
@@ -155,6 +192,10 @@ module cnn_axi_lite_slave #(
  apply_wstrb({31'd0, final_residual_enable}, wdata_q, wstrb_q);
  assign irq_enable_merged =
  apply_wstrb({30'd0, irq_enable}, wdata_q, wstrb_q);
+ assign metadata_address_merged =
+ apply_wstrb(metadata_address, wdata_q, wstrb_q);
+ assign metadata_write_data_merged =
+ apply_wstrb(metadata_read_data, wdata_q, wstrb_q);
 
  assign irq = |(irq_status & irq_enable);
  assign capability_word_index = s_axi_araddr[6:2];
@@ -170,6 +211,37 @@ module cnn_axi_lite_slave #(
  ) u_cnn_runtime_capabilities (
  .word_index(capability_word_index),
  .word_data(capability_word_data)
+ );
+
+ cnn_model_metadata_store u_cnn_model_metadata_store (
+ .clk(s_axi_aclk),
+ .resetn(s_axi_aresetn),
+ .begin_load(model_begin_load),
+ .finish_load(model_finish_load),
+ .validate_model(model_validate),
+ .activate_model(model_activate),
+ .retire_active(model_retire),
+ .clear_error(model_clear_error || clear_pulse),
+ .job_busy(core_busy),
+ .metadata_write(metadata_write),
+ .metadata_commit(metadata_commit),
+ .metadata_kind(metadata_address[1:0]),
+ .metadata_record_index(metadata_address[7:2]),
+ .metadata_word_index(metadata_address[13:8]),
+ .metadata_write_data(metadata_write_data_q),
+ .metadata_read_data(metadata_read_data),
+ .staging_state(model_staging_state),
+ .staging_bank(model_staging_bank),
+ .active_valid(model_active_valid),
+ .active_bank(model_active_bank),
+ .staging_model_id(staging_model_id),
+ .staging_generation_id(staging_generation_id),
+ .active_model_id(active_model_id),
+ .active_generation_id(active_generation_id),
+ .staging_layer_count(staging_layer_count),
+ .staging_tensor_count(staging_tensor_count),
+ .staging_quantization_count(staging_quantization_count),
+ .lifecycle_error(model_lifecycle_error)
  );
 
  cnn_structured_error_snapshot u_cnn_structured_error_snapshot (
@@ -206,6 +278,16 @@ module cnn_axi_lite_slave #(
 
  start_pulse <= 1'b0;
  clear_pulse <= 1'b0;
+ model_begin_load <= 1'b0;
+ model_finish_load <= 1'b0;
+ model_validate <= 1'b0;
+ model_activate <= 1'b0;
+ model_retire <= 1'b0;
+ model_clear_error <= 1'b0;
+ metadata_write <= 1'b0;
+ metadata_commit <= 1'b0;
+ metadata_address <= 32'd0;
+ metadata_write_data_q <= 32'd0;
  final_residual_enable <= 1'b0;
  image_width <= '0;
  image_height <= '0;
@@ -218,6 +300,14 @@ module cnn_axi_lite_slave #(
  s_axi_wready <= 1'b0;
  start_pulse <= 1'b0;
  clear_pulse <= 1'b0;
+ model_begin_load <= 1'b0;
+ model_finish_load <= 1'b0;
+ model_validate <= 1'b0;
+ model_activate <= 1'b0;
+ model_retire <= 1'b0;
+ model_clear_error <= 1'b0;
+ metadata_write <= 1'b0;
+ metadata_commit <= 1'b0;
  core_done_q <= core_done;
  core_error_q <= core_error;
 
@@ -268,6 +358,37 @@ module cnn_axi_lite_slave #(
 
  ADDR_MODE_FLAGS: begin
  final_residual_enable <= mode_merged[0];
+ end
+
+ ADDR_MODEL_COMMAND: begin
+ if (wstrb_q[0]) begin
+ model_begin_load <= wdata_q[0];
+ model_finish_load <= wdata_q[1];
+ model_validate <= wdata_q[2];
+ model_activate <= wdata_q[3];
+ model_retire <= wdata_q[4];
+ end
+ end
+
+ ADDR_METADATA_ADDRESS: begin
+ metadata_address <= metadata_address_merged;
+ end
+
+ ADDR_METADATA_DATA: begin
+ metadata_write_data_q <= metadata_write_data_merged;
+ metadata_write <= |wstrb_q;
+ end
+
+ ADDR_METADATA_COMMIT: begin
+ if (wstrb_q[0]) begin
+ metadata_commit <= wdata_q[0];
+ end
+ end
+
+ ADDR_MODEL_ERROR: begin
+ if (wstrb_q[0]) begin
+ model_clear_error <= wdata_q[0];
+ end
  end
 
  default: begin
@@ -358,6 +479,50 @@ module cnn_axi_lite_slave #(
  ADDR_PACKET_WORDS: begin
  s_axi_rdata <= input_packet_words;
  end
+ ADDR_MODEL_COMMAND: begin
+ s_axi_rdata <= 32'd0;
+ end
+ ADDR_MODEL_STATUS: begin
+ s_axi_rdata <= {
+ 16'd0,
+ model_lifecycle_error,
+ 2'd0,
+ model_active_bank,
+ model_staging_bank,
+ model_active_valid,
+ model_staging_state
+ };
+ end
+ ADDR_STAGING_MODEL_ID: begin
+ s_axi_rdata <= staging_model_id;
+ end
+ ADDR_STAGING_GENERATION: begin
+ s_axi_rdata <= staging_generation_id;
+ end
+ ADDR_ACTIVE_MODEL_ID: begin
+ s_axi_rdata <= active_model_id;
+ end
+ ADDR_ACTIVE_GENERATION: begin
+ s_axi_rdata <= active_generation_id;
+ end
+ ADDR_METADATA_ADDRESS: begin
+ s_axi_rdata <= metadata_address;
+ end
+ ADDR_METADATA_DATA: begin
+ s_axi_rdata <= metadata_read_data;
+ end
+ ADDR_METADATA_COMMIT: begin
+ s_axi_rdata <= 32'd0;
+ end
+ ADDR_MODEL_ERROR: begin
+ s_axi_rdata <= {24'd0, model_lifecycle_error};
+ end
+ ADDR_STAGING_COUNTS0: begin
+ s_axi_rdata <= {staging_tensor_count, staging_layer_count};
+ end
+ ADDR_STAGING_COUNTS1: begin
+ s_axi_rdata <= {16'd0, staging_quantization_count};
+ end
  ADDR_PERF_JOB: begin
  s_axi_rdata <= perf_job_cycles;
  end
@@ -392,7 +557,7 @@ module cnn_axi_lite_slave #(
  s_axi_rdata <= perf_output_stall_cycles;
  end
  ADDR_VERSION: begin
- s_axi_rdata <= 32'h0003_0000;
+ s_axi_rdata <= 32'h0004_0000;
  end
  default: begin
  s_axi_rdata <= 32'hDEAD_BEEF;

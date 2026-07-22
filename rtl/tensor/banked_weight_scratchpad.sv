@@ -33,6 +33,7 @@ module banked_weight_scratchpad #(
   localparam int DEPTH = MAX_COUT * MAX_CIN * 9;
 
   logic [ADDR_W-1:0] lane_read_addr [PK][PC];
+  logic [ADDR_W-1:0] lane_read_addr_q [PK][PC];
   logic lane_read_enable [PK][PC];
   logic [ADDR_W-1:0] write_addr;
   logic write_valid;
@@ -42,6 +43,7 @@ module banked_weight_scratchpad #(
   logic [ADDR_W-1:0] debug_addr;
   logic debug_valid;
   logic lane_read_enable_q [PK][PC];
+  logic lane_read_enable_qq [PK][PC];
   logic signed [DATA_W-1:0] lane_read_data_q [PK][PC];
   (* ram_style = "block" *) logic signed [DATA_W-1:0] debug_mem [0:DEPTH-1];
   logic signed [DATA_W-1:0] debug_read_data_q;
@@ -97,7 +99,7 @@ module banked_weight_scratchpad #(
   always_comb begin
     for (int pk = 0; pk < PK; pk++) begin
       for (int pc = 0; pc < PC; pc++) begin
-        weight_mat[pk][pc] = lane_read_enable_q[pk][pc] ?
+        weight_mat[pk][pc] = lane_read_enable_qq[pk][pc] ?
                              lane_read_data_q[pk][pc] :
                              '0;
       end
@@ -116,7 +118,7 @@ module banked_weight_scratchpad #(
           .write_enable(write_valid_q),
           .write_addr(write_addr_q),
           .write_data(write_data_q),
-          .read_addr(lane_read_addr[pk][pc]),
+          .read_addr(lane_read_addr_q[pk][pc]),
           .read_data(lane_read_data_q[pk][pc])
         );
       end
@@ -134,7 +136,9 @@ module banked_weight_scratchpad #(
 
     for (int pk = 0; pk < PK; pk++) begin
       for (int pc = 0; pc < PC; pc++) begin
+        lane_read_addr_q[pk][pc] <= lane_read_addr[pk][pc];
         lane_read_enable_q[pk][pc] <= lane_read_enable[pk][pc];
+        lane_read_enable_qq[pk][pc] <= lane_read_enable_q[pk][pc];
       end
     end
 

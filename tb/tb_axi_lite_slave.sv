@@ -14,6 +14,18 @@ module tb_axi_lite_slave;
  localparam logic [11:0] ADDR_ERROR_CODE = 12'h01C;
  localparam logic [11:0] ADDR_STREAM_STATE = 12'h020;
  localparam logic [11:0] ADDR_PACKET_WORDS = 12'h024;
+ localparam logic [11:0] ADDR_MODEL_COMMAND = 12'h028;
+ localparam logic [11:0] ADDR_MODEL_STATUS = 12'h02C;
+ localparam logic [11:0] ADDR_STAGING_MODEL_ID = 12'h030;
+ localparam logic [11:0] ADDR_STAGING_GENERATION = 12'h034;
+ localparam logic [11:0] ADDR_ACTIVE_MODEL_ID = 12'h038;
+ localparam logic [11:0] ADDR_ACTIVE_GENERATION = 12'h03C;
+ localparam logic [11:0] ADDR_METADATA_ADDRESS = 12'h040;
+ localparam logic [11:0] ADDR_METADATA_DATA = 12'h044;
+ localparam logic [11:0] ADDR_METADATA_COMMIT = 12'h048;
+ localparam logic [11:0] ADDR_MODEL_ERROR = 12'h04C;
+ localparam logic [11:0] ADDR_STAGING_COUNTS0 = 12'h050;
+ localparam logic [11:0] ADDR_STAGING_COUNTS1 = 12'h054;
  localparam logic [11:0] ADDR_PERF_JOB = 12'h080;
  localparam logic [11:0] ADDR_PERF_PACKET = 12'h084;
  localparam logic [11:0] ADDR_PERF_COMPUTE = 12'h088;
@@ -289,6 +301,50 @@ module tb_axi_lite_slave;
  end
  endtask
 
+ function automatic logic [31:0] metadata_address_value(
+ input logic [1:0] kind,
+ input logic [5:0] record_index,
+ input logic [5:0] word_index
+ );
+ begin
+ return {18'd0, word_index, record_index, kind};
+ end
+ endfunction
+
+ task automatic axi_metadata_write(
+ input logic [1:0] kind,
+ input logic [5:0] record_index,
+ input logic [5:0] word_index,
+ input logic [31:0] data
+ );
+ logic [1:0] write_response;
+ begin
+ axi_write(
+ ADDR_METADATA_ADDRESS,
+ metadata_address_value(kind, record_index, word_index),
+ 4'hF,
+ write_response
+ );
+ axi_write(ADDR_METADATA_DATA, data, 4'hF, write_response);
+ end
+ endtask
+
+ task automatic axi_metadata_commit(
+ input logic [1:0] kind,
+ input logic [5:0] record_index
+ );
+ logic [1:0] write_response;
+ begin
+ axi_write(
+ ADDR_METADATA_ADDRESS,
+ metadata_address_value(kind, record_index, 0),
+ 4'hF,
+ write_response
+ );
+ axi_write(ADDR_METADATA_COMMIT, 32'd1, 4'h1, write_response);
+ end
+ endtask
+
  initial begin
  checks = 0;
  errors = 0;
@@ -343,17 +399,17 @@ module tb_axi_lite_slave;
  repeat (2) @(posedge clk);
 
  axi_read(ADDR_VERSION, rd, resp);
- check_eq("version", rd, 32'h0003_0000);
+ check_eq("version", rd, 32'h0004_0000);
  check_eq("version RRESP", {30'd0, resp}, 32'd0);
 
  axi_read(ADDR_CAP_HEADER, rd, resp);
  check_eq("capability header", rd, 32'h0080_0001);
  axi_read(ADDR_CAP_HW_VERSION, rd, resp);
- check_eq("capability hardware version", rd, 32'h0003_0000);
+ check_eq("capability hardware version", rd, 32'h0004_0000);
  axi_read(ADDR_CAP_ABI_DMA, rd, resp);
  check_eq("capability ABI and DMA width", rd, 32'h0004_0001);
  axi_read(ADDR_CAP_FEATURES, rd, resp);
- check_eq("capability fixed features", rd, 32'h8000_0083);
+ check_eq("capability fixed features", rd, 32'h8000_008B);
  axi_read(ADDR_CAP_LIMITS0, rd, resp);
  check_eq("capability layer tensor limits", rd, 32'h0004_0003);
  axi_read(ADDR_CAP_LIMITS2, rd, resp);
@@ -364,6 +420,57 @@ module tb_axi_lite_slave;
  check_eq("capability PC PK", rd, 32'h0004_0002);
  axi_read(ADDR_CAP_CLOCK_HZ, rd, resp);
  check_eq("capability clock", rd, 32'd125_000_000);
+
+ axi_read(ADDR_MODEL_STATUS, rd, resp);
+ check_eq("model status reset", rd, 32'h0000_0010);
+ axi_write(ADDR_MODEL_COMMAND, 32'h0000_0001, 4'h1, resp);
+ axi_read(ADDR_MODEL_STATUS, rd, resp);
+ check_eq("model loading status", rd, 32'h0000_0011);
+
+ axi_metadata_write(0, 0, 0, 32'h314E_4E43);
+ axi_metadata_write(0, 0, 1, 32'h0080_0001);
+ axi_metadata_write(0, 0, 4, 32'd55);
+ axi_metadata_write(0, 0, 5, 32'd7);
+ axi_metadata_write(0, 0, 6, 32'h0002_0001);
+ axi_metadata_write(0, 0, 7, 32'h0000_0001);
+ axi_metadata_commit(0, 0);
+ axi_metadata_write(1, 0, 0, 32'h0080_0001);
+ axi_metadata_write(1, 0, 1, 32'h0001_0000);
+ axi_metadata_commit(1, 0);
+ axi_metadata_write(2, 0, 0, 32'h0040_0001);
+ axi_metadata_write(2, 0, 1, 32'h0001_0000);
+ axi_metadata_commit(2, 0);
+ axi_metadata_write(2, 1, 0, 32'h0040_0001);
+ axi_metadata_write(2, 1, 1, 32'h0002_0001);
+ axi_metadata_commit(2, 1);
+ axi_metadata_write(3, 0, 0, 32'h00C0_0001);
+ axi_metadata_write(3, 0, 1, 32'h0000_0000);
+ axi_metadata_commit(3, 0);
+
+ axi_read(ADDR_STAGING_MODEL_ID, rd, resp);
+ check_eq("staging model ID", rd, 32'd55);
+ axi_read(ADDR_STAGING_GENERATION, rd, resp);
+ check_eq("staging generation", rd, 32'd7);
+ axi_read(ADDR_STAGING_COUNTS0, rd, resp);
+ check_eq("staging layer tensor counts", rd, 32'h0002_0001);
+ axi_read(ADDR_STAGING_COUNTS1, rd, resp);
+ check_eq("staging quantization count", rd, 32'd1);
+ axi_read(ADDR_METADATA_DATA, rd, resp);
+ check_eq("metadata aperture readback", rd, 32'h00C0_0001);
+
+ axi_write(ADDR_MODEL_COMMAND, 32'h0000_0002, 4'h1, resp);
+ axi_write(ADDR_MODEL_COMMAND, 32'h0000_0004, 4'h1, resp);
+ axi_read(ADDR_MODEL_STATUS, rd, resp);
+ check_eq("model validated status", rd, 32'h0000_0013);
+ axi_write(ADDR_MODEL_COMMAND, 32'h0000_0008, 4'h1, resp);
+ axi_read(ADDR_MODEL_STATUS, rd, resp);
+ check_eq("model active status", rd, 32'h0000_0038);
+ axi_read(ADDR_ACTIVE_MODEL_ID, rd, resp);
+ check_eq("active model ID", rd, 32'd55);
+ axi_read(ADDR_ACTIVE_GENERATION, rd, resp);
+ check_eq("active generation", rd, 32'd7);
+ axi_read(ADDR_MODEL_ERROR, rd, resp);
+ check_eq("model lifecycle error clear", rd, 32'd0);
 
  axi_write(ADDR_IMAGE_WIDTH, 32'd640, 4'hF, resp);
  check_eq("width BRESP", {30'd0, resp}, 32'd0);

@@ -44,6 +44,8 @@ Expected RTL coverage includes:
 - positive and negative INT8 clipping with saturation-event masks
 - INT8 residual add/subtract overflow saturation
 - packet router malformed-input errors
+- dual-bank metadata loading, record commits, validation, and atomic activation
+- failed staging-model isolation and busy activation/retirement rejection
 - output backpressure
 - per-layer, DMA-stall, and saturation performance counter snapshots
 

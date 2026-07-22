@@ -21,21 +21,32 @@ This is an out-of-context implementation experiment for the image-to-image RTL t
 
 | Metric | Value |
 |---|---:|
-| WNS | 0.020 ns |
-| WHS | 0.094 ns |
-| Estimated setup Fmax | 125.3 MHz |
+| WNS | 0.261 ns |
+| WHS | 0.083 ns |
+| Estimated setup Fmax | 129.2 MHz |
 | Timing met | True |
+
+### Timing robustness
+
+The 125 MHz target was implemented twice from clean synthesis using different placement and routing directives. Both variants use post-route `phys_opt_design -directive AggressiveExplore`.
+
+| Variant | Place | Route | WNS | WHS |
+|---|---|---|---:|---:|
+| Canonical | Default | Default | 0.261 ns | 0.083 ns |
+| Alternate | Explore | Explore | 0.310 ns | 0.083 ns |
+
+Both runs converge on metadata-index address generation into the quantization descriptor BRAM as the limiting setup path. The convolution post-processing, weight-scratchpad addressing, residual output, and activation-scratchpad paths were explicitly registered or simplified and no longer appear as the worst path.
 
 ## Utilization
 
 | Resource | Used |
 |---|---:|
-| Slice LUTs | 4,415 |
-| Slice Registers | 4,059 |
-| F7 Muxes | 25 |
-| F8 Muxes | 8 |
-| Block RAM Tile | 27 |
-| DSPs | 5 |
+| Slice LUTs | 6,053 |
+| Slice Registers | 5,248 |
+| F7 Muxes | 86 |
+| F8 Muxes | 33 |
+| Block RAM Tile | 33 |
+| DSPs | 4 |
 
 ## Artifacts
 
@@ -48,7 +59,7 @@ This is an out-of-context implementation experiment for the image-to-image RTL t
 ## Interpretation
 
 The current top fits, routes, and meets the 125 MHz internal clock target in this out-of-context smoke configuration.
-The Zynq block-design implementation has also been generated and routed with board-level timing evidence; see [board_implementation.md](board_implementation.md).
+The next board-facing step is integrating `cnn_image2image_system_top` into a Zynq block design with PS, AXI DMA, resets, clocking, physical constraints, and board-level timing evidence.
 
 Regenerate:
 

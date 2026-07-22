@@ -16,8 +16,8 @@ atomically activated, and reused across multiple images.
 | 1 | Freeze exact V1 model-package ABI | Complete, including per-channel requantization |
 | 2 | Build model compiler and package-level bit-accurate executor | Complete |
 | 3 | Add capability discovery and structured errors | Complete |
-| 4 | Add runtime metadata memories and atomic model lifecycle | Next |
-| 5 | Generalize descriptor-driven layer execution control | Planned |
+| 4 | Add runtime metadata memories and atomic model lifecycle | Complete |
+| 5 | Generalize descriptor-driven layer execution control | Next |
 | 6 | Add reusable active/prefetch parameter banks | Planned |
 | 7 | Introduce packed, versioned DMA protocol | Planned |
 | 8 | Implement DDR-backed spatial tiling and halo handling | Planned |
@@ -38,6 +38,11 @@ V1 deliberately uses tail masking rather than cross-pixel channel packing.
 It has two independent 4,096-byte weight banks and two independent 256-byte
 postprocessing banks. The final parallelism choice remains gated by the
 [compute and DDR bandwidth budget](bandwidth_budget.md).
+
+Phase 4 now provides two complete metadata banks, a software-visible record
+aperture, commit tracking, structural validation, busy-safe retirement, and
+single-cycle active-bank switching. See
+[runtime_model_lifecycle.md](runtime_model_lifecycle.md).
 
 ## Final Workflow
 

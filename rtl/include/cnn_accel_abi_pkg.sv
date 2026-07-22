@@ -113,6 +113,24 @@ package cnn_accel_abi_pkg;
     ROUND_HALF_TO_EVEN = 8'd1
   } rounding_mode_e;
 
+  typedef enum logic [2:0] {
+    MODEL_STAGING_UNLOADED = 3'd0,
+    MODEL_STAGING_LOADING = 3'd1,
+    MODEL_STAGING_LOADED_UNVALIDATED = 3'd2,
+    MODEL_STAGING_VALIDATED = 3'd3
+  } model_staging_state_e;
+
+  typedef enum logic [7:0] {
+    MODEL_LIFECYCLE_OK = 8'd0,
+    MODEL_LIFECYCLE_BAD_STATE = 8'd1,
+    MODEL_LIFECYCLE_BUSY = 8'd2,
+    MODEL_LIFECYCLE_BAD_ADDRESS = 8'd3,
+    MODEL_LIFECYCLE_INCOMPLETE = 8'd4,
+    MODEL_LIFECYCLE_BAD_HEADER = 8'd5,
+    MODEL_LIFECYCLE_LIMIT = 8'd6,
+    MODEL_LIFECYCLE_BAD_DESCRIPTOR = 8'd7
+  } model_lifecycle_error_e;
+
   localparam logic [31:0] LAYER_FLAG_BIAS_ENABLE = 32'h0000_0001;
   localparam logic [31:0] LAYER_FLAG_LAST_LAYER = 32'h0000_0002;
   localparam logic [15:0] TENSOR_FLAG_MODEL_INPUT = 16'h0001;

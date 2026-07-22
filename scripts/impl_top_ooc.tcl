@@ -11,6 +11,9 @@ set pk 4
 set max_pixels 16
 set max_cin 16
 set max_cout 16
+set place_directive ""
+set route_directive ""
+set post_route_phys_directive "AggressiveExplore"
 
 if {[info exists ::env(PC)]} {
  set pc $::env(PC)
@@ -26,6 +29,15 @@ if {[info exists ::env(MAX_CIN)]} {
 }
 if {[info exists ::env(MAX_COUT)]} {
  set max_cout $::env(MAX_COUT)
+}
+if {[info exists ::env(PLACE_DIRECTIVE)]} {
+ set place_directive $::env(PLACE_DIRECTIVE)
+}
+if {[info exists ::env(ROUTE_DIRECTIVE)]} {
+ set route_directive $::env(ROUTE_DIRECTIVE)
+}
+if {[info exists ::env(POST_ROUTE_PHYS_DIRECTIVE)]} {
+ set post_route_phys_directive $::env(POST_ROUTE_PHYS_DIRECTIVE)
 }
 if {[info exists ::env(OUT_DIR)]} {
  set out_dir $::env(OUT_DIR)
@@ -96,6 +108,7 @@ proc utilization_over_limit_messages {path} {
 }
 
 set sources [list \
+ rtl/include/cnn_accel_abi_pkg.sv \
  rtl/scheduler/tail_mask_generator.sv \
  rtl/postprocess/parallel_bias_add.sv \
  rtl/postprocess/parallel_relu.sv \
@@ -114,6 +127,8 @@ set sources [list \
  rtl/tensor/weight_tensor_load_controller.sv \
  rtl/tensor/output_tensor_store_controller.sv \
  rtl/stream/tensor_packet_router.sv \
+ rtl/runtime/cnn_metadata_word_ram.sv \
+ rtl/runtime/cnn_model_metadata_store.sv \
  rtl/scheduler/denoise_layer_descriptor_rom.sv \
  rtl/scheduler/performance_counters.sv \
  rtl/compute/reduction_tree.sv \
@@ -191,9 +206,18 @@ set implementation_error ""
 
 if {[catch {
  opt_design
- place_design
+ if {$place_directive eq ""} {
+  place_design
+ } else {
+  place_design -directive $place_directive
+ }
  phys_opt_design
- route_design
+ if {$route_directive eq ""} {
+  route_design
+ } else {
+  route_design -directive $route_directive
+ }
+ phys_opt_design -directive $post_route_phys_directive
 
  report_clocks -file "$out_dir/clocks_post_route.rpt"
  report_utilization -file "$out_dir/utilization_post_route.rpt"

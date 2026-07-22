@@ -16,13 +16,14 @@ module cnn_runtime_capabilities #(
   localparam logic [31:0] FIXED_FEATURES =
     FEATURE_CAPABILITY_QUERY |
     FEATURE_STRUCTURED_ERRORS |
+    FEATURE_RUNTIME_METADATA |
     FEATURE_INTERRUPTS |
     FEATURE_FIXED_NETWORK;
 
   always_comb begin
     unique case (word_index)
       5'd0:  word_data = {16'(CAPABILITY_RECORD_BYTES), 16'(ABI_VERSION)};
-      5'd1:  word_data = 32'h0003_0000;
+      5'd1:  word_data = 32'h0004_0000;
       5'd2:  word_data = {16'd4, 16'(ABI_VERSION)};
       5'd3:  word_data = FIXED_FEATURES;
       5'd4:  word_data = 32'h0000_0002; // CONV2D opcode bit 1.

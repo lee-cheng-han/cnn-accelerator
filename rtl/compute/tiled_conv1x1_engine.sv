@@ -52,10 +52,13 @@ module tiled_conv1x1_engine #(
     S_CLEAR,
     S_FETCH,
     S_READ,
+    S_READ_WAIT,
     S_CAPTURE,
     S_ISSUE,
     S_WAIT_MAC,
     S_NEXT_C,
+    S_POST_RELU,
+    S_POSTPROCESS,
     S_WRITE_TILE,
     S_DONE
   } state_t;
@@ -94,8 +97,10 @@ module tiled_conv1x1_engine #(
   logic signed [BIAS_W-1:0] bias_vec_q [PK];
   logic signed [ACC_W-1:0] bias_acc_vec [PK];
   logic signed [ACC_W-1:0] relu_acc_vec [PK];
+  logic signed [ACC_W-1:0] relu_acc_vec_q [PK];
   logic signed [ACC_W-1:0] quant_acc_vec [PK];
   logic signed [OUT_W-1:0] post_out_vec [PK];
+  logic signed [OUT_W-1:0] post_out_vec_q [PK];
 
   tail_mask_generator #(
     .LANES(PC),
@@ -222,7 +227,7 @@ module tiled_conv1x1_engine #(
     .PK(PK),
     .ACC_W(ACC_W)
   ) u_parallel_quantizer (
-    .acc_in(relu_acc_vec),
+    .acc_in(relu_acc_vec_q),
     .quant_enable(quant_enable),
     .quant_shift(quant_shift),
     .lane_mask(cout_lane_mask),
@@ -267,6 +272,8 @@ module tiled_conv1x1_engine #(
       end
       for (int pk = 0; pk < PK; pk++) begin
         bias_vec_q[pk] <= '0;
+        relu_acc_vec_q[pk] <= '0;
+        post_out_vec_q[pk] <= '0;
         for (int pc = 0; pc < PC; pc++) begin
           mac_weight_mat_q[pk][pc] <= '0;
         end
@@ -285,7 +292,7 @@ module tiled_conv1x1_engine #(
 
         S_CLEAR: begin
           c_base <= '0;
-          state  <= (cin == '0) ? S_WRITE_TILE : S_FETCH;
+          state  <= (cin == '0) ? S_POST_RELU : S_FETCH;
         end
 
         S_FETCH: begin
@@ -301,6 +308,10 @@ module tiled_conv1x1_engine #(
         end
 
         S_READ: begin
+          state <= S_READ_WAIT;
+        end
+
+        S_READ_WAIT: begin
           state <= S_CAPTURE;
         end
 
@@ -332,14 +343,28 @@ module tiled_conv1x1_engine #(
             c_base <= c_base + COUNT_W'(PC);
             state  <= S_FETCH;
           end else begin
-            state <= S_WRITE_TILE;
+            state <= S_POST_RELU;
           end
+        end
+
+        S_POST_RELU: begin
+          for (int pk = 0; pk < PK; pk++) begin
+            relu_acc_vec_q[pk] <= relu_acc_vec[pk];
+          end
+          state <= S_POSTPROCESS;
+        end
+
+        S_POSTPROCESS: begin
+          for (int pk = 0; pk < PK; pk++) begin
+            post_out_vec_q[pk] <= post_out_vec[pk];
+          end
+          state <= S_WRITE_TILE;
         end
 
         S_WRITE_TILE: begin
           for (int pk = 0; pk < PK; pk++) begin
             if (cout_lane_mask[pk]) begin
-              output_data[int'(k_base) + pk] <= post_out_vec[pk];
+              output_data[int'(k_base) + pk] <= post_out_vec_q[pk];
             end
           end
 

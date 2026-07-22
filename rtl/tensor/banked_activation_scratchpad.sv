@@ -52,8 +52,7 @@ module banked_activation_scratchpad #(
     write_valid_q <=
       write_enable &&
       (write_pixel < ADDR_W'(MAX_PIXELS)) &&
-      (write_channel < COUNT_W'(MAX_C)) &&
-      (write_addr < ADDR_W'(DEPTH));
+      (write_channel < COUNT_W'(MAX_C));
     write_addr_q <= write_addr;
     write_data_q <= write_data;
 
@@ -65,8 +64,7 @@ module banked_activation_scratchpad #(
       read_addr = (read_pixel * ADDR_W'(MAX_C)) + ADDR_W'(channel);
       if (lane_mask[lane] &&
           (read_pixel < ADDR_W'(MAX_PIXELS)) &&
-          (channel < COUNT_W'(MAX_C)) &&
-          (read_addr < ADDR_W'(DEPTH))) begin
+          (channel < COUNT_W'(MAX_C))) begin
         lane_data_q[lane] <= lane_mem[lane][read_addr];
       end else begin
         lane_data_q[lane] <= '0;
@@ -76,8 +74,7 @@ module banked_activation_scratchpad #(
     debug_addr =
       (debug_read_pixel * ADDR_W'(MAX_C)) + ADDR_W'(debug_read_channel);
     if ((debug_read_pixel < ADDR_W'(MAX_PIXELS)) &&
-        (debug_read_channel < COUNT_W'(MAX_C)) &&
-        (debug_addr < ADDR_W'(DEPTH))) begin
+        (debug_read_channel < COUNT_W'(MAX_C))) begin
       debug_read_data_q <= lane_mem[0][debug_addr];
     end else begin
       debug_read_data_q <= '0;

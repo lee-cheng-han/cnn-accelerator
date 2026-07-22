@@ -15,7 +15,19 @@
 #define CNN_ERROR_RECORD_SIZE               64u
 #define CNN_ABI_RECORD_ALIGNMENT            64u
 #define CNN_NO_TENSOR_ID                 0xFFFFu
-#define CNN_REGISTER_MAP_VERSION      0x00030000u
+#define CNN_REGISTER_MAP_VERSION      0x00040000u
+#define CNN_REG_MODEL_COMMAND              0x028u
+#define CNN_REG_MODEL_STATUS               0x02Cu
+#define CNN_REG_STAGING_MODEL_ID           0x030u
+#define CNN_REG_STAGING_GENERATION         0x034u
+#define CNN_REG_ACTIVE_MODEL_ID            0x038u
+#define CNN_REG_ACTIVE_GENERATION          0x03Cu
+#define CNN_REG_METADATA_ADDRESS           0x040u
+#define CNN_REG_METADATA_DATA              0x044u
+#define CNN_REG_METADATA_COMMIT            0x048u
+#define CNN_REG_MODEL_ERROR                0x04Cu
+#define CNN_REG_STAGING_COUNTS0            0x050u
+#define CNN_REG_STAGING_COUNTS1            0x054u
 #define CNN_REG_CAPABILITY_BASE            0x100u
 #define CNN_REG_STRUCTURED_ERROR_BASE       0x180u
 
@@ -41,6 +53,38 @@
 #define CNN_FEATURE_AUTONOMOUS_FETCH   (1u << 6)
 #define CNN_FEATURE_INTERRUPTS         (1u << 7)
 #define CNN_FEATURE_FIXED_NETWORK      (1u << 31)
+
+#define CNN_MODEL_COMMAND_BEGIN_LOAD   (1u << 0)
+#define CNN_MODEL_COMMAND_FINISH_LOAD  (1u << 1)
+#define CNN_MODEL_COMMAND_VALIDATE     (1u << 2)
+#define CNN_MODEL_COMMAND_ACTIVATE     (1u << 3)
+#define CNN_MODEL_COMMAND_RETIRE       (1u << 4)
+
+enum cnn_model_staging_state {
+    CNN_MODEL_STAGING_UNLOADED = 0,
+    CNN_MODEL_STAGING_LOADING = 1,
+    CNN_MODEL_STAGING_LOADED_UNVALIDATED = 2,
+    CNN_MODEL_STAGING_VALIDATED = 3
+};
+
+enum cnn_model_lifecycle_error {
+    CNN_MODEL_LIFECYCLE_OK = 0,
+    CNN_MODEL_LIFECYCLE_BAD_STATE = 1,
+    CNN_MODEL_LIFECYCLE_BUSY = 2,
+    CNN_MODEL_LIFECYCLE_BAD_ADDRESS = 3,
+    CNN_MODEL_LIFECYCLE_INCOMPLETE = 4,
+    CNN_MODEL_LIFECYCLE_BAD_HEADER = 5,
+    CNN_MODEL_LIFECYCLE_LIMIT = 6,
+    CNN_MODEL_LIFECYCLE_BAD_DESCRIPTOR = 7
+};
+
+#define CNN_METADATA_KIND_HEADER        0u
+#define CNN_METADATA_KIND_LAYER         1u
+#define CNN_METADATA_KIND_TENSOR        2u
+#define CNN_METADATA_KIND_QUANTIZATION  3u
+#define CNN_METADATA_ADDRESS(kind, record, word) \
+    ((((uint32_t)(word) & 0x3Fu) << 8) | \
+     (((uint32_t)(record) & 0x3Fu) << 2) | ((uint32_t)(kind) & 0x3u))
 
 enum cnn_error_code {
     CNN_ERROR_NONE = 0x0000,

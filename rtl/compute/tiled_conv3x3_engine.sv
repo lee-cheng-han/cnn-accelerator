@@ -54,19 +54,21 @@ module tiled_conv3x3_engine #(
   output logic done
 );
 
-  typedef enum logic [3:0] {
+  typedef enum logic [4:0] {
     S_IDLE,
     S_CLEAR,
     S_ADDR_PREP,
     S_ADDR_INDEX,
     S_FETCH,
     S_READ,
+    S_READ_WAIT,
     S_CAPTURE,
     S_ISSUE,
     S_WAIT_MAC,
     S_NEXT_C,
     S_NEXT_K,
     S_POST_BIAS,
+    S_POST_RELU,
     S_POSTPROCESS,
     S_WRITE_TILE,
     S_DONE
@@ -127,7 +129,9 @@ module tiled_conv3x3_engine #(
   logic signed [BIAS_W-1:0] bias_vec_q [PK];
   logic signed [ACC_W-1:0] bias_acc_vec [PK];
   logic signed [ACC_W-1:0] bias_acc_vec_q [PK];
+  logic [PK-1:0] post_lane_mask_q;
   logic signed [ACC_W-1:0] relu_acc_vec [PK];
+  logic signed [ACC_W-1:0] relu_acc_vec_q [PK];
   logic signed [ACC_W-1:0] quant_acc_vec [PK];
   logic signed [OUT_W-1:0] post_out_vec [PK];
   logic signed [OUT_W-1:0] post_out_vec_q [PK];
@@ -266,7 +270,7 @@ module tiled_conv3x3_engine #(
   ) u_parallel_relu (
     .acc_in(bias_acc_vec_q),
     .relu_enable(relu_enable_q),
-    .lane_mask(cout_lane_mask),
+    .lane_mask(post_lane_mask_q),
     .acc_out(relu_acc_vec)
   );
 
@@ -274,10 +278,10 @@ module tiled_conv3x3_engine #(
     .PK(PK),
     .ACC_W(ACC_W)
   ) u_parallel_quantizer (
-    .acc_in(relu_acc_vec),
+    .acc_in(relu_acc_vec_q),
     .quant_enable(quant_enable_q),
     .quant_shift(quant_shift_q),
-    .lane_mask(cout_lane_mask),
+    .lane_mask(post_lane_mask_q),
     .acc_out(quant_acc_vec)
   );
 
@@ -287,7 +291,7 @@ module tiled_conv3x3_engine #(
     .OUT_W(OUT_W)
   ) u_parallel_saturate (
     .acc_in(quant_acc_vec),
-    .lane_mask(cout_lane_mask),
+    .lane_mask(post_lane_mask_q),
     .out_vec(post_out_vec)
   );
 
@@ -312,6 +316,7 @@ module tiled_conv3x3_engine #(
       relu_enable_q <= 1'b0;
       quant_enable_q <= 1'b0;
       quant_shift_q <= '0;
+      post_lane_mask_q <= '0;
       done       <= 1'b0;
       scratch_activation_read_pixel_q <= '0;
       scratch_activation_read_c_base_q <= '0;
@@ -335,6 +340,7 @@ module tiled_conv3x3_engine #(
       for (int pk = 0; pk < PK; pk++) begin
         bias_vec_q[pk] <= '0;
         bias_acc_vec_q[pk] <= '0;
+        relu_acc_vec_q[pk] <= '0;
         post_out_vec_q[pk] <= '0;
         for (int pc = 0; pc < PC; pc++) begin
           mac_weight_mat_q[pk][pc] <= '0;
@@ -407,6 +413,10 @@ module tiled_conv3x3_engine #(
         end
 
         S_READ: begin
+          state <= S_READ_WAIT;
+        end
+
+        S_READ_WAIT: begin
           state <= S_CAPTURE;
         end
 
@@ -453,8 +463,16 @@ module tiled_conv3x3_engine #(
         end
 
         S_POST_BIAS: begin
+          post_lane_mask_q <= cout_lane_mask;
           for (int pk = 0; pk < PK; pk++) begin
             bias_acc_vec_q[pk] <= bias_acc_vec[pk];
+          end
+          state <= S_POST_RELU;
+        end
+
+        S_POST_RELU: begin
+          for (int pk = 0; pk < PK; pk++) begin
+            relu_acc_vec_q[pk] <= relu_acc_vec[pk];
           end
           state <= S_POSTPROCESS;
         end
@@ -468,7 +486,7 @@ module tiled_conv3x3_engine #(
 
         S_WRITE_TILE: begin
           for (int pk = 0; pk < PK; pk++) begin
-            if (cout_lane_mask[pk]) begin
+            if (post_lane_mask_q[pk]) begin
               output_data[int'(k_base) + pk] <= post_out_vec_q[pk];
             end
           end

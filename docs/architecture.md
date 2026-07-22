@@ -83,6 +83,7 @@ Input RGB tensor
 | `cnn_image2image_system_top` | AXI-Lite plus packetized AXI-Stream system top |
 | `cnn_image2image_system_bd_wrapper` | Vivado block-design wrapper for Zynq integration |
 | `cnn_axi_lite_slave` | Software-visible registers, status, interrupts, diagnostics, and counters |
+| `cnn_model_metadata_store` | Dual-bank runtime descriptors, commit validation, and atomic model activation |
 | `tensor_packet_router` | Validates and routes the seven-packet tensor input stream |
 | `stream_loaded_multi_layer_job_controller` | Loads tensors, overlaps parameter prefetch, and runs the 3-layer job |
 | `single_layer_scheduler` | Reuses 1x1/3x3 tiled engines across image positions |
@@ -107,8 +108,9 @@ The accelerator uses AXI-Lite for control and observability. Tensor payloads are
 | `0x01C` | `ERROR_CODE` | Packet-router or compute error code |
 | `0x020` | `STREAM_STATE` | Packet type and ready-layer state |
 | `0x024` | `PACKET_WORDS` | Current packet payload words accepted |
+| `0x028`-`0x054` | `MODEL_*`, `METADATA_*` | Runtime metadata loading, validation, activation, and identity |
 | `0x080`-`0x0A8` | `PERF_*` | Latency, layer, transfer, and stall counters |
-| `0x0FC` | `VERSION` | Register-map version, `0x00030000` |
+| `0x0FC` | `VERSION` | Register-map version, `0x00040000` |
 | `0x100`-`0x17C` | `CAPABILITY_*` | Versioned hardware capability record |
 | `0x180`-`0x1BC` | `ERROR_RECORD_*` | Sticky structured-error context |
 

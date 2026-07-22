@@ -151,7 +151,7 @@ module tb_banked_scratchpads;
  weight_read_k = kernel[3:0];
  weight_out_mask = out_mask;
  weight_in_mask = in_mask;
- @(posedge clk);
+ repeat (2) @(posedge clk);
  #1;
  end
  endtask

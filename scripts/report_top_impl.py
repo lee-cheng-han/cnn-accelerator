@@ -125,7 +125,11 @@ def load_result(build_dir: Path) -> TopImplResult:
     )
 
 
-def render_markdown(result: TopImplResult, build_dir: Path) -> str:
+def render_markdown(
+    result: TopImplResult,
+    build_dir: Path,
+    alternate: TopImplResult | None = None,
+) -> str:
     wns = "NA" if result.wns_ns is None else f"{result.wns_ns:.3f} ns"
     whs = "NA" if result.whs_ns is None else f"{result.whs_ns:.3f} ns"
     routed = result.result_stage == "post_route" and result.implementation_status == "passed"
@@ -167,23 +171,51 @@ def render_markdown(result: TopImplResult, build_dir: Path) -> str:
         f"| Estimated setup Fmax | {result.estimated_fmax_mhz:.1f} MHz |",
         f"| Timing met | {timing_label} |",
         "",
-        "## Utilization",
-        "",
-        "| Resource | Used |",
-        "|---|---:|",
-        f"| Slice LUTs | {result.luts:,} |",
-        f"| Slice Registers | {result.registers:,} |",
-        f"| F7 Muxes | {result.f7_muxes:,} |",
-        f"| F8 Muxes | {result.f8_muxes:,} |",
-        f"| Block RAM Tile | {result.bram_tiles:g} |",
-        f"| DSPs | {result.dsps:,} |",
-        "",
-        "## Artifacts",
-        "",
-        f"- Checkpoint: `{build_dir / checkpoint}`",
-        f"- Timing report: `{build_dir / timing_report}`",
-        f"- Utilization report: `{build_dir / utilization_report}`",
     ]
+    if alternate is not None and routed:
+        alt_wns = "NA" if alternate.wns_ns is None else f"{alternate.wns_ns:.3f} ns"
+        alt_whs = "NA" if alternate.whs_ns is None else f"{alternate.whs_ns:.3f} ns"
+        lines.extend(
+            [
+                "### Timing robustness",
+                "",
+                "The 125 MHz target was implemented twice from clean synthesis using different "
+                "placement and routing directives. Both variants use post-route "
+                "`phys_opt_design -directive AggressiveExplore`.",
+                "",
+                "| Variant | Place | Route | WNS | WHS |",
+                "|---|---|---|---:|---:|",
+                f"| Canonical | Default | Default | {wns} | {whs} |",
+                f"| Alternate | Explore | Explore | {alt_wns} | {alt_whs} |",
+                "",
+                "Both runs converge on metadata-index address generation into the quantization "
+                "descriptor BRAM as the limiting setup path. The convolution post-processing, "
+                "weight-scratchpad addressing, residual output, and activation-scratchpad paths "
+                "were explicitly registered or simplified and no longer appear as the worst path.",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Utilization",
+            "",
+            "| Resource | Used |",
+            "|---|---:|",
+            f"| Slice LUTs | {result.luts:,} |",
+            f"| Slice Registers | {result.registers:,} |",
+            f"| F7 Muxes | {result.f7_muxes:,} |",
+            f"| F8 Muxes | {result.f8_muxes:,} |",
+            f"| Block RAM Tile | {result.bram_tiles:g} |",
+            f"| DSPs | {result.dsps:,} |",
+            "",
+            "## Artifacts",
+            "",
+            f"- Checkpoint: `{build_dir / checkpoint}`",
+            f"- Timing report: `{build_dir / timing_report}`",
+            f"- Utilization report: `{build_dir / utilization_report}`",
+        ]
+    )
     if routed:
         lines.extend(
             [
@@ -260,8 +292,12 @@ def main() -> int:
     args = parser.parse_args()
 
     result = load_result(args.build_dir)
+    alternate_dir = args.build_dir.parent / f"{args.build_dir.name}_explore"
+    alternate = None
+    if (alternate_dir / "metadata.txt").exists():
+        alternate = load_result(alternate_dir)
     args.markdown.parent.mkdir(parents=True, exist_ok=True)
-    args.markdown.write_text(render_markdown(result, args.build_dir))
+    args.markdown.write_text(render_markdown(result, args.build_dir, alternate))
     print(args.markdown.read_text())
     print(f"Wrote {args.markdown}")
     return 0

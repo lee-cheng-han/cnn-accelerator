@@ -7,10 +7,10 @@ accelerator. The record sizes, byte offsets, enum values, numeric behavior, and
 rejection rules are frozen at ABI version 1.
 
 The checked-in board design still executes its fixed three-layer descriptor
-path. Freezing this ABI is the first implementation milestone for replacing
-that path. Runtime metadata memories, model activation, packed DMA packets,
-DDR-backed tiling, and autonomous parameter fetching are later milestones and
-must consume this contract without changing it.
+path, but it now includes dual-bank runtime metadata storage and atomic model
+activation. Descriptor-driven execution, packed DMA packets, DDR-backed tiling,
+and autonomous parameter fetching remain later milestones and must consume this
+contract without changing it.
 
 The canonical executable definition is
 [`models/cnn_abi.py`](../models/cnn_abi.py). Matching constants for bare-metal
@@ -260,7 +260,7 @@ table bounds/alignment, tensor geometry and strides, convolution output shape,
 parameter lengths and bank capacities, quantization restrictions, residual
 compatibility, and checksums.
 
-The lifecycle implemented in a later milestone is:
+The implemented metadata lifecycle is:
 
 ```text
 UNLOADED
@@ -271,7 +271,10 @@ UNLOADED
 
 Staging and active metadata are distinct. Failed loading or validation does not
 damage the active model. `RUN_IMAGE` accepts only an active, validated model,
-and V1 rejects activation while a job is busy.
+and V1 rejects activation while a job is busy. The current fixed scheduler does
+not consume the active descriptors yet; that handoff is Phase 5. Exact register
+commands and the Phase 4 validation boundary are specified in
+[runtime_model_lifecycle.md](runtime_model_lifecycle.md).
 
 ## Intentionally Deferred Wire Protocol
 

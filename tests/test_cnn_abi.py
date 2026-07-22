@@ -11,6 +11,7 @@ from models.cnn_abi import (
     LAYER_DESCRIPTOR_SIZE,
     MODEL_HEADER_SIZE,
     QUANT_DESCRIPTOR_SIZE,
+    REGISTER_MAP_VERSION,
     TENSOR_DESCRIPTOR_SIZE,
     AbiError,
     Activation,
@@ -139,9 +140,9 @@ class TestCnnAbi(unittest.TestCase):
     def test_fixed_capability_words_match_axi_lite_contract(self):
         words = struct.unpack("<32I", fixed_hardware_capabilities().pack())
         self.assertEqual(words[0], 0x00800001)
-        self.assertEqual(words[1], 0x00030000)
+        self.assertEqual(words[1], REGISTER_MAP_VERSION)
         self.assertEqual(words[2], 0x00040001)
-        self.assertEqual(words[3], 0x80000083)
+        self.assertEqual(words[3], 0x8000008B)
         self.assertEqual(words[11], 0x00040003)
         self.assertEqual(words[13], 0x00100010)
         self.assertEqual(words[16], 16)
