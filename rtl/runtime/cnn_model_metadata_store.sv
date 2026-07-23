@@ -24,6 +24,35 @@ module cnn_model_metadata_store #(
   input  logic [31:0] metadata_write_data,
   output logic [31:0] metadata_read_data,
 
+  input  logic [2:0]  execution_layer_index,
+  output logic        execution_descriptor_valid,
+  output logic [15:0] execution_layer_id,
+  output logic [15:0] execution_opcode,
+  output logic        execution_last_layer,
+  output logic        execution_bias_enable,
+  output logic [15:0] execution_input_tensor_id,
+  output logic [15:0] execution_output_tensor_id,
+  output logic [15:0] execution_residual_tensor_id,
+  output logic [15:0] execution_quantization_id,
+  output logic [15:0] execution_input_width,
+  output logic [15:0] execution_input_height,
+  output logic [15:0] execution_input_channels,
+  output logic [15:0] execution_output_width,
+  output logic [15:0] execution_output_height,
+  output logic [15:0] execution_output_channels,
+  output logic [7:0]  execution_kernel_height,
+  output logic [7:0]  execution_kernel_width,
+  output logic [7:0]  execution_stride_y,
+  output logic [7:0]  execution_stride_x,
+  output logic [7:0]  execution_padding_top,
+  output logic [7:0]  execution_padding_bottom,
+  output logic [7:0]  execution_padding_left,
+  output logic [7:0]  execution_padding_right,
+  output logic [7:0]  execution_dilation_y,
+  output logic [7:0]  execution_dilation_x,
+  output logic [7:0]  execution_activation,
+  output logic [7:0]  execution_residual_mode,
+
   output logic [2:0]  staging_state,
   output logic        staging_bank,
   output logic        active_valid,
@@ -32,6 +61,7 @@ module cnn_model_metadata_store #(
   output logic [31:0] staging_generation_id,
   output logic [31:0] active_model_id,
   output logic [31:0] active_generation_id,
+  output logic [15:0] active_layer_count,
   output logic [15:0] staging_layer_count,
   output logic [15:0] staging_tensor_count,
   output logic [15:0] staging_quantization_count,
@@ -47,6 +77,8 @@ module cnn_model_metadata_store #(
   localparam int LAYER_DEPTH = 2 * MAX_LAYERS * LAYER_WORDS;
   localparam int TENSOR_DEPTH = 2 * MAX_TENSORS * TENSOR_WORDS;
   localparam int QUANT_DEPTH = 2 * MAX_QUANTIZATIONS * QUANT_WORDS;
+  localparam int LAYER_INDEX_W = (MAX_LAYERS <= 1) ? 1 : $clog2(MAX_LAYERS);
+  localparam int TENSOR_INDEX_W = (MAX_TENSORS <= 1) ? 1 : $clog2(MAX_TENSORS);
 
   localparam logic [1:0] METADATA_HEADER = 2'd0;
   localparam logic [1:0] METADATA_LAYER = 2'd1;
@@ -77,6 +109,20 @@ module cnn_model_metadata_store #(
   logic [31:0] cached_counts0 [0:1];
   logic [31:0] cached_counts1 [0:1];
 
+  logic [31:0] cached_layer_header [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_identity [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_flags [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_tensor_ids [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_residual_quant [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_geometry [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_padding [0:1][0:MAX_LAYERS-1];
+  logic [31:0] cached_layer_postprocess [0:1][0:MAX_LAYERS-1];
+
+  logic [31:0] cached_tensor_header [0:1][0:MAX_TENSORS-1];
+  logic [31:0] cached_tensor_identity [0:1][0:MAX_TENSORS-1];
+  logic [31:0] cached_tensor_geometry [0:1][0:MAX_TENSORS-1];
+  logic [31:0] cached_tensor_channels [0:1][0:MAX_TENSORS-1];
+
   logic header_committed;
   logic [15:0] layer_committed_count;
   logic [15:0] tensor_committed_count;
@@ -91,6 +137,119 @@ module cnn_model_metadata_store #(
   logic metadata_address_valid;
   logic validation_ok;
   logic [7:0] validation_error;
+
+  always_comb begin
+    logic [15:0] input_tensor_id;
+    logic [15:0] output_tensor_id;
+    int unsigned layer_slot;
+    int unsigned input_slot;
+    int unsigned output_slot;
+
+    execution_descriptor_valid = 1'b0;
+    execution_layer_id = 16'd0;
+    execution_opcode = 16'd0;
+    execution_last_layer = 1'b0;
+    execution_bias_enable = 1'b0;
+    execution_input_tensor_id = 16'd0;
+    execution_output_tensor_id = 16'd0;
+    execution_residual_tensor_id = NO_TENSOR_ID;
+    execution_quantization_id = 16'd0;
+    execution_input_width = 16'd0;
+    execution_input_height = 16'd0;
+    execution_input_channels = 16'd0;
+    execution_output_width = 16'd0;
+    execution_output_height = 16'd0;
+    execution_output_channels = 16'd0;
+    execution_kernel_height = 8'd0;
+    execution_kernel_width = 8'd0;
+    execution_stride_y = 8'd0;
+    execution_stride_x = 8'd0;
+    execution_padding_top = 8'd0;
+    execution_padding_bottom = 8'd0;
+    execution_padding_left = 8'd0;
+    execution_padding_right = 8'd0;
+    execution_dilation_y = 8'd0;
+    execution_dilation_x = 8'd0;
+    execution_activation = 8'd0;
+    execution_residual_mode = 8'd0;
+
+    layer_slot = int'(execution_layer_index);
+    input_tensor_id = 16'd0;
+    output_tensor_id = 16'd0;
+    input_slot = 0;
+    output_slot = 0;
+
+    if (active_valid &&
+        (layer_slot < MAX_LAYERS) &&
+        (layer_slot < int'(cached_counts0[active_bank][15:0]))) begin
+      input_tensor_id = cached_layer_tensor_ids[active_bank][layer_slot][15:0];
+      output_tensor_id = cached_layer_tensor_ids[active_bank][layer_slot][31:16];
+      input_slot = int'(input_tensor_id);
+      output_slot = int'(output_tensor_id);
+
+      execution_layer_id = cached_layer_identity[active_bank][layer_slot][15:0];
+      execution_opcode = cached_layer_identity[active_bank][layer_slot][31:16];
+      execution_last_layer =
+        (cached_layer_flags[active_bank][layer_slot] & LAYER_FLAG_LAST_LAYER) != 0;
+      execution_bias_enable =
+        (cached_layer_flags[active_bank][layer_slot] & LAYER_FLAG_BIAS_ENABLE) != 0;
+      execution_input_tensor_id = input_tensor_id;
+      execution_output_tensor_id = output_tensor_id;
+      execution_residual_tensor_id =
+        cached_layer_residual_quant[active_bank][layer_slot][15:0];
+      execution_quantization_id =
+        cached_layer_residual_quant[active_bank][layer_slot][31:16];
+      execution_kernel_height =
+        cached_layer_geometry[active_bank][layer_slot][7:0];
+      execution_kernel_width =
+        cached_layer_geometry[active_bank][layer_slot][15:8];
+      execution_stride_y =
+        cached_layer_geometry[active_bank][layer_slot][23:16];
+      execution_stride_x =
+        cached_layer_geometry[active_bank][layer_slot][31:24];
+      execution_padding_top =
+        cached_layer_padding[active_bank][layer_slot][7:0];
+      execution_padding_bottom =
+        cached_layer_padding[active_bank][layer_slot][15:8];
+      execution_padding_left =
+        cached_layer_padding[active_bank][layer_slot][23:16];
+      execution_padding_right =
+        cached_layer_padding[active_bank][layer_slot][31:24];
+      execution_dilation_y =
+        cached_layer_postprocess[active_bank][layer_slot][7:0];
+      execution_dilation_x =
+        cached_layer_postprocess[active_bank][layer_slot][15:8];
+      execution_activation =
+        cached_layer_postprocess[active_bank][layer_slot][23:16];
+      execution_residual_mode =
+        cached_layer_postprocess[active_bank][layer_slot][31:24];
+
+      if ((input_slot < MAX_TENSORS) && (output_slot < MAX_TENSORS)) begin
+        execution_input_width =
+          cached_tensor_geometry[active_bank][input_slot][15:0];
+        execution_input_height =
+          cached_tensor_geometry[active_bank][input_slot][31:16];
+        execution_input_channels =
+          cached_tensor_channels[active_bank][input_slot][15:0];
+        execution_output_width =
+          cached_tensor_geometry[active_bank][output_slot][15:0];
+        execution_output_height =
+          cached_tensor_geometry[active_bank][output_slot][31:16];
+        execution_output_channels =
+          cached_tensor_channels[active_bank][output_slot][15:0];
+
+        execution_descriptor_valid =
+          (cached_layer_header[active_bank][layer_slot] ==
+           {16'(LAYER_DESCRIPTOR_BYTES), 16'(ABI_VERSION)}) &&
+          (cached_tensor_header[active_bank][input_slot] ==
+           {16'(TENSOR_DESCRIPTOR_BYTES), 16'(ABI_VERSION)}) &&
+          (cached_tensor_header[active_bank][output_slot] ==
+           {16'(TENSOR_DESCRIPTOR_BYTES), 16'(ABI_VERSION)}) &&
+          (cached_tensor_identity[active_bank][input_slot][15:0] == input_tensor_id) &&
+          (cached_tensor_identity[active_bank][output_slot][15:0] == output_tensor_id);
+      end
+    end
+  end
 
   always_comb begin
     header_address_value = $clog2(HEADER_DEPTH)'(
@@ -226,9 +385,11 @@ module cnn_model_metadata_store #(
     if (active_valid) begin
       active_model_id = cached_model_id[active_bank];
       active_generation_id = cached_generation_id[active_bank];
+      active_layer_count = cached_counts0[active_bank][15:0];
     end else begin
       active_model_id = 32'd0;
       active_generation_id = 32'd0;
+      active_layer_count = 16'd0;
     end
   end
 
@@ -339,6 +500,27 @@ module cnn_model_metadata_store #(
               endcase
             end
             METADATA_LAYER: begin
+              unique case (metadata_word_index)
+                0: cached_layer_header[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                1: cached_layer_identity[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                2: cached_layer_flags[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                3: cached_layer_tensor_ids[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                4: cached_layer_residual_quant[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                10: cached_layer_geometry[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                      metadata_write_data;
+                11: cached_layer_padding[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                      metadata_write_data;
+                12: cached_layer_postprocess[staging_bank][LAYER_INDEX_W'(metadata_record_index)] <=
+                      metadata_write_data;
+                default: begin
+                end
+              endcase
+
               if ((metadata_record_index == layer_committed_count[5:0]) &&
                   (metadata_word_index == 0)) begin
                 layer_header_valid <=
@@ -352,6 +534,19 @@ module cnn_model_metadata_store #(
               end
             end
             METADATA_TENSOR: begin
+              unique case (metadata_word_index)
+                0: cached_tensor_header[staging_bank][TENSOR_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                1: cached_tensor_identity[staging_bank][TENSOR_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                5: cached_tensor_geometry[staging_bank][TENSOR_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                6: cached_tensor_channels[staging_bank][TENSOR_INDEX_W'(metadata_record_index)] <=
+                     metadata_write_data;
+                default: begin
+                end
+              endcase
+
               if ((metadata_record_index == tensor_committed_count[5:0]) &&
                   (metadata_word_index == 0)) begin
                 tensor_header_valid <=

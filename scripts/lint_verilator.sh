@@ -49,6 +49,7 @@ verilator --lint-only \
  rtl/compute/tiled_conv1x1_engine.sv \
  rtl/compute/tiled_conv3x3_engine.sv \
  rtl/scheduler/single_layer_scheduler.sv \
+ rtl/scheduler/descriptor_driven_job_controller.sv \
  rtl/scheduler/multi_layer_job_controller.sv \
  rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
  rtl/zynq/cnn_runtime_capabilities.sv \
@@ -56,5 +57,29 @@ verilator --lint-only \
  rtl/zynq/cnn_axi_lite_slave.sv \
  rtl/zynq/cnn_image2image_axi_stream_top.sv \
  rtl/zynq/cnn_image2image_system_top.sv
+
+verilator --lint-only \
+ -Wall \
+ -Wno-fatal \
+ -Wno-BLKLOOPINIT \
+ -Wno-BLKSEQ \
+ -Wno-DECLFILENAME \
+ -Wno-PINCONNECTEMPTY \
+ -Wno-UNUSEDSIGNAL \
+ -Wno-UNUSEDPARAM \
+ --top-module descriptor_driven_job_controller \
+ rtl/include/cnn_accel_abi_pkg.sv \
+ rtl/scheduler/tail_mask_generator.sv \
+ rtl/postprocess/parallel_bias_add.sv \
+ rtl/postprocess/parallel_relu.sv \
+ rtl/postprocess/parallel_quantizer.sv \
+ rtl/postprocess/parallel_saturate.sv \
+ rtl/compute/reduction_tree.sv \
+ rtl/compute/parallel_mac_array.sv \
+ rtl/compute/psum_accumulator.sv \
+ rtl/compute/tiled_conv1x1_engine.sv \
+ rtl/compute/tiled_conv3x3_engine.sv \
+ rtl/scheduler/single_layer_scheduler.sv \
+ rtl/scheduler/descriptor_driven_job_controller.sv
 
 echo "[PASS] Verilator lint completed"

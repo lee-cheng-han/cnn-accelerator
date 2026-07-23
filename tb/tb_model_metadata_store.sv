@@ -30,6 +30,7 @@ module tb_model_metadata_store;
   logic [31:0] staging_generation_id;
   logic [31:0] active_model_id;
   logic [31:0] active_generation_id;
+  logic [15:0] active_layer_count;
   logic [15:0] staging_layer_count;
   logic [15:0] staging_tensor_count;
   logic [15:0] staging_quantization_count;
@@ -59,6 +60,34 @@ module tb_model_metadata_store;
     .metadata_word_index(metadata_word_index),
     .metadata_write_data(metadata_write_data),
     .metadata_read_data(metadata_read_data),
+    .execution_layer_index(3'd0),
+    .execution_descriptor_valid(),
+    .execution_layer_id(),
+    .execution_opcode(),
+    .execution_last_layer(),
+    .execution_bias_enable(),
+    .execution_input_tensor_id(),
+    .execution_output_tensor_id(),
+    .execution_residual_tensor_id(),
+    .execution_quantization_id(),
+    .execution_input_width(),
+    .execution_input_height(),
+    .execution_input_channels(),
+    .execution_output_width(),
+    .execution_output_height(),
+    .execution_output_channels(),
+    .execution_kernel_height(),
+    .execution_kernel_width(),
+    .execution_stride_y(),
+    .execution_stride_x(),
+    .execution_padding_top(),
+    .execution_padding_bottom(),
+    .execution_padding_left(),
+    .execution_padding_right(),
+    .execution_dilation_y(),
+    .execution_dilation_x(),
+    .execution_activation(),
+    .execution_residual_mode(),
     .staging_state(staging_state),
     .staging_bank(staging_bank),
     .active_valid(active_valid),
@@ -67,6 +96,7 @@ module tb_model_metadata_store;
     .staging_generation_id(staging_generation_id),
     .active_model_id(active_model_id),
     .active_generation_id(active_generation_id),
+    .active_layer_count(active_layer_count),
     .staging_layer_count(staging_layer_count),
     .staging_tensor_count(staging_tensor_count),
     .staging_quantization_count(staging_quantization_count),

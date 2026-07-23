@@ -15,6 +15,7 @@ TESTS=(
  tb_output_store_controller
  tb_layer_descriptors
  tb_model_metadata_store
+ tb_descriptor_driven_job_controller
  tb_single_layer_scheduler
  tb_multi_layer_job_controller
  tb_stream_loaded_multi_layer_job_controller

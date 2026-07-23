@@ -67,6 +67,7 @@ xvlog -sv -L work \
  ../../rtl/compute/tiled_conv1x1_engine.sv \
  ../../rtl/compute/tiled_conv3x3_engine.sv \
  ../../rtl/scheduler/single_layer_scheduler.sv \
+ ../../rtl/scheduler/descriptor_driven_job_controller.sv \
  ../../rtl/scheduler/multi_layer_job_controller.sv \
  ../../rtl/scheduler/stream_loaded_multi_layer_job_controller.sv \
  ../../rtl/zynq/cnn_runtime_capabilities.sv \

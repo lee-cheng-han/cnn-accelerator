@@ -17,8 +17,8 @@ atomically activated, and reused across multiple images.
 | 2 | Build model compiler and package-level bit-accurate executor | Complete |
 | 3 | Add capability discovery and structured errors | Complete |
 | 4 | Add runtime metadata memories and atomic model lifecycle | Complete |
-| 5 | Generalize descriptor-driven layer execution control | Next |
-| 6 | Add reusable active/prefetch parameter banks | Planned |
+| 5 | Generalize descriptor-driven layer execution control | Complete |
+| 6 | Add reusable active/prefetch parameter banks | Next |
 | 7 | Introduce packed, versioned DMA protocol | Planned |
 | 8 | Implement DDR-backed spatial tiling and halo handling | Planned |
 | 9 | Complete residual and quantization behavior in runtime RTL | Planned |
@@ -43,6 +43,13 @@ Phase 4 now provides two complete metadata banks, a software-visible record
 aperture, commit tracking, structural validation, busy-safe retirement, and
 single-cycle active-bank switching. See
 [runtime_model_lifecycle.md](runtime_model_lifecycle.md).
+
+Phase 5 now decodes the atomically active metadata bank and sequences one to
+eight mixed 1x1/3x3 layers through the reusable single-layer scheduler. It
+checks geometry, tensor chaining, supported operations, final-layer flags, and
+residual compatibility before requesting parameters. The temporary
+request/ready parameter boundary is documented in
+[descriptor_driven_execution.md](descriptor_driven_execution.md).
 
 ## Final Workflow
 

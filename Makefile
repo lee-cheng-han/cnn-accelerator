@@ -4,7 +4,7 @@ TB ?= tb_axi_stream_full_network_golden_flow
 VITIS_DATA_DIR ?= $(CURDIR)/build/vitis_data
 
 .PHONY: xsim regression xsim-regression lint clean flow-report report-flow check-warnings docs-check preboard-proof
-.PHONY: unit model-test model-package-example golden-test synth-sweep synth-report
+.PHONY: unit descriptor-test model-test model-package-example golden-test synth-sweep synth-report
 .PHONY: top-impl top-report baremetal-headers vitis-app
 .PHONY: zybo-z7-project zybo-z7-bitstream zybo-z7-xsa full-zybo-z7-flow
 .PHONY: boot-image full-preboard-proof program-zybo-z7
@@ -16,6 +16,9 @@ xsim-regression: regression
 
 unit:
 	bash scripts/run_unit.sh
+
+descriptor-test:
+	bash scripts/run_descriptor_controller_tb.sh
 
 model-test:
 	python3 -m unittest discover -s tests -p 'test_*.py'

@@ -16,6 +16,7 @@
 | tensor RTL | `tb_tensor_address_gen` | Covered | stride, padding, and valid/invalid address behavior |
 | tensor RTL | `tb_banked_scratchpads` | Covered | one-cycle replicated-bank activation/weight scratchpad reads |
 | runtime metadata RTL | `tb_model_metadata_store` | Covered | dual-bank loading, commit validation, atomic activation, failed replacement isolation, and busy rejection |
+| runtime controller RTL | `tb_descriptor_driven_job_controller` | Covered | active metadata decode, mixed 1x1/3x3 execution, parameter stalls, residual output, eight-layer limit, and negative launch/geometry cases |
 | scheduler RTL | `tb_single_layer_scheduler` | Covered | full-image array-backed and banked-scratchpad-backed scheduler paths |
 | controller RTL | `tb_full_network_golden_flow` | Covered | full 3-layer denoising controller against Python golden tensors |
 | stream RTL | `tb_stream_loaded_full_network_golden_flow` | Covered | packet-loaded full network with output backpressure |
@@ -41,6 +42,7 @@
 | output backpressure | High | stream-loaded and AXI stream golden flows |
 | AXI-Lite control/status/performance registers | High pre-board | integrated system wrapper and Vitis app build against exported XSA |
 | runtime metadata lifecycle | High pre-board | standalone lifecycle test plus complete AXI-Lite metadata load and activation |
+| descriptor-driven execution | High pre-integration | active-bank four-layer golden flow, eight-layer boundary flow, and negative tests under Verilator CI |
 | Zynq block design integration | High pre-board | bitstream and XSA generated at 125 MHz |
 | bare-metal DMA integration | High pre-board | Vitis app and BOOT.BIN build from XSA |
 | real hardware behavior | Pending | board not yet available |
@@ -49,6 +51,7 @@
 
 ```bash
 make model-test
+make descriptor-test
 make golden-test
 make unit
 make regression

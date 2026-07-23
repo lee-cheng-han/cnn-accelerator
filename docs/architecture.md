@@ -84,6 +84,7 @@ Input RGB tensor
 | `cnn_image2image_system_bd_wrapper` | Vivado block-design wrapper for Zynq integration |
 | `cnn_axi_lite_slave` | Software-visible registers, status, interrupts, diagnostics, and counters |
 | `cnn_model_metadata_store` | Dual-bank runtime descriptors, commit validation, and atomic model activation |
+| `descriptor_driven_job_controller` | Validates and sequences one to eight active runtime layer descriptors through the reusable scheduler |
 | `tensor_packet_router` | Validates and routes the seven-packet tensor input stream |
 | `stream_loaded_multi_layer_job_controller` | Loads tensors, overlaps parameter prefetch, and runs the 3-layer job |
 | `single_layer_scheduler` | Reuses 1x1/3x3 tiled engines across image positions |
@@ -91,6 +92,12 @@ Input RGB tensor
 | `banked_weight_scratchpad` | BRAM-style weight storage with registered PK x PC reads |
 | `performance_counters` | Counts job, packet, compute, layer, transfer, and stall cycles |
 | AXI DMA | Moves tensor packets and output pixels between DDR and PL streams |
+
+The current board path uses `stream_loaded_multi_layer_job_controller`. The
+parallel layer-programmable path connects the active view from
+`cnn_model_metadata_store` to `descriptor_driven_job_controller` and has
+standalone golden RTL evidence. It becomes board-facing after Phase 6 adds
+runtime parameter banks and Phase 7 adds the packed DMA protocol.
 
 ## Register Map
 

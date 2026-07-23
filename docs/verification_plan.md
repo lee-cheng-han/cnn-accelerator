@@ -46,6 +46,9 @@ Expected RTL coverage includes:
 - packet router malformed-input errors
 - dual-bank metadata loading, record commits, validation, and atomic activation
 - failed staging-model isolation and busy activation/retirement rejection
+- active-bank descriptor decode and one-to-eight-layer execution sequencing
+- descriptor geometry, tensor-chain, operation, and residual compatibility rejection
+- temporary parameter-provider backpressure between runtime layers
 - output backpressure
 - per-layer, DMA-stall, and saturation performance counter snapshots
 
@@ -90,6 +93,7 @@ Passing criteria:
 | Python model tests | Passing |
 | golden RTL tests | Passing |
 | unit RTL tests | Passing |
+| descriptor-driven controller test | Passing |
 | Zynq block design | Passing |
 | implementation | Passing |
 | Timing | Met at 125 MHz |

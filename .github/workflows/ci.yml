@@ -78,6 +78,10 @@ jobs:
         run: |
           make lint
 
+      - name: Run descriptor-driven controller test
+        run: |
+          make descriptor-test
+
   docs:
     name: ci / docs · evidence consistency
     runs-on: ubuntu-24.04

@@ -54,8 +54,8 @@ The following safety rules are enforced:
   `active_generation_id` unchanged.
 - Activation and active-model retirement are rejected while a job is busy.
 - A failed replacement load never invalidates the previous active model.
-- `RUN_IMAGE` will require `active_valid` when the descriptor-driven controller
-  replaces the current fixed scheduler in Phase 5.
+- The Phase 5 descriptor-driven controller requires `active_valid` and reads
+  only the atomically selected active metadata bank.
 
 ## Metadata Aperture
 
@@ -93,9 +93,9 @@ The Phase 4 RTL validator independently checks the metadata transfer itself:
 - layer count 1-8, tensor count 2-32, and quantization count 1-32
 - contiguous layer, tensor, and quantization IDs
 
-Semantic descriptor execution checks are added beside the generalized runtime
-controller in Phase 5. Parameter CRC verification is added when parameter banks
-become runtime-loaded in Phase 6.
+Semantic descriptor execution checks now run beside the generalized runtime
+controller. Parameter CRC verification is added when parameter banks become
+runtime-loaded in Phase 6.
 
 ## Lifecycle Errors
 
